@@ -1,0 +1,3 @@
+- integrate rehearsals in schedule and score... someone rehearsing every week for a bigger service in the future should make sure that those services are recognized.. need to decide if a rehearsal is weighted as heavily as a service. 
+- downscore same pairs? (need to check if a pair is requested)
+- person view to see specifically that person's schedule
