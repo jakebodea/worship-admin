@@ -185,6 +185,29 @@ export interface RawPlan {
     created_at: string;
     sort_date?: string;
   };
+  relationships?: {
+    service_type?: {
+      data: PCResourceIdentifier;
+    };
+  };
+}
+
+// Service History Item Types
+export interface ServiceHistoryItem {
+  id: string;
+  date: Date;
+  teamPositionName: string;
+  teamName?: string;
+  serviceTypeName?: string;
+  planTitle?: string;
+  status: string;
+}
+
+// Team Position Group Types
+export interface TeamPositionGroup {
+  teamId: string;
+  teamName: string;
+  positions: TeamPosition[];
 }
 
 // Utility type for frequency tracking
@@ -204,4 +227,6 @@ export interface PersonWithAvailability extends Person {
   availability?: AvailabilityStatus;
   frequency?: ScheduleFrequency;
   blockouts?: Blockout[];
+  serviceHistory?: ServiceHistoryItem[];
+  isBlockedForDate?: boolean;
 }
