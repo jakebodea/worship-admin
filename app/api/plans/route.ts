@@ -5,12 +5,9 @@ import type { Plan, RawPlan } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const startTime = Date.now();
   try {
     const { searchParams } = new URL(request.url);
     const serviceTypeId = searchParams.get("service_type_id");
-
-    console.log(`[API /plans] Starting request for service_type_id: ${serviceTypeId}`);
 
     if (!serviceTypeId) {
       return NextResponse.json(
@@ -19,7 +16,6 @@ export async function GET(request: Request) {
       );
     }
 
-    console.log(`[API /plans] Calling pcClient.getPlans...`);
     // Limit to a reasonable date range to avoid fetching too many pages
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -34,7 +30,6 @@ export async function GET(request: Request) {
       "filter[archived]": "false",
       "filter[sort_date]": `${startDate.toISOString().split("T")[0]}..${endDate.toISOString().split("T")[0]}`,
     });
-    console.log(`[API /plans] Received ${rawPlans.length} raw plans from API`);
 
     const plans: Plan[] = rawPlans
       .map((raw) => {
@@ -48,7 +43,6 @@ export async function GET(request: Request) {
         
         // Validate date is valid
         if (isNaN(sortDate.getTime())) {
-          console.warn(`[API /plans] Invalid sort_date for plan ${plan.id}: ${sortDateStr}`);
           return null;
         }
 
@@ -94,12 +88,8 @@ export async function GET(request: Request) {
       return a.sortDate.getTime() - b.sortDate.getTime();
     });
 
-    const duration = Date.now() - startTime;
-    console.log(`[API /plans] Returning ${limitedPlans.length} plans (${recentPast.length} past, ${todayPlans.length} today, ${upcomingFuture.length} future) (took ${duration}ms)`);
     return NextResponse.json(limitedPlans);
   } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`[API /plans] Error after ${duration}ms:`, error);
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(

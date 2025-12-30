@@ -29,8 +29,7 @@ export async function GET(
     });
 
     return NextResponse.json(blockouts);
-  } catch (error) {
-    console.error("Error fetching blockouts:", error);
+  } catch {
     return NextResponse.json(
       { error: "Failed to fetch blockouts" },
       { status: 500 }

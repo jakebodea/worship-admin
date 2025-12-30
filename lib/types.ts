@@ -212,11 +212,16 @@ export interface TeamPositionGroup {
 
 // Utility type for frequency tracking
 export interface ScheduleFrequency {
+  // Past services (before the reference/plan date)
   last30Days: number;
   last60Days: number;
   last90Days: number;
-  lastServedDate?: Date;
-  totalServed: number;
+  lastServedDate?: Date; // Most recent service BEFORE the plan date
+  totalServed: number; // Total past services
+  
+  // Upcoming services (after the reference/plan date)
+  upcomingServices: number; // Number of services scheduled AFTER the plan date
+  nextUpcomingDate?: Date; // Next scheduled service AFTER the plan date
 }
 
 // UI Helper Types
@@ -230,4 +235,5 @@ export interface PersonWithAvailability extends Person {
   serviceHistory?: ServiceHistoryItem[];
   isBlockedForDate?: boolean;
   recommendationScore?: number;
+  recommendationReasoning?: string[];
 }

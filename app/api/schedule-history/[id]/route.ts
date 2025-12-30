@@ -67,6 +67,7 @@ export async function GET(
       last60Days: 0,
       last90Days: 0,
       totalServed: planPeople.length,
+      upcomingServices: 0, // This endpoint only returns historical data
     };
 
     planPeople.forEach((pp) => {
@@ -88,8 +89,7 @@ export async function GET(
       planPeople: planPeople.slice(0, 20), // Return last 20 for display
       frequency,
     });
-  } catch (error) {
-    console.error("Error fetching schedule history:", error);
+  } catch {
     return NextResponse.json(
       { error: "Failed to fetch schedule history" },
       { status: 500 }

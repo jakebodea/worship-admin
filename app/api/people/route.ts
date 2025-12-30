@@ -20,77 +20,146 @@ export const dynamic = "force-dynamic";
  * Calculate recommendation score based on schedule frequency.
  * Higher score = more recommended to schedule.
  * Prioritizes people with lower frequency (haven't served recently).
+ * Penalizes people who already have upcoming services scheduled.
+ * @param person - The person to score
+ * @param referenceDate - The date to use as reference (plan's service date), defaults to today
  */
-function calculateRecommendationScore(person: PersonWithAvailability, logDetails: boolean = false): number {
+function calculateRecommendationScore(
+  person: PersonWithAvailability,
+  referenceDate: Date = new Date()
+): { score: number; reasoning: string[] } {
   const frequency = person.frequency;
+  const reasoning: string[] = [];
   
   if (!frequency) {
-    if (logDetails) {
-      console.log(`[SCORE] ${person.fullName}: No frequency data - returning neutral score 50`);
-    }
-    return 50; // No history = neutral score
+    reasoning.push("No service history available");
+    return { score: 50, reasoning }; // No history = neutral score
   }
   
-  // Base score: inverse of frequency (lower frequency = higher score)
+  // Helper to format dates
+  const formatDate = (date: Date) => {
+    return new Intl.DateTimeFormat("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(date);
+  };
+
+  // Base score: inverse of past frequency (lower frequency = higher score)
   // Weight recent frequency more heavily (each service in last 30 days = -10 points)
   const baseScore = 100 - (frequency.last30Days * 10);
   
   // Bonus for days since last served (max 30 days = +30 points)
   // People who haven't served in a while get a bonus
+  // Only consider PAST services for recency bonus
   const daysSinceLastServed = frequency.lastServedDate
-    ? Math.floor((Date.now() - frequency.lastServedDate.getTime()) / (1000 * 60 * 60 * 24))
+    ? Math.floor((referenceDate.getTime() - frequency.lastServedDate.getTime()) / (1000 * 60 * 60 * 24))
     : 999; // Never served = very high score
-  const recencyBonus = Math.min(daysSinceLastServed, 30);
+  const recencyBonus = Math.min(Math.max(daysSinceLastServed, 0), 30);
   
-  const rawScore = baseScore + recencyBonus;
+  // Penalty for upcoming services (each upcoming service = -20 points)
+  // People who are already scheduled after this date should be ranked lower
+  const upcomingPenalty = (frequency.upcomingServices || 0) * 20;
   
-  if (logDetails) {
-    console.log(`[SCORE] ${person.fullName}:`, {
-      last30Days: frequency.last30Days,
-      last60Days: frequency.last60Days,
-      last90Days: frequency.last90Days,
-      totalServed: frequency.totalServed,
-      daysSinceLastServed: frequency.lastServedDate ? daysSinceLastServed : 'never',
-      baseScore: `${100} - (${frequency.last30Days} × 10) = ${baseScore}`,
-      recencyBonus: `min(${daysSinceLastServed}, 30) = ${recencyBonus}`,
-      rawScore: `${baseScore} + ${recencyBonus} = ${rawScore}`,
-    });
+  // Additional penalty if their next service is very close (within 14 days after this date)
+  let proximityPenalty = 0;
+  if (frequency.nextUpcomingDate) {
+    const daysUntilNext = Math.floor(
+      (frequency.nextUpcomingDate.getTime() - referenceDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    if (daysUntilNext <= 7) {
+      proximityPenalty = 30; // Heavy penalty for service within a week
+    } else if (daysUntilNext <= 14) {
+      proximityPenalty = 15; // Moderate penalty for service within 2 weeks
+    }
   }
   
-  return rawScore;
+  const rawScore = baseScore + recencyBonus - upcomingPenalty - proximityPenalty;
+
+  // === Generate reasoning ===
+  
+  // Past service - include days before
+  if (frequency.lastServedDate === undefined && frequency.totalServed === 0) {
+    reasoning.push("No past services scheduled");
+  } else if (frequency.lastServedDate) {
+    const lastServedStr = formatDate(frequency.lastServedDate);
+    if (daysSinceLastServed === 0) {
+      reasoning.push(`Last served on the same date (${lastServedStr})`);
+    } else if (daysSinceLastServed === 1) {
+      reasoning.push(`Last served 1 day before on ${lastServedStr}`);
+    } else {
+      reasoning.push(`Last served ${daysSinceLastServed} days before on ${lastServedStr}`);
+    }
+  }
+  
+  // Upcoming service - include days after
+  if (frequency.upcomingServices > 0 && frequency.nextUpcomingDate) {
+    const nextDateStr = formatDate(frequency.nextUpcomingDate);
+    const daysUntilNext = Math.floor(
+      (frequency.nextUpcomingDate.getTime() - referenceDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    
+    if (frequency.upcomingServices === 1) {
+      if (daysUntilNext === 1) {
+        reasoning.push(`Upcoming: 1 day after on ${nextDateStr}`);
+      } else {
+        reasoning.push(`Upcoming: ${daysUntilNext} days after on ${nextDateStr}`);
+      }
+    } else {
+      reasoning.push(`Upcoming: ${frequency.upcomingServices} days scheduled (${daysUntilNext} days after on ${nextDateStr})`);
+    }
+  }
+  
+  // Only add score-impacting explanations for significant factors
+  
+  // Penalty: upcoming service close
+  if (frequency.upcomingServices > 0 && frequency.nextUpcomingDate) {
+    const daysUntilNext = Math.floor(
+      (frequency.nextUpcomingDate.getTime() - referenceDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    
+    if (daysUntilNext <= 7) {
+      reasoning.push(`Ranked lower: scheduled ${daysUntilNext} day${daysUntilNext === 1 ? '' : 's'} after`);
+    } else if (daysUntilNext <= 14) {
+      reasoning.push(`Ranked slightly lower: scheduled ${daysUntilNext} days after`);
+    } else if (daysUntilNext <= 21) {
+      reasoning.push(`Minor penalty: scheduled ${daysUntilNext} days after`);
+    }
+  }
+  
+  // Penalty: high recent frequency (3+ days in last 30 days)
+  if (frequency.last30Days >= 3) {
+    reasoning.push(`Ranked lower: served ${frequency.last30Days} days in the last 30 days`);
+  }
+  
+  return { score: rawScore, reasoning };
 }
 
 export async function GET(request: Request) {
-  const startTime = Date.now();
   try {
     const { searchParams } = new URL(request.url);
-    const planId = searchParams.get("plan_id");
     const positionId = searchParams.get("position_id");
     const teamId = searchParams.get("team_id");
     const dateStr = searchParams.get("date");
 
-    console.log(`[API /people] Starting request for team_id: ${teamId}, position_id: ${positionId}, plan_id: ${planId}, date: ${dateStr}`);
-
     // Require both team_id and position_id for optimized query
     if (!positionId || !teamId) {
-      console.log(`[API /people] Missing required params - returning empty array`);
       return NextResponse.json([]);
     }
 
-    // Parse date if provided
+    // Parse date if provided (this is the plan's service date)
     const checkDate = dateStr ? new Date(dateStr) : null;
-    const ninetyDaysAgo = new Date();
+    // Calculate 90 days ago relative to the plan date (or today if no date provided)
+    const referenceDate = checkDate || new Date();
+    const ninetyDaysAgo = new Date(referenceDate);
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
     // Step 1: Get ONLY people who can serve in this position (optimized endpoint)
-    console.log(`[API /people] Step 1: Fetching people for team_position...`);
-    const step1Start = Date.now();
-    const { data: peopleData, included } = await pcClient.getPeopleForTeamPosition(
+    const { data: peopleData } = await pcClient.getPeopleForTeamPosition(
       teamId,
       positionId
     );
-    const step1Duration = Date.now() - step1Start;
-    console.log(`[API /people] Step 1: Received ${peopleData.length} people, ${included.length} included resources (took ${step1Duration}ms)`);
     
     // The endpoint returns Person resources directly in the data array (not PersonTeamPositionAssignment)
     // So we can use the data array directly as Person resources
@@ -103,12 +172,7 @@ export async function GET(request: Request) {
       (person) => !person.attributes.archived_at
     );
 
-    console.log(`[API /people] Found ${personResources.length} people total, ${activePersonResources.length} active (non-archived)`);
-
     // Step 2 & 3: Check blockouts and get service history for each person
-    console.log(`[API /people] Step 2 & 3: Processing ${activePersonResources.length} people (checking blockouts and service history)...`);
-    const step2Start = Date.now();
-    
     const peopleWithData = await Promise.all(
       activePersonResources.map(async (rawPerson) => {
         const person = rawPerson as unknown as RawPerson;
@@ -148,11 +212,8 @@ export async function GET(request: Request) {
               teamId,
             };
           });
-        } catch (error) {
-          console.warn(
-            `Failed to get positions for person ${person.id}:`,
-            error
-          );
+        } catch {
+          // Failed to get positions for person
         }
 
         // Transform to Person type
@@ -192,11 +253,8 @@ export async function GET(request: Request) {
                 checkDate >= blockout.startsAt && checkDate <= blockout.endsAt
               );
             });
-          } catch (error) {
-            console.warn(
-              `Failed to get blockouts for person ${person.id}:`,
-              error
-            );
+          } catch {
+            // Failed to get blockouts for person
           }
         }
 
@@ -313,46 +371,85 @@ export async function GET(request: Request) {
           });
 
           // Calculate frequency metrics from ALL service history (before slicing for display)
-          const now = new Date();
+          // Use the plan's service date as reference, or today if no date provided
+          const referenceDate = checkDate || new Date();
           const frequency: ScheduleFrequency = {
             last30Days: 0,
             last60Days: 0,
             last90Days: 0,
-            totalServed: serviceHistory.length,
+            totalServed: 0,
+            upcomingServices: 0,
           };
 
-          // Count services in different time windows
+          // Helper to normalize a date to just the day (remove time component)
+          const normalizeToDay = (date: Date): string => {
+            const normalized = new Date(date);
+            normalized.setHours(0, 0, 0, 0);
+            return normalized.toISOString().split('T')[0]; // YYYY-MM-DD format
+          };
+
+          // Track unique service dates (not individual service items)
+          // This ensures multiple positions on the same day count as one day
+          const pastServiceDates = new Set<string>();
+          const futureServiceDates = new Set<string>();
+          const pastServices: ServiceHistoryItem[] = [];
+          const futureServices: ServiceHistoryItem[] = [];
+          
           serviceHistory.forEach((historyItem) => {
-            const daysAgo = Math.floor(
-              (now.getTime() - historyItem.date.getTime()) / (1000 * 60 * 60 * 24)
+            const daysDiff = Math.floor(
+              (referenceDate.getTime() - historyItem.date.getTime()) / (1000 * 60 * 60 * 24)
             );
 
-            if (daysAgo <= 30) frequency.last30Days++;
-            if (daysAgo <= 60) frequency.last60Days++;
-            if (daysAgo <= 90) frequency.last90Days++;
+            const serviceDateKey = normalizeToDay(historyItem.date);
+
+            if (daysDiff >= 0) {
+              // Past service (on or before the plan date)
+              // Only count unique dates, not individual service items
+              if (!pastServiceDates.has(serviceDateKey)) {
+                pastServiceDates.add(serviceDateKey);
+                if (daysDiff <= 30) frequency.last30Days++;
+                if (daysDiff <= 60) frequency.last60Days++;
+                if (daysDiff <= 90) frequency.last90Days++;
+              }
+              pastServices.push(historyItem);
+            } else {
+              // Future service (after the plan date)
+              // Only count unique dates, not individual service items
+              if (!futureServiceDates.has(serviceDateKey)) {
+                futureServiceDates.add(serviceDateKey);
+                frequency.upcomingServices++;
+              }
+              futureServices.push(historyItem);
+            }
           });
 
-          // Get the most recent service date
-          if (serviceHistory.length > 0) {
-            // Service history is sorted ascending, so last item is most recent
-            frequency.lastServedDate = serviceHistory[serviceHistory.length - 1].date;
+          // totalServed should count unique days, not individual service items
+          frequency.totalServed = pastServiceDates.size;
+
+          // Get the most recent PAST service date
+          if (pastServices.length > 0) {
+            // Past services are sorted ascending, so last item is most recent past service
+            frequency.lastServedDate = pastServices[pastServices.length - 1].date;
+          }
+
+          // Get the next UPCOMING service date
+          if (futureServices.length > 0) {
+            // Future services are sorted ascending, so first item is next upcoming
+            frequency.nextUpcomingDate = futureServices[0].date;
           }
 
           transformedPerson.frequency = frequency;
 
           // Show only the 4 most recent service histories for display (last 4 after sorting ascending)
           serviceHistory = serviceHistory.slice(-4);
-        } catch (error) {
-          console.warn(
-            `Failed to get service history for person ${person.id}:`,
-            error
-          );
+        } catch {
           // Set default frequency if there's an error
           transformedPerson.frequency = {
             last30Days: 0,
             last60Days: 0,
             last90Days: 0,
             totalServed: 0,
+            upcomingServices: 0,
           };
         }
 
@@ -362,18 +459,14 @@ export async function GET(request: Request) {
       })
     );
     
-    const step2Duration = Date.now() - step2Start;
-    const blockedCount = peopleWithData.filter(p => p.isBlockedForDate).length;
-    const availableCount = peopleWithData.length - blockedCount;
-    console.log(`[API /people] Step 2 & 3: Processed ${peopleWithData.length} people (${availableCount} available, ${blockedCount} blocked) (took ${step2Duration}ms)`);
-
     // Step 4: Calculate recommendation scores, normalize to 0-100, and sort
-    console.log(`[API /people] Step 4: Calculating recommendation scores...`);
-    const step4Start = Date.now();
-    
     // Calculate raw recommendation scores for each person
+    // Use the plan's service date as reference for scoring
+    const scoringReferenceDate = checkDate || new Date();
     peopleWithData.forEach((person) => {
-      person.recommendationScore = calculateRecommendationScore(person, true);
+      const { score, reasoning } = calculateRecommendationScore(person, scoringReferenceDate);
+      person.recommendationScore = score;
+      person.recommendationReasoning = reasoning;
     });
 
     // Find min and max scores for normalization (excluding blocked people from normalization)
@@ -385,8 +478,6 @@ export async function GET(request: Request) {
     const maxScore = availablePeopleScores.length > 0 ? Math.max(...availablePeopleScores) : 100;
     const scoreRange = maxScore - minScore;
 
-    console.log(`[API /people] Score normalization: min=${minScore}, max=${maxScore}, range=${scoreRange}`);
-
     // Normalize scores to 0-100 range
     peopleWithData.forEach((person) => {
       if (person.recommendationScore !== undefined && !person.isBlockedForDate) {
@@ -397,13 +488,8 @@ export async function GET(request: Request) {
           ? ((rawScore - minScore) / scoreRange) * 100
           : 50; // If all scores are the same, set to middle value
         person.recommendationScore = Math.round(normalizedScore * 100) / 100; // Round to 2 decimal places
-        
-        console.log(`[SCORE] ${person.fullName}: Raw=${rawScore.toFixed(2)} → Normalized=${person.recommendationScore.toFixed(2)}%`);
       }
     });
-
-    const step4Duration = Date.now() - step4Start;
-    console.log(`[API /people] Step 4: Calculated and normalized scores (took ${step4Duration}ms)`);
 
     // Sort: available first, then by recommendation score (highest first), then alphabetically
     peopleWithData.sort((a, b) => {
@@ -421,12 +507,8 @@ export async function GET(request: Request) {
       return a.fullName.localeCompare(b.fullName);
     });
 
-    const totalDuration = Date.now() - startTime;
-    console.log(`[API /people] Returning ${peopleWithData.length} people (${availableCount} available, ${blockedCount} blocked) (took ${totalDuration}ms)`);
     return NextResponse.json(peopleWithData);
   } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`[API /people] Error after ${duration}ms:`, error);
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(

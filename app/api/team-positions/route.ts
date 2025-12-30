@@ -86,7 +86,6 @@ export async function GET(request: Request) {
 
     return NextResponse.json(groupedPositions);
   } catch (error) {
-    console.error("Error fetching team positions:", error);
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(

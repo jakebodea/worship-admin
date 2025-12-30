@@ -25,7 +25,6 @@ export async function GET() {
 
     return NextResponse.json(teams);
   } catch (error) {
-    console.error("Error fetching teams:", error);
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(

@@ -9,6 +9,7 @@ export const EXCLUDED_SERVICE_IDS: string[] = [
   "1025407", // Junior Academy Worship Team
   "1106935", // Worship Leading Classes
   "1280704", // Children's Ministry
+  "1039924", // Special Services & Meetings
 ];
 
 /**

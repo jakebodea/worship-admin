@@ -5,7 +5,6 @@ export function usePlans(serviceTypeId: string | null) {
   return useQuery<Plan[]>({
     queryKey: ["plans", serviceTypeId],
     queryFn: async () => {
-      console.log("[usePlans] Fetching plans for service type:", serviceTypeId);
       if (!serviceTypeId) {
         return [];
       }
@@ -16,7 +15,6 @@ export function usePlans(serviceTypeId: string | null) {
         throw new Error("Failed to fetch plans");
       }
       const data = await response.json();
-      console.log("[usePlans] Fetched plans:", data);
       return data;
     },
     enabled: !!serviceTypeId,

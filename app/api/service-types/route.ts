@@ -27,7 +27,6 @@ export async function GET() {
 
     return NextResponse.json(serviceTypes);
   } catch (error) {
-    console.error("Error fetching service types:", error);
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(

@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { PersonWithAvailability } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -80,17 +81,37 @@ export function PersonCard({ person }: PersonCardProps) {
                 </Badge>
               )}
               {recommendationPercentage !== null && (
-                <Badge 
-                  variant="outline" 
-                  className={cn(
-                    "text-xs font-semibold",
-                    recommendationPercentage >= 80 && "border-green-500 text-green-700 bg-green-50",
-                    recommendationPercentage >= 50 && recommendationPercentage < 80 && "border-yellow-500 text-yellow-700 bg-yellow-50",
-                    recommendationPercentage < 50 && "border-orange-500 text-orange-700 bg-orange-50"
-                  )}
-                >
-                  {recommendationPercentage}% Recommended
-                </Badge>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Badge 
+                      variant="outline" 
+                      className={cn(
+                        "text-xs font-semibold cursor-help",
+                        recommendationPercentage >= 80 && "border-green-500 text-green-700 bg-green-50",
+                        recommendationPercentage >= 50 && recommendationPercentage < 80 && "border-yellow-500 text-yellow-700 bg-yellow-50",
+                        recommendationPercentage < 50 && "border-orange-500 text-orange-700 bg-orange-50"
+                      )}
+                    >
+                      {recommendationPercentage}% Recommended
+                    </Badge>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80">
+                    <div className="space-y-2">
+                      <h4 className="font-semibold text-sm">Recommendation Reasoning</h4>
+                      {person.recommendationReasoning && person.recommendationReasoning.length > 0 ? (
+                        <ul className="text-sm space-y-1 list-disc list-inside text-muted-foreground">
+                          {person.recommendationReasoning.map((reason, index) => (
+                            <li key={index}>{reason}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          No reasoning available for this recommendation.
+                        </p>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               )}
             </div>
           </div>

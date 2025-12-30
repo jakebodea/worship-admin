@@ -76,19 +76,13 @@ class PlanningCenterClient {
     let hasMore = true;
     let pageCount = 0;
 
-    console.log(`[pcClient.fetchAll] Starting pagination for: ${endpoint} (max ${maxPages} pages)`);
-
     while (hasMore && pageCount < maxPages) {
       pageCount++;
-      console.log(`[pcClient.fetchAll] Fetching page ${pageCount}...`);
-      const pageStartTime = Date.now();
       const response = await this.fetch<T[] | T>(url);
-      const pageDuration = Date.now() - pageStartTime;
       const data = Array.isArray(response.data)
         ? response.data
         : [response.data];
       allData.push(...data);
-      console.log(`[pcClient.fetchAll] Page ${pageCount}: Got ${data.length} items (took ${pageDuration}ms), total: ${allData.length}`);
 
       // Check for next page
       const nextUrl = response.links?.next;
@@ -99,11 +93,6 @@ class PlanningCenterClient {
       }
     }
 
-    if (pageCount >= maxPages) {
-      console.log(`[pcClient.fetchAll] Reached max pages limit (${maxPages}), stopping pagination`);
-    }
-
-    console.log(`[pcClient.fetchAll] Completed: ${allData.length} total items across ${pageCount} pages`);
     return allData;
   }
 
@@ -177,9 +166,8 @@ class PlanningCenterClient {
         
         // Collect all included resources
         allIncluded.push(...included);
-      } catch (error) {
+      } catch {
         // Skip teams that don't have people endpoint or have errors
-        console.warn(`Failed to get people from team ${team.id}:`, error);
       }
     }
 
@@ -346,9 +334,6 @@ class PlanningCenterClient {
     serviceTypeId: string,
     params: Record<string, string> = {}
   ): Promise<PCResource[]> {
-    console.log(`[pcClient.getPlans] Fetching plans for serviceTypeId: ${serviceTypeId}`, params);
-    const startTime = Date.now();
-    
     // Build URL with order parameter and merge with other params
     const url = this.buildUrl(
       `/services/v2/service_types/${serviceTypeId}/plans`,
@@ -358,8 +343,6 @@ class PlanningCenterClient {
     const response = await this.fetch<PCResource[]>(url);
     const data = Array.isArray(response.data) ? response.data : [response.data];
     
-    const duration = Date.now() - startTime;
-    console.log(`[pcClient.getPlans] Fetched ${data.length} plans in ${duration}ms`);
     return data;
   }
 

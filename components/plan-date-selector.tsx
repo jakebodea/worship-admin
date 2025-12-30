@@ -17,9 +17,7 @@ export function PlanDateSelector({
   selectedPlan,
   onSelect,
 }: PlanDateSelectorProps) {
-  console.log("[PlanDateSelector] serviceTypeId:", serviceTypeId);
   const { data: plans, isLoading, isFetching } = usePlans(serviceTypeId);
-  console.log("[PlanDateSelector] plans:", plans, "isLoading:", isLoading, "isFetching:", isFetching);
 
   if (isLoading || isFetching) {
     return (
