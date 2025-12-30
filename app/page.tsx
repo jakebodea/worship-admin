@@ -1,31 +1,75 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { PersonCard } from "@/components/person-card";
-import { TeamFilter } from "@/components/team-filter";
-import { DateRangePicker } from "@/components/date-range-picker";
+import { ServiceTypeSelector } from "@/components/service-type-selector";
+import { PlanDateSelector } from "@/components/plan-date-selector";
+import { PositionSelector } from "@/components/position-selector";
+import { WizardNavigation } from "@/components/wizard-navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePeople } from "@/hooks/use-people";
-import { useTeams } from "@/hooks/use-teams";
+import { useTeamPositions } from "@/hooks/use-team-positions";
+import type { ServiceType, Plan } from "@/lib/types";
+
+type Step = 1 | 2 | 3;
 
 export default function DashboardPage() {
-  const [selectedTeam, setSelectedTeam] = useState("all");
-  const [checkDate, setCheckDate] = useState(new Date());
+  const [step, setStep] = useState<Step>(1);
+  const [selectedServiceType, setSelectedServiceType] = useState<ServiceType | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
+  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
+  const [selectedPosition, setSelectedPosition] = useState<string | null>(null);
 
-  const { data: people, isLoading: peopleLoading } = usePeople();
-  const { data: teams, isLoading: teamsLoading } = useTeams();
+  // Get team and position names for display
+  const { data: teamPositionGroups } = useTeamPositions(selectedServiceType?.id || null);
+  const selectedTeamGroup = teamPositionGroups?.find((g) => g.teamId === selectedTeam);
+  const selectedPositionObj = selectedTeamGroup?.positions.find((p) => p.id === selectedPosition);
 
-  const filteredPeople = useMemo(() => {
-    if (!people) return [];
-    
-    if (selectedTeam === "all") {
-      return people;
+  const { data: people, isLoading: peopleLoading } = usePeople(
+    selectedTeam,
+    selectedPosition,
+    selectedPlan?.id || null,
+    selectedPlan?.sortDate || null
+  );
+
+  const handleServiceTypeSelect = (serviceType: ServiceType) => {
+    setSelectedServiceType(serviceType);
+    setStep(2);
+    // Clear subsequent selections
+    setSelectedPlan(null);
+    setSelectedTeam(null);
+    setSelectedPosition(null);
+  };
+
+  const handlePlanSelect = (plan: Plan) => {
+    setSelectedPlan(plan);
+    setStep(3);
+    // Clear position selections
+    setSelectedTeam(null);
+    setSelectedPosition(null);
+  };
+
+  const handleBack = () => {
+    if (step === 2) {
+      setStep(1);
+      setSelectedServiceType(null);
+      setSelectedPlan(null);
+    } else if (step === 3) {
+      setStep(2);
+      setSelectedPlan(null);
+      setSelectedTeam(null);
+      setSelectedPosition(null);
     }
+  };
 
-    return people.filter((person) =>
-      person.positions.some((pos) => pos.teamId === selectedTeam)
-    );
-  }, [people, selectedTeam]);
+  const handleTeamChange = (teamId: string) => {
+    setSelectedTeam(teamId);
+    setSelectedPosition(null); // Reset position when team changes
+  };
+
+  const handlePositionChange = (positionId: string) => {
+    setSelectedPosition(positionId);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -35,54 +79,120 @@ export default function DashboardPage() {
             Worship Team Scheduler
           </h1>
           <p className="text-muted-foreground">
-            View team member availability and scheduling frequency
+            Schedule team members for your worship services
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          <div className="flex-1">
-            {teamsLoading ? (
-              <Skeleton className="h-10 w-[200px]" />
-            ) : (
-              <TeamFilter
-                teams={teams || []}
-                selectedTeam={selectedTeam}
-                onTeamChange={setSelectedTeam}
-              />
+        <WizardNavigation
+          currentStep={step}
+          totalSteps={3}
+          onBack={handleBack}
+          canGoBack={step > 1}
+        />
+
+        {/* Filter Summary */}
+        {(selectedServiceType || selectedPlan || selectedTeam || selectedPosition) && (
+          <div className="mb-6 p-4 bg-muted/50 rounded-lg border">
+            <h3 className="text-sm font-semibold mb-2 text-muted-foreground">Selected Filters</h3>
+            <div className="flex flex-wrap gap-2 text-sm">
+              {selectedServiceType && (
+                <span className="px-2 py-1 bg-background rounded border">
+                  Service Type: <span className="font-medium">{selectedServiceType.name}</span>
+                </span>
+              )}
+              {selectedPlan && (
+                <span className="px-2 py-1 bg-background rounded border">
+                  Plan: <span className="font-medium">{selectedPlan.title}</span>
+                  {selectedPlan.sortDate && !isNaN(new Date(selectedPlan.sortDate).getTime()) && (
+                    <span className="text-muted-foreground ml-1">
+                      ({new Intl.DateTimeFormat("en-US", {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      }).format(new Date(selectedPlan.sortDate))})
+                    </span>
+                  )}
+                </span>
+              )}
+              {selectedTeamGroup && (
+                <span className="px-2 py-1 bg-background rounded border">
+                  Team: <span className="font-medium">{selectedTeamGroup.teamName}</span>
+                </span>
+              )}
+              {selectedPositionObj && (
+                <span className="px-2 py-1 bg-background rounded border">
+                  Position: <span className="font-medium">{selectedPositionObj.name}</span>
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Step 1: Service Type Selection */}
+        {step === 1 && (
+          <ServiceTypeSelector
+            selectedServiceType={selectedServiceType?.id || null}
+            onSelect={handleServiceTypeSelect}
+          />
+        )}
+
+        {/* Step 2: Plan/Date Selection */}
+        {step === 2 && (
+          <PlanDateSelector
+            serviceTypeId={selectedServiceType?.id || null}
+            selectedPlan={selectedPlan}
+            onSelect={handlePlanSelect}
+          />
+        )}
+
+        {/* Step 3: Team/Position Selection and People Display */}
+        {step === 3 && (
+          <div className="space-y-6">
+            <PositionSelector
+              serviceTypeId={selectedServiceType?.id || null}
+              selectedTeam={selectedTeam}
+              selectedPosition={selectedPosition}
+              onTeamChange={handleTeamChange}
+              onPositionChange={handlePositionChange}
+            />
+
+            {selectedPosition && (
+              <div className="mt-8">
+                {peopleLoading ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {Array.from({ length: 8 }).map((_, i) => (
+                      <Skeleton key={i} className="h-64 w-full" />
+                    ))}
+                  </div>
+                ) : !people || people.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-muted-foreground">
+                      No people found for this position. Make sure the position
+                      has team members assigned.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="mb-4 text-sm text-muted-foreground">
+                      Showing {people.length}{" "}
+                      {people.length === 1 ? "person" : "people"}
+                      {people.some((p) => p.isBlockedForDate) && (
+                        <span className="ml-2">
+                          (blocked members shown last)
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {people.map((person) => (
+                        <PersonCard key={person.id} person={person} />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             )}
           </div>
-          <DateRangePicker date={checkDate} onDateChange={setCheckDate} />
-        </div>
-
-        {peopleLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-64 w-full" />
-            ))}
-          </div>
-        ) : filteredPeople.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">
-              No team members found. Make sure your Planning Center credentials
-              are configured correctly.
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="mb-4 text-sm text-muted-foreground">
-              Showing {filteredPeople.length}{" "}
-              {filteredPeople.length === 1 ? "person" : "people"}
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredPeople.map((person) => (
-                <PersonCard
-                  key={person.id}
-                  person={person}
-                  checkDate={checkDate}
-                />
-              ))}
-            </div>
-          </>
         )}
       </div>
     </div>

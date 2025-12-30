@@ -3,31 +3,53 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { AvailabilityBadge } from "./availability-badge";
-import { FrequencyIndicator, FrequencyStats } from "./frequency-indicator";
-import { useBlockouts } from "@/hooks/use-blockouts";
-import { useScheduleHistory } from "@/hooks/use-schedule-history";
-import type { Person } from "@/lib/types";
+import type { PersonWithAvailability } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 interface PersonCardProps {
-  person: Person;
-  checkDate?: Date;
+  person: PersonWithAvailability;
 }
 
-export function PersonCard({ person, checkDate }: PersonCardProps) {
-  const { data: blockouts, isLoading: blockoutsLoading } = useBlockouts(
-    person.id
-  );
-  const { data: history, isLoading: historyLoading } = useScheduleHistory(
-    person.id,
-    90
-  );
-
+export function PersonCard({ person }: PersonCardProps) {
   const initials = `${person.firstName[0]}${person.lastName[0]}`;
+  const isBlocked = person.isBlockedForDate || false;
+  const serviceHistory = person.serviceHistory || [];
+
+  const formatDate = (date: Date | string | undefined) => {
+    if (!date) return "Unknown date";
+    
+    // Convert string to Date if needed
+    const dateObj = typeof date === "string" ? new Date(date) : date;
+    
+    // Check if date is valid
+    if (isNaN(dateObj.getTime())) {
+      return "Invalid date";
+    }
+    
+    // Format with day of week (3 letters) + date
+    const dayOfWeek = new Intl.DateTimeFormat("en-US", {
+      weekday: "short",
+    }).format(dateObj);
+    
+    const dateStr = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(dateObj);
+    
+    return `${dayOfWeek}, ${dateStr}`;
+  };
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card
+      className={cn(
+        "hover:shadow-md transition-shadow relative",
+        isBlocked && "opacity-60"
+      )}
+    >
+      {isBlocked && (
+        <div className="absolute inset-0 bg-red-500/10 border-2 border-red-500/30 rounded-lg pointer-events-none z-10" />
+      )}
       <CardHeader className="pb-3">
         <div className="flex items-start gap-3">
           <Avatar>
@@ -38,16 +60,11 @@ export function PersonCard({ person, checkDate }: PersonCardProps) {
             <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold truncate">{person.fullName}</h3>
-            <div className="flex flex-wrap gap-1 mt-1">
-              {person.positions.slice(0, 2).map((pos) => (
-                <Badge key={pos.id} variant="outline" className="text-xs">
-                  {pos.name}
-                </Badge>
-              ))}
-              {person.positions.length > 2 && (
-                <Badge variant="outline" className="text-xs">
-                  +{person.positions.length - 2}
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold truncate">{person.fullName}</h3>
+              {isBlocked && (
+                <Badge variant="destructive" className="text-xs">
+                  Blocked
                 </Badge>
               )}
             </div>
@@ -55,29 +72,50 @@ export function PersonCard({ person, checkDate }: PersonCardProps) {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        {blockoutsLoading ? (
-          <Skeleton className="h-5 w-24" />
-        ) : (
-          <AvailabilityBadge
-            blockouts={blockouts || []}
-            checkDate={checkDate}
-          />
+        {serviceHistory.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium">Recent Service History</h4>
+            <div className="space-y-1.5">
+              {serviceHistory.slice(0, 5).map((historyItem) => (
+                <div
+                  key={historyItem.id}
+                  className="text-xs text-muted-foreground border-l-2 border-muted pl-2"
+                >
+                  <div className="font-medium text-foreground">
+                    {formatDate(historyItem.date)}
+                  </div>
+                  <div>
+                    {historyItem.teamName && (
+                      <span>{historyItem.teamName} - </span>
+                    )}
+                    {historyItem.teamPositionName}
+                    {historyItem.serviceTypeName && (
+                      <span className="text-muted-foreground">
+                        {" "}
+                        ({historyItem.serviceTypeName})
+                      </span>
+                    )}
+                  </div>
+                  {historyItem.planTitle && (
+                    <div className="text-muted-foreground italic">
+                      {historyItem.planTitle}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {serviceHistory.length > 5 && (
+                <div className="text-xs text-muted-foreground pt-1">
+                  +{serviceHistory.length - 5} more
+                </div>
+              )}
+            </div>
+          </div>
         )}
-        
-        {historyLoading ? (
-          <Skeleton className="h-5 w-full" />
-        ) : history?.frequency ? (
-          <>
-            <FrequencyIndicator frequency={history.frequency} />
-            <FrequencyStats frequency={history.frequency} />
-            {history.frequency.lastServedDate && (
-              <p className="text-xs text-muted-foreground">
-                Last served:{" "}
-                {new Date(history.frequency.lastServedDate).toLocaleDateString()}
-              </p>
-            )}
-          </>
-        ) : null}
+        {serviceHistory.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            No recent service history
+          </p>
+        )}
       </CardContent>
     </Card>
   );

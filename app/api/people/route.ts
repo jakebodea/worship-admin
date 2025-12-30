@@ -1,25 +1,79 @@
 import { NextResponse } from "next/server";
-import { pcClient } from "@/lib/planning-center";
-import type { Person, RawPerson, RawTeamPosition } from "@/lib/types";
+import { pcClient, findIncluded, findAllIncluded } from "@/lib/planning-center";
+import type {
+  PersonWithAvailability,
+  RawPerson,
+  RawTeamPosition,
+  RawBlockout,
+  RawPlanPerson,
+  RawPlan,
+  RawServiceType,
+  ServiceHistoryItem,
+  Blockout,
+} from "@/lib/types";
+import type { PCResource } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const startTime = Date.now();
   try {
-    // Get all people from teams (limited to avoid rate limits)
-    const { people: rawPeople } = await pcClient.getAllPeopleFromTeams();
+    const { searchParams } = new URL(request.url);
+    const planId = searchParams.get("plan_id");
+    const positionId = searchParams.get("position_id");
+    const teamId = searchParams.get("team_id");
+    const dateStr = searchParams.get("date");
 
-    // Get team positions for all people in parallel (but limit concurrency)
-    const peopleWithPositions = await Promise.all(
-      rawPeople.slice(0, 50).map(async (rawPerson) => {
+    console.log(`[API /people] Starting request for team_id: ${teamId}, position_id: ${positionId}, plan_id: ${planId}, date: ${dateStr}`);
+
+    // Require both team_id and position_id for optimized query
+    if (!positionId || !teamId) {
+      console.log(`[API /people] Missing required params - returning empty array`);
+      return NextResponse.json([]);
+    }
+
+    // Parse date if provided
+    const checkDate = dateStr ? new Date(dateStr) : null;
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+    // Step 1: Get ONLY people who can serve in this position (optimized endpoint)
+    console.log(`[API /people] Step 1: Fetching people for team_position...`);
+    const step1Start = Date.now();
+    const { data: peopleData, included } = await pcClient.getPeopleForTeamPosition(
+      teamId,
+      positionId
+    );
+    const step1Duration = Date.now() - step1Start;
+    console.log(`[API /people] Step 1: Received ${peopleData.length} people, ${included.length} included resources (took ${step1Duration}ms)`);
+    
+    // The endpoint returns Person resources directly in the data array (not PersonTeamPositionAssignment)
+    // So we can use the data array directly as Person resources
+    const personResources: RawPerson[] = peopleData
+      .filter((item) => item.type === "Person")
+      .map((item) => item as unknown as RawPerson);
+
+    // Filter out archived people early
+    const activePersonResources = personResources.filter(
+      (person) => !person.attributes.archived_at
+    );
+
+    console.log(`[API /people] Found ${personResources.length} people total, ${activePersonResources.length} active (non-archived)`);
+
+    // Step 2 & 3: Check blockouts and get service history for each person
+    console.log(`[API /people] Step 2 & 3: Processing ${activePersonResources.length} people (checking blockouts and service history)...`);
+    const step2Start = Date.now();
+    
+    const peopleWithData = await Promise.all(
+      activePersonResources.map(async (rawPerson) => {
         const person = rawPerson as unknown as RawPerson;
-        
-        // Get team position assignments for this person
+
+        // Get all team position assignments for this person to populate positions array
         let positions: Array<{ id: string; name: string; teamId: string }> = [];
-        
         try {
-          const assignmentsResponse = await pcClient.getPersonTeamPositionAssignments(person.id);
-          
+          const assignmentsResponse =
+            await pcClient.getPersonTeamPositionAssignments(person.id);
+
           // Extract team positions from included resources
           const teamPositions = assignmentsResponse.included.filter(
             (item) => item.type === "TeamPosition"
@@ -27,17 +81,15 @@ export async function GET() {
 
           positions = teamPositions.map((tp) => {
             const pos = tp as unknown as RawTeamPosition;
-            // Get team ID from relationships
             const teamData = pos.relationships?.team?.data;
             let teamId = "";
-            
+
             if (teamData) {
-              teamId = Array.isArray(teamData) 
+              teamId = Array.isArray(teamData)
                 ? teamData[0]?.id || ""
                 : teamData.id || "";
             }
-            
-            // If not in relationships, find in included
+
             if (!teamId) {
               const team = assignmentsResponse.included.find(
                 (item) => item.type === "Team"
@@ -52,34 +104,175 @@ export async function GET() {
             };
           });
         } catch (error) {
-          // Skip if we can't get positions for this person
-          console.warn(`Failed to get positions for person ${person.id}:`, error);
+          console.warn(
+            `Failed to get positions for person ${person.id}:`,
+            error
+          );
         }
 
-        // Transform to our Person type
-        const transformedPerson: Person = {
+        // Transform to Person type
+        const transformedPerson: PersonWithAvailability = {
           id: person.id,
           firstName: (person.attributes.first_name as string) || "",
           lastName: (person.attributes.last_name as string) || "",
           fullName: `${person.attributes.first_name || ""} ${person.attributes.last_name || ""}`.trim(),
           photoUrl: (person.attributes.photo_url as string) || null,
-          photoThumbnailUrl: (person.attributes.photo_thumbnail_url as string) || null,
+          photoThumbnailUrl:
+            (person.attributes.photo_thumbnail_url as string) || null,
           archived: !!person.attributes.archived_at,
           positions,
         };
 
+        // Step 2: Check blockouts for the selected date
+        let isBlocked = false;
+        let blockouts: Blockout[] = [];
+        if (checkDate) {
+          try {
+            const rawBlockouts = await pcClient.getPersonBlockouts(person.id);
+            blockouts = rawBlockouts.map((raw) => {
+              const blockout = raw as unknown as RawBlockout;
+              return {
+                id: blockout.id,
+                reason: blockout.attributes.reason || "",
+                startsAt: new Date(blockout.attributes.starts_at as string),
+                endsAt: new Date(blockout.attributes.ends_at as string),
+                description: blockout.attributes.description || "",
+                share: blockout.attributes.share,
+              };
+            });
+
+            // Check if person is blocked for the selected date
+            isBlocked = blockouts.some((blockout) => {
+              return (
+                checkDate >= blockout.startsAt && checkDate <= blockout.endsAt
+              );
+            });
+          } catch (error) {
+            console.warn(
+              `Failed to get blockouts for person ${person.id}:`,
+              error
+            );
+          }
+        }
+
+        transformedPerson.isBlockedForDate = isBlocked;
+        transformedPerson.blockouts = blockouts;
+        transformedPerson.availability = isBlocked ? "blocked" : "available";
+
+        // Step 3: Get service history (last 90 days) for ANY position
+        // This endpoint already returns history across all positions, which is what we want
+        let serviceHistory: ServiceHistoryItem[] = [];
+        try {
+          const historyResponse =
+            await pcClient.getPersonPlanPeopleWithPlans(person.id, {
+              "filter[after]": ninetyDaysAgo.toISOString().split("T")[0],
+              order: "-created_at",
+            });
+
+          const planPeople = historyResponse.data as unknown as RawPlanPerson[];
+          const historyIncluded = historyResponse.included || [];
+
+          serviceHistory = planPeople.map((pp) => {
+            const planId = pp.relationships?.plan?.data;
+            let plan: RawPlan | undefined;
+            let serviceType: RawServiceType | undefined;
+
+            if (planId) {
+              const planIdStr = Array.isArray(planId)
+                ? planId[0]?.id
+                : planId?.id;
+              if (planIdStr) {
+                plan = findIncluded(
+                  historyIncluded,
+                  "Plan",
+                  planIdStr
+                ) as unknown as RawPlan | undefined;
+
+                if (plan?.relationships?.service_type?.data) {
+                  const stData = plan.relationships.service_type.data;
+                  const stId = Array.isArray(stData)
+                    ? stData[0]?.id
+                    : stData?.id;
+                  if (stId) {
+                    serviceType = findIncluded(
+                      historyIncluded,
+                      "ServiceType",
+                      stId
+                    ) as unknown as RawServiceType | undefined;
+                  }
+                }
+              }
+            }
+
+            // Extract team name from team_position_name (format: "Team Name - Position Name")
+            const teamPositionParts = (
+              pp.attributes.team_position_name as string
+            ).split(" - ");
+            const teamName =
+              teamPositionParts.length > 1 ? teamPositionParts[0] : undefined;
+            const positionName =
+              teamPositionParts.length > 1
+                ? teamPositionParts[1]
+                : teamPositionParts[0];
+
+            // Use plan's sort_date (service date) instead of PlanPerson's created_at (scheduling date)
+            // Fallback to created_at if sort_date is not available
+            const serviceDate = plan?.attributes.sort_date 
+              ? new Date(plan.attributes.sort_date as string)
+              : new Date(pp.attributes.created_at as string);
+
+            return {
+              id: pp.id,
+              date: serviceDate,
+              teamPositionName: positionName,
+              teamName,
+              serviceTypeName: serviceType?.attributes.name as
+                | string
+                | undefined,
+              planTitle: plan?.attributes.title as string | undefined,
+              status: pp.attributes.status as string,
+            };
+          });
+
+          // Sort by service date ascending (oldest first)
+          serviceHistory.sort((a, b) => {
+            return a.date.getTime() - b.date.getTime();
+          });
+
+          // Show only the 4 most recent service histories (last 4 after sorting ascending)
+          serviceHistory = serviceHistory.slice(-4);
+        } catch (error) {
+          console.warn(
+            `Failed to get service history for person ${person.id}:`,
+            error
+          );
+        }
+
+        transformedPerson.serviceHistory = serviceHistory;
+
         return transformedPerson;
       })
     );
+    
+    const step2Duration = Date.now() - step2Start;
+    const blockedCount = peopleWithData.filter(p => p.isBlockedForDate).length;
+    const availableCount = peopleWithData.length - blockedCount;
+    console.log(`[API /people] Step 2 & 3: Processed ${peopleWithData.length} people (${availableCount} available, ${blockedCount} blocked) (took ${step2Duration}ms)`);
 
-    // Filter out archived people and those without positions
-    const activePeopleWithPositions = peopleWithPositions.filter(
-      (person) => !person.archived && person.positions.length > 0
-    );
+    // Step 3: Sort - available people first, blocked people last
+    // Blocked people will have red overlay in the UI
+    peopleWithData.sort((a, b) => {
+      if (a.isBlockedForDate && !b.isBlockedForDate) return 1;
+      if (!a.isBlockedForDate && b.isBlockedForDate) return -1;
+      return a.fullName.localeCompare(b.fullName);
+    });
 
-    return NextResponse.json(activePeopleWithPositions);
+    const totalDuration = Date.now() - startTime;
+    console.log(`[API /people] Returning ${peopleWithData.length} people (${availableCount} available, ${blockedCount} blocked) (took ${totalDuration}ms)`);
+    return NextResponse.json(peopleWithData);
   } catch (error) {
-    console.error("Error fetching people:", error);
+    const duration = Date.now() - startTime;
+    console.error(`[API /people] Error after ${duration}ms:`, error);
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(

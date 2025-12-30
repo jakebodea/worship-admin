@@ -68,18 +68,27 @@ class PlanningCenterClient {
   // Fetch all pages of a paginated endpoint
   async fetchAll<T>(
     endpoint: string,
-    params: Record<string, string> = {}
+    params: Record<string, string> = {},
+    maxPages: number = 10
   ): Promise<T[]> {
     const allData: T[] = [];
     let url = this.buildUrl(endpoint, { ...params, per_page: "100" });
     let hasMore = true;
+    let pageCount = 0;
 
-    while (hasMore) {
+    console.log(`[pcClient.fetchAll] Starting pagination for: ${endpoint} (max ${maxPages} pages)`);
+
+    while (hasMore && pageCount < maxPages) {
+      pageCount++;
+      console.log(`[pcClient.fetchAll] Fetching page ${pageCount}...`);
+      const pageStartTime = Date.now();
       const response = await this.fetch<T[] | T>(url);
+      const pageDuration = Date.now() - pageStartTime;
       const data = Array.isArray(response.data)
         ? response.data
         : [response.data];
       allData.push(...data);
+      console.log(`[pcClient.fetchAll] Page ${pageCount}: Got ${data.length} items (took ${pageDuration}ms), total: ${allData.length}`);
 
       // Check for next page
       const nextUrl = response.links?.next;
@@ -90,6 +99,11 @@ class PlanningCenterClient {
       }
     }
 
+    if (pageCount >= maxPages) {
+      console.log(`[pcClient.fetchAll] Reached max pages limit (${maxPages}), stopping pagination`);
+    }
+
+    console.log(`[pcClient.fetchAll] Completed: ${allData.length} total items across ${pageCount} pages`);
     return allData;
   }
 
@@ -192,6 +206,86 @@ class PlanningCenterClient {
     );
   }
 
+  // Get plan people with plan details included (for service history)
+  async getPersonPlanPeopleWithPlans(
+    personId: string,
+    params: Record<string, string> = {}
+  ): Promise<{ data: PCResource[]; included: PCResource[] }> {
+    // Build URL with include parameter
+    const url = this.buildUrl(
+      `/services/v2/people/${personId}/plan_people`,
+      { ...params, include: "plan,plan.service_type" }
+    );
+    
+    const response = await this.fetch<PCResource[]>(url);
+    
+    return {
+      data: Array.isArray(response.data) ? response.data : [response.data],
+      included: response.included || [],
+    };
+  }
+
+  // Get people for a specific team position
+  async getPeopleForPosition(
+    teamId: string,
+    positionId: string
+  ): Promise<{ data: PCResource[]; included: PCResource[] }> {
+    // Try with include parameter - the endpoint returns PersonTeamPositionAssignment resources
+    // and we want to include the related Person resources
+    const response = await this.fetch<PCResource[]>(
+      `/services/v2/teams/${teamId}/team_positions/${positionId}/people?include=person`
+    );
+    
+    return {
+      data: Array.isArray(response.data) ? response.data : [response.data],
+      included: response.included || [],
+    };
+  }
+  
+  // Alternative: Get people for a team position by fetching assignments and then persons
+  async getPeopleForTeamPositionWithPersons(
+    teamId: string,
+    positionId: string
+  ): Promise<{ assignments: PCResource[]; persons: PCResource[] }> {
+    // First get the assignments
+    const assignmentsResponse = await this.fetch<PCResource[]>(
+      `/services/v2/teams/${teamId}/team_positions/${positionId}/people`
+    );
+    
+    const assignments = Array.isArray(assignmentsResponse.data) 
+      ? assignmentsResponse.data 
+      : [assignmentsResponse.data];
+    
+    // Extract person IDs from assignments
+    const personIds = new Set<string>();
+    assignments.forEach((assignment) => {
+      const personRel = assignment.relationships?.person?.data;
+      if (personRel) {
+        const personId = Array.isArray(personRel) ? personRel[0]?.id : personRel.id;
+        if (personId) {
+          personIds.add(personId);
+        }
+      }
+    });
+    
+    // Fetch person data for each ID (batch if possible, or individual)
+    // For now, we'll return assignments and let the caller handle person fetching
+    // Or we could fetch persons here, but that adds API calls
+    
+    return {
+      assignments,
+      persons: assignmentsResponse.included?.filter(item => item.type === "Person") || [],
+    };
+  }
+
+  // Alias for consistency (same as getPeopleForPosition)
+  async getPeopleForTeamPosition(
+    teamId: string,
+    positionId: string
+  ): Promise<{ data: PCResource[]; included: PCResource[] }> {
+    return this.getPeopleForPosition(teamId, positionId);
+  }
+
   // Get team positions for a person
   async getPersonTeamPositionAssignments(
     personId: string
@@ -238,10 +332,21 @@ class PlanningCenterClient {
     serviceTypeId: string,
     params: Record<string, string> = {}
   ): Promise<PCResource[]> {
-    return this.fetchAll<PCResource>(
+    console.log(`[pcClient.getPlans] Fetching plans for serviceTypeId: ${serviceTypeId}`, params);
+    const startTime = Date.now();
+    
+    // Build URL with order parameter and merge with other params
+    const url = this.buildUrl(
       `/services/v2/service_types/${serviceTypeId}/plans`,
-      params
+      { ...params, order: "-sort_date", per_page: "25" }
     );
+    
+    const response = await this.fetch<PCResource[]>(url);
+    const data = Array.isArray(response.data) ? response.data : [response.data];
+    
+    const duration = Date.now() - startTime;
+    console.log(`[pcClient.getPlans] Fetched ${data.length} plans in ${duration}ms`);
+    return data;
   }
 
   async getPlan(planId: string): Promise<PCResource> {
