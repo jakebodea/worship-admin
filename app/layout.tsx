@@ -14,8 +14,18 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Worship Team Scheduler",
+  title: "Agape Planning Center Helper",
   description: "Planning Center worship team scheduling helper",
+  openGraph: {
+    title: "Agape Planning Center Helper",
+    description: "Planning Center worship team scheduling helper",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "Agape Planning Center Helper",
+    description: "Planning Center worship team scheduling helper",
+  },
 };
 
 export default function RootLayout({

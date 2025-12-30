@@ -78,7 +78,7 @@ export default function DashboardPage() {
       <div className="container mx-auto py-8 px-4">
         <div className="mb-8">
           <h1 className="text-4xl font-bold tracking-tight mb-2">
-            Worship Team Scheduler
+            Agape Planning Center Helper
           </h1>
           <p className="text-muted-foreground">
             Schedule team members for your worship services
@@ -86,8 +86,6 @@ export default function DashboardPage() {
         </div>
 
         <WizardNavigation
-          currentStep={step}
-          totalSteps={3}
           onBack={handleBack}
           canGoBack={step > 1}
         />
