@@ -229,4 +229,5 @@ export interface PersonWithAvailability extends Person {
   blockouts?: Blockout[];
   serviceHistory?: ServiceHistoryItem[];
   isBlockedForDate?: boolean;
+  recommendationScore?: number;
 }

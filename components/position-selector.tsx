@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import {
   Select,
   SelectContent,
@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTeamPositions } from "@/hooks/use-team-positions";
-import type { TeamPosition } from "@/lib/types";
 
 interface PositionSelectorProps {
   serviceTypeId: string | null;

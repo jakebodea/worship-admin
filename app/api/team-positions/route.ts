@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { pcClient, findAllIncluded, findIncluded } from "@/lib/planning-center";
-import type { TeamPositionGroup, RawTeamPosition, RawTeam, PCResource } from "@/lib/types";
+import type { TeamPositionGroup, RawTeamPosition, RawTeam } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -17,9 +17,7 @@ export async function GET(request: Request) {
     }
 
     // Get team positions for this service type with team info included
-    const response = await pcClient.fetch<PCResource[]>(
-      `/services/v2/service_types/${serviceTypeId}/team_positions?include=team`
-    );
+    const response = await pcClient.getServiceTypeTeamPositionsWithTeams(serviceTypeId);
 
     const teamPositions = Array.isArray(response.data) ? response.data : [response.data];
     const included = response.included || [];

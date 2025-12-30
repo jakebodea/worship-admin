@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { pcClient, findIncluded, findAllIncluded } from "@/lib/planning-center";
+import { pcClient, findIncluded } from "@/lib/planning-center";
+import { isServiceExcluded } from "@/lib/excluded-services";
 import type {
   PersonWithAvailability,
   RawPerson,
@@ -10,10 +11,54 @@ import type {
   RawServiceType,
   ServiceHistoryItem,
   Blockout,
+  ScheduleFrequency,
 } from "@/lib/types";
-import type { PCResource } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Calculate recommendation score based on schedule frequency.
+ * Higher score = more recommended to schedule.
+ * Prioritizes people with lower frequency (haven't served recently).
+ */
+function calculateRecommendationScore(person: PersonWithAvailability, logDetails: boolean = false): number {
+  const frequency = person.frequency;
+  
+  if (!frequency) {
+    if (logDetails) {
+      console.log(`[SCORE] ${person.fullName}: No frequency data - returning neutral score 50`);
+    }
+    return 50; // No history = neutral score
+  }
+  
+  // Base score: inverse of frequency (lower frequency = higher score)
+  // Weight recent frequency more heavily (each service in last 30 days = -10 points)
+  const baseScore = 100 - (frequency.last30Days * 10);
+  
+  // Bonus for days since last served (max 30 days = +30 points)
+  // People who haven't served in a while get a bonus
+  const daysSinceLastServed = frequency.lastServedDate
+    ? Math.floor((Date.now() - frequency.lastServedDate.getTime()) / (1000 * 60 * 60 * 24))
+    : 999; // Never served = very high score
+  const recencyBonus = Math.min(daysSinceLastServed, 30);
+  
+  const rawScore = baseScore + recencyBonus;
+  
+  if (logDetails) {
+    console.log(`[SCORE] ${person.fullName}:`, {
+      last30Days: frequency.last30Days,
+      last60Days: frequency.last60Days,
+      last90Days: frequency.last90Days,
+      totalServed: frequency.totalServed,
+      daysSinceLastServed: frequency.lastServedDate ? daysSinceLastServed : 'never',
+      baseScore: `${100} - (${frequency.last30Days} × 10) = ${baseScore}`,
+      recencyBonus: `min(${daysSinceLastServed}, 30) = ${recencyBonus}`,
+      rawScore: `${baseScore} + ${recencyBonus} = ${rawScore}`,
+    });
+  }
+  
+  return rawScore;
+}
 
 export async function GET(request: Request) {
   const startTime = Date.now();
@@ -172,7 +217,35 @@ export async function GET(request: Request) {
           const planPeople = historyResponse.data as unknown as RawPlanPerson[];
           const historyIncluded = historyResponse.included || [];
 
-          serviceHistory = planPeople.map((pp) => {
+          // Filter out plan_people that belong to excluded service types
+          const filteredPlanPeople = planPeople.filter((pp) => {
+            const planId = pp.relationships?.plan?.data;
+            if (planId) {
+              const planIdStr = Array.isArray(planId)
+                ? planId[0]?.id
+                : planId?.id;
+              if (planIdStr) {
+                const plan = findIncluded(
+                  historyIncluded,
+                  "Plan",
+                  planIdStr
+                ) as unknown as RawPlan | undefined;
+
+                if (plan?.relationships?.service_type?.data) {
+                  const stData = plan.relationships.service_type.data;
+                  const stId = Array.isArray(stData)
+                    ? stData[0]?.id
+                    : stData?.id;
+                  if (stId && isServiceExcluded(stId)) {
+                    return false; // Exclude this plan_person
+                  }
+                }
+              }
+            }
+            return true; // Include if we can't determine service type or it's not excluded
+          });
+
+          serviceHistory = filteredPlanPeople.map((pp) => {
             const planId = pp.relationships?.plan?.data;
             let plan: RawPlan | undefined;
             let serviceType: RawServiceType | undefined;
@@ -239,13 +312,48 @@ export async function GET(request: Request) {
             return a.date.getTime() - b.date.getTime();
           });
 
-          // Show only the 4 most recent service histories (last 4 after sorting ascending)
+          // Calculate frequency metrics from ALL service history (before slicing for display)
+          const now = new Date();
+          const frequency: ScheduleFrequency = {
+            last30Days: 0,
+            last60Days: 0,
+            last90Days: 0,
+            totalServed: serviceHistory.length,
+          };
+
+          // Count services in different time windows
+          serviceHistory.forEach((historyItem) => {
+            const daysAgo = Math.floor(
+              (now.getTime() - historyItem.date.getTime()) / (1000 * 60 * 60 * 24)
+            );
+
+            if (daysAgo <= 30) frequency.last30Days++;
+            if (daysAgo <= 60) frequency.last60Days++;
+            if (daysAgo <= 90) frequency.last90Days++;
+          });
+
+          // Get the most recent service date
+          if (serviceHistory.length > 0) {
+            // Service history is sorted ascending, so last item is most recent
+            frequency.lastServedDate = serviceHistory[serviceHistory.length - 1].date;
+          }
+
+          transformedPerson.frequency = frequency;
+
+          // Show only the 4 most recent service histories for display (last 4 after sorting ascending)
           serviceHistory = serviceHistory.slice(-4);
         } catch (error) {
           console.warn(
             `Failed to get service history for person ${person.id}:`,
             error
           );
+          // Set default frequency if there's an error
+          transformedPerson.frequency = {
+            last30Days: 0,
+            last60Days: 0,
+            last90Days: 0,
+            totalServed: 0,
+          };
         }
 
         transformedPerson.serviceHistory = serviceHistory;
@@ -259,11 +367,57 @@ export async function GET(request: Request) {
     const availableCount = peopleWithData.length - blockedCount;
     console.log(`[API /people] Step 2 & 3: Processed ${peopleWithData.length} people (${availableCount} available, ${blockedCount} blocked) (took ${step2Duration}ms)`);
 
-    // Step 3: Sort - available people first, blocked people last
-    // Blocked people will have red overlay in the UI
+    // Step 4: Calculate recommendation scores, normalize to 0-100, and sort
+    console.log(`[API /people] Step 4: Calculating recommendation scores...`);
+    const step4Start = Date.now();
+    
+    // Calculate raw recommendation scores for each person
+    peopleWithData.forEach((person) => {
+      person.recommendationScore = calculateRecommendationScore(person, true);
+    });
+
+    // Find min and max scores for normalization (excluding blocked people from normalization)
+    const availablePeopleScores = peopleWithData
+      .filter(p => !p.isBlockedForDate && p.recommendationScore !== undefined)
+      .map(p => p.recommendationScore!);
+    
+    const minScore = availablePeopleScores.length > 0 ? Math.min(...availablePeopleScores) : 0;
+    const maxScore = availablePeopleScores.length > 0 ? Math.max(...availablePeopleScores) : 100;
+    const scoreRange = maxScore - minScore;
+
+    console.log(`[API /people] Score normalization: min=${minScore}, max=${maxScore}, range=${scoreRange}`);
+
+    // Normalize scores to 0-100 range
+    peopleWithData.forEach((person) => {
+      if (person.recommendationScore !== undefined && !person.isBlockedForDate) {
+        const rawScore = person.recommendationScore;
+        // Normalize: (score - min) / range * 100
+        // Handle edge case where all scores are the same (range = 0)
+        const normalizedScore = scoreRange > 0 
+          ? ((rawScore - minScore) / scoreRange) * 100
+          : 50; // If all scores are the same, set to middle value
+        person.recommendationScore = Math.round(normalizedScore * 100) / 100; // Round to 2 decimal places
+        
+        console.log(`[SCORE] ${person.fullName}: Raw=${rawScore.toFixed(2)} → Normalized=${person.recommendationScore.toFixed(2)}%`);
+      }
+    });
+
+    const step4Duration = Date.now() - step4Start;
+    console.log(`[API /people] Step 4: Calculated and normalized scores (took ${step4Duration}ms)`);
+
+    // Sort: available first, then by recommendation score (highest first), then alphabetically
     peopleWithData.sort((a, b) => {
+      // Blocked people always go last
       if (a.isBlockedForDate && !b.isBlockedForDate) return 1;
       if (!a.isBlockedForDate && b.isBlockedForDate) return -1;
+
+      // Sort by recommendation score (descending - highest score first)
+      const aScore = a.recommendationScore || 0;
+      const bScore = b.recommendationScore || 0;
+      const scoreDiff = bScore - aScore;
+      if (scoreDiff !== 0) return scoreDiff;
+
+      // Tiebreaker: alphabetical
       return a.fullName.localeCompare(b.fullName);
     });
 

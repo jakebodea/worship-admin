@@ -52,13 +52,14 @@ export async function GET(request: Request) {
           return null;
         }
 
-        return {
+        const planObj: Plan = {
           id: plan.id,
           title: plan.attributes.title as string,
           seriesTitle: plan.attributes.series_title as string | undefined,
           createdAt: new Date(plan.attributes.created_at as string),
           sortDate,
         };
+        return planObj;
       })
       .filter((plan): plan is Plan => plan !== null);
 

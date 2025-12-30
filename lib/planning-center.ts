@@ -327,6 +327,20 @@ class PlanningCenterClient {
     );
   }
 
+  // Get team positions for a service type with included team data
+  async getServiceTypeTeamPositionsWithTeams(
+    serviceTypeId: string
+  ): Promise<{ data: PCResource[]; included: PCResource[] }> {
+    const response = await this.fetch<PCResource[]>(
+      `/services/v2/service_types/${serviceTypeId}/team_positions?include=team`
+    );
+    
+    return {
+      data: Array.isArray(response.data) ? response.data : [response.data],
+      included: response.included || [],
+    };
+  }
+
   // Plans endpoints
   async getPlans(
     serviceTypeId: string,

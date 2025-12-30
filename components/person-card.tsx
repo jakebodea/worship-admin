@@ -15,6 +15,18 @@ export function PersonCard({ person }: PersonCardProps) {
   const isBlocked = person.isBlockedForDate || false;
   const serviceHistory = person.serviceHistory || [];
 
+  // Get recommendation percentage
+  // Scores are already normalized to 0-100 in the API
+  const getRecommendationPercentage = (): number | null => {
+    if (isBlocked || person.recommendationScore === undefined) {
+      return null;
+    }
+    // Score is already a percentage (0-100), just round it
+    return Math.round(person.recommendationScore);
+  };
+
+  const recommendationPercentage = getRecommendationPercentage();
+
   const formatDate = (date: Date | string | undefined) => {
     if (!date) return "Unknown date";
     
@@ -60,11 +72,24 @@ export function PersonCard({ person }: PersonCardProps) {
             <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-semibold truncate">{person.fullName}</h3>
               {isBlocked && (
                 <Badge variant="destructive" className="text-xs">
                   Blocked
+                </Badge>
+              )}
+              {recommendationPercentage !== null && (
+                <Badge 
+                  variant="outline" 
+                  className={cn(
+                    "text-xs font-semibold",
+                    recommendationPercentage >= 80 && "border-green-500 text-green-700 bg-green-50",
+                    recommendationPercentage >= 50 && recommendationPercentage < 80 && "border-yellow-500 text-yellow-700 bg-yellow-50",
+                    recommendationPercentage < 50 && "border-orange-500 text-orange-700 bg-orange-50"
+                  )}
+                >
+                  {recommendationPercentage}% Recommended
                 </Badge>
               )}
             </div>
