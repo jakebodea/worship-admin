@@ -101,9 +101,13 @@ hooks/
   use-schedule-history.ts   # Fetch scheduling history
 
 lib/
-  planning-center.ts        # API client with auth
+  http/                     # Shared API error/handler utilities
+  planning-center/
+    core-client.ts          # Raw Planning Center HTTP client
+    services/               # API adapter services (plans/people/catalog)
+    utils.ts                # Included-resource helper utilities
+  use-cases/                # Business logic per endpoint
   types.ts                  # TypeScript type definitions
-  utils.ts                  # Utility functions
 ```
 
 ## API Routes
@@ -114,6 +118,14 @@ All API routes are server-side and handle Planning Center authentication:
 - `GET /api/teams` - All active teams
 - `GET /api/blockouts/[id]` - Blockouts for a specific person
 - `GET /api/schedule-history/[id]` - Scheduling history for a person
+
+## Testing
+
+```bash
+npm test
+```
+
+Unit tests cover core Planning Center use-cases under `lib/use-cases/`.
 
 ## Best Practices Implemented
 

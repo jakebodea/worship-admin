@@ -1,40 +1,8 @@
-import { NextResponse } from "next/server";
-import { pcClient } from "@/lib/planning-center";
-import { isServiceExcluded } from "@/lib/excluded-services";
-import type { ServiceType, RawServiceType } from "@/lib/types";
+import { handleRoute } from "@/lib/http/route-handler";
+import { getServiceTypes } from "@/lib/use-cases/planning-center/get-service-types";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  try {
-    const rawServiceTypes = await pcClient.getServiceTypes();
-
-    const activeRawServiceTypes = rawServiceTypes.filter((raw) => {
-      const archivedAt = (raw.attributes.archived_at as string | null) || null;
-      return !archivedAt;
-    });
-
-    const serviceTypes: ServiceType[] = activeRawServiceTypes
-      .map((raw) => {
-        const st = raw as unknown as RawServiceType;
-        return {
-          id: st.id,
-          name: st.attributes.name as string,
-          sequence: st.attributes.sequence as number,
-        };
-      })
-      .filter((st) => !isServiceExcluded(st.id));
-
-    // Sort by sequence
-    serviceTypes.sort((a, b) => a.sequence - b.sequence);
-
-    return NextResponse.json(serviceTypes);
-  } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json(
-      { error: "Failed to fetch service types", details: errorMessage },
-      { status: 500 }
-    );
-  }
+  return handleRoute(getServiceTypes);
 }
