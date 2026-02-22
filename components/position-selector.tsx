@@ -42,7 +42,6 @@ export function PositionSelector({
   // Reset position when team changes
   const handleTeamChange = (teamId: string) => {
     onTeamChange(teamId);
-    onPositionChange(""); // Reset position selection
   };
 
   if (isLoading) {
