@@ -126,20 +126,20 @@ type HistoryGroup = {
 };
 
 function buildHistoryGroups(items: ServiceHistoryItem[]): HistoryGroup[] {
-  const byDay = new Map<string, ServiceHistoryItem[]>();
+  const bySchedule = new Map<string, ServiceHistoryItem[]>();
   const order: string[] = [];
 
   for (const item of items) {
-    const key = toDayKey(item.date) || item.sourceScheduleId || item.id;
-    if (!byDay.has(key)) {
-      byDay.set(key, []);
+    const key = item.sourceScheduleId || item.id;
+    if (!bySchedule.has(key)) {
+      bySchedule.set(key, []);
       order.push(key);
     }
-    byDay.get(key)!.push(item);
+    bySchedule.get(key)!.push(item);
   }
 
   return order.map((key) => {
-    const groupItems = [...(byDay.get(key) || [])].sort(
+    const groupItems = [...(bySchedule.get(key) || [])].sort(
       (a, b) => toDate(a.date).getTime() - toDate(b.date).getTime()
     );
     const primary =
