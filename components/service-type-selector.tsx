@@ -53,15 +53,21 @@ export function ServiceTypeSelector({
           <Card
             key={serviceType.id}
             className={cn(
-              "cursor-pointer transition-all hover:shadow-md",
+              "p-0 overflow-hidden transition-all hover:shadow-md",
               selectedServiceType === serviceType.id &&
                 "ring-2 ring-primary ring-offset-2"
             )}
-            onClick={() => onSelect(serviceType)}
           >
-            <CardHeader>
-              <CardTitle>{serviceType.name}</CardTitle>
-            </CardHeader>
+            <button
+              type="button"
+              className="w-full text-left rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => onSelect(serviceType)}
+              aria-pressed={selectedServiceType === serviceType.id}
+            >
+              <CardHeader>
+                <CardTitle>{serviceType.name}</CardTitle>
+              </CardHeader>
+            </button>
           </Card>
         ))}
       </div>

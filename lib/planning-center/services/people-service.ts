@@ -117,6 +117,20 @@ export class PlanningCenterPeopleService {
     };
   }
 
+  async getPlanTeamMembers(
+    serviceTypeId: string,
+    planId: string
+  ): Promise<{ data: PCResource[]; included: PCResource[] }> {
+    const response = await this.core.fetch<PCResource[]>(
+      `/services/v2/service_types/${serviceTypeId}/plans/${planId}/team_members?include=person,team`
+    );
+
+    return {
+      data: Array.isArray(response.data) ? response.data : [response.data],
+      included: response.included || [],
+    };
+  }
+
   async getPersonTeamPositionAssignments(
     personId: string
   ): Promise<{ data: PCResource[]; included: PCResource[] }> {

@@ -87,6 +87,18 @@ export interface TeamPosition {
   name: string;
   teamId: string;
   teamName?: string;
+  neededCount?: number;
+  filledPendingCount?: number;
+  filledConfirmedCount?: number;
+  filledPeople?: FilledPositionPerson[];
+}
+
+export interface FilledPositionPerson {
+  id: string;
+  name: string;
+  status: "pending" | "confirmed";
+  rawStatus: string;
+  photoThumbnailUrl?: string | null;
 }
 
 export interface RawTeamPosition {
@@ -150,6 +162,9 @@ export interface RawPlanPerson {
     };
     team?: {
       data: PCResourceIdentifier;
+    };
+    person?: {
+      data: PCResourceIdentifier | null;
     };
   };
 }

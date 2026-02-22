@@ -41,3 +41,4 @@
 - Preferred flow: `app/api` route -> `lib/use-cases/*` -> `lib/planning-center/services/*`.
 - React Query keys are centralized in `lib/query-keys.ts`; use them for hooks/invalidation.
 - Use `lib/http/client.ts` (`getJson`, `postJson`) for client-side API calls instead of ad hoc `fetch` code.
+- Backward compatibility is not a priority during the current dev phase; prefer cleaner APIs/URLs/UX over temporary compatibility shims unless explicitly requested.

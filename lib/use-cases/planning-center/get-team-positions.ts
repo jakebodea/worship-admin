@@ -1,11 +1,15 @@
 import { planningCenterCatalogService } from "@/lib/planning-center/services/catalog-service";
+import { planningCenterPeopleService } from "@/lib/planning-center/services/people-service";
 import { planningCenterPlansService } from "@/lib/planning-center/services/plans-service";
 import { logger } from "@/lib/logger";
 import { findAllIncluded, findIncluded } from "@/lib/planning-center/utils";
 import type {
+  FilledPositionPerson,
   PCResource,
   RawPlan,
+  RawPerson,
   RawNeededPosition,
+  RawPlanPerson,
   RawTeam,
   RawTeamPosition,
   TeamPosition,
@@ -25,7 +29,7 @@ export async function getNeededTeamPositionsForPlan(
   );
 
   const resolvedSeriesId = seriesId || (await getSeriesIdForPlan(serviceTypeId, planId));
-  const [teamPositionResponse, neededPositionResponse] = await Promise.all([
+  const [teamPositionResponse, neededPositionResponse, planTeamMembersResponse] = await Promise.all([
     planningCenterCatalogService.getServiceTypeTeamPositionsWithTeams(serviceTypeId),
     // Some plans are not attached to a Series (no `series` relationship in payload),
     // so `needed_positions` must be fetched from the service-type scoped plan path.
@@ -35,6 +39,7 @@ export async function getNeededTeamPositionsForPlan(
           serviceTypeId,
           planId
         ),
+    planningCenterPeopleService.getPlanTeamMembers(serviceTypeId, planId),
   ]);
 
   const teamPositions = Array.isArray(teamPositionResponse.data)
@@ -45,9 +50,12 @@ export async function getNeededTeamPositionsForPlan(
     ? neededPositionResponse.data
     : [neededPositionResponse.data];
   const neededIncluded = neededPositionResponse.included || [];
+  const planTeamMembers = Array.isArray(planTeamMembersResponse.data)
+    ? planTeamMembersResponse.data
+    : [planTeamMembersResponse.data];
+  const planTeamMembersIncluded = planTeamMembersResponse.included || [];
   const teamMap = new Map<string, TeamPositionGroup>();
   const positionsByTeamAndName = new Map<string, TeamPosition>();
-  const seenPositionIdsByTeam = new Map<string, Set<string>>();
 
   for (const tp of teamPositions) {
     const position = tp as unknown as RawTeamPosition;
@@ -60,6 +68,7 @@ export async function getNeededTeamPositionsForPlan(
       name: positionName,
       teamId,
       teamName,
+      neededCount: 0,
     });
   }
 
@@ -78,7 +87,6 @@ export async function getNeededTeamPositionsForPlan(
       buildTeamPositionKey(teamId, neededName)
     );
     if (!matchedPosition) continue;
-
     let teamName = matchedPosition.teamName || "";
     if (!teamName) {
       const team = findIncluded(neededIncluded, "Team", teamId) as unknown as RawTeam | undefined;
@@ -92,18 +100,23 @@ export async function getNeededTeamPositionsForPlan(
 
     if (!teamMap.has(teamId)) {
       teamMap.set(teamId, { teamId, teamName, positions: [] });
-      seenPositionIdsByTeam.set(teamId, new Set<string>());
     }
 
-    const seenIds = seenPositionIdsByTeam.get(teamId)!;
-    if (seenIds.has(matchedPosition.id)) continue;
-    seenIds.add(matchedPosition.id);
+    const group = teamMap.get(teamId)!;
+    const existingPosition = group.positions.find((position) => position.id === matchedPosition.id);
+    const incrementBy = typeof quantity === "number" && quantity > 0 ? quantity : 1;
 
-    teamMap.get(teamId)!.positions.push({
-      ...matchedPosition,
-      teamName,
-    });
+    if (existingPosition) {
+      existingPosition.neededCount = (existingPosition.neededCount ?? 0) + incrementBy;
+      continue;
+    }
+
+    matchedPosition.teamName = teamName;
+    matchedPosition.neededCount = incrementBy;
+    group.positions.push(matchedPosition);
   }
+
+  applyPlanTeamMemberSummary(planTeamMembers, planTeamMembersIncluded, positionsByTeamAndName);
 
   const groupedPositions: TeamPositionGroup[] = Array.from(teamMap.values());
   groupedPositions.sort((a, b) => a.teamName.localeCompare(b.teamName));
@@ -119,6 +132,7 @@ export async function getNeededTeamPositionsForPlan(
       neededPositionSource: resolvedSeriesId ? "series-plan" : "service-type-plan",
       serviceTypeTeamPositionCount: teamPositions.length,
       neededPositionCount: neededPositions.length,
+      planTeamMemberCount: planTeamMembers.length,
       matchedTeamCount: groupedPositions.length,
       matchedPositionCount: groupedPositions.reduce((sum, g) => sum + g.positions.length, 0),
     },
@@ -176,6 +190,158 @@ function getTeamInfo(
 
 function buildTeamPositionKey(teamId: string, positionName: string): string {
   return `${teamId}::${positionName.trim().toLowerCase()}`;
+}
+
+function applyPlanTeamMemberSummary(
+  rawPlanTeamMembers: PCResource[],
+  included: PCResource[],
+  positionsByTeamAndName: Map<string, TeamPosition>
+) {
+  const personInfoById = buildPersonInfoMap(included);
+
+  for (const raw of rawPlanTeamMembers) {
+    const planPerson = raw as unknown as RawPlanPerson;
+    const status = classifyPlanPersonStatus(planPerson.attributes.status);
+    if (!status) continue;
+
+    const slotKey = getPlanPersonSlotKey(planPerson, positionsByTeamAndName, included);
+    if (!slotKey) continue;
+
+    const slot = positionsByTeamAndName.get(slotKey);
+    if (!slot) continue;
+
+    if (status === "confirmed") {
+      slot.filledConfirmedCount = (slot.filledConfirmedCount ?? 0) + 1;
+    } else {
+      slot.filledPendingCount = (slot.filledPendingCount ?? 0) + 1;
+    }
+
+    const personId = getPlanPersonId(planPerson) ?? `unknown-${planPerson.id}`;
+    const personInfo = personId ? personInfoById.get(personId) : undefined;
+    const entry: FilledPositionPerson = {
+      id: personId,
+      name: personInfo?.name || "Unknown person",
+      status,
+      rawStatus: (planPerson.attributes.status || "").toString(),
+      photoThumbnailUrl: personInfo?.photoThumbnailUrl ?? null,
+    };
+
+    if (!slot.filledPeople) {
+      slot.filledPeople = [entry];
+    } else {
+      slot.filledPeople.push(entry);
+    }
+  }
+
+  for (const slot of positionsByTeamAndName.values()) {
+    if (!slot.filledPeople || slot.filledPeople.length === 0) continue;
+    slot.filledPeople.sort((a, b) => {
+      if (a.status !== b.status) {
+        return a.status === "confirmed" ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }
+}
+
+function buildPersonInfoMap(
+  included: PCResource[]
+): Map<string, { name: string; photoThumbnailUrl: string | null }> {
+  const result = new Map<string, { name: string; photoThumbnailUrl: string | null }>();
+
+  for (const resource of included) {
+    if (resource.type !== "Person") continue;
+    const person = resource as unknown as RawPerson;
+    const firstName = (person.attributes.first_name || "").trim();
+    const lastName = (person.attributes.last_name || "").trim();
+    const fullName = [firstName, lastName].filter(Boolean).join(" ").trim() || "Unknown person";
+    result.set(resource.id, {
+      name: fullName,
+      photoThumbnailUrl: person.attributes.photo_thumbnail_url ?? null,
+    });
+  }
+
+  return result;
+}
+
+function classifyPlanPersonStatus(rawStatus: string | undefined): "confirmed" | "pending" | null {
+  const status = (rawStatus || "").trim().toLowerCase();
+  if (!status) return "pending";
+  if (status === "c" || status === "confirmed") return "confirmed";
+  if (
+    status === "d" ||
+    status.includes("declined") ||
+    status.includes("removed")
+  ) {
+    return null;
+  }
+  return "pending";
+}
+
+function getPlanPersonId(planPerson: RawPlanPerson): string | null {
+  const personRel = planPerson.relationships?.person?.data;
+  if (!personRel || Array.isArray(personRel)) return null;
+  return personRel.id || null;
+}
+
+function getPlanPersonSlotKey(
+  planPerson: RawPlanPerson,
+  positionsByTeamAndName: Map<string, TeamPosition>,
+  included: PCResource[]
+): string | null {
+  const teamId = getPlanPersonTeamId(planPerson);
+  const teamPositionName = (planPerson.attributes.team_position_name || "").trim();
+  if (!teamPositionName) return null;
+
+  if (teamId) {
+    const directKey = buildTeamPositionKey(teamId, teamPositionName);
+    if (positionsByTeamAndName.has(directKey)) return directKey;
+
+    const parsed = parseTeamAndPosition(teamPositionName);
+    if (parsed) {
+      const byParsedPosition = buildTeamPositionKey(teamId, parsed.positionName);
+      if (positionsByTeamAndName.has(byParsedPosition)) return byParsedPosition;
+    }
+  }
+
+  const parsed = parseTeamAndPosition(teamPositionName);
+  if (!parsed) return null;
+
+  const parsedTeamId = findTeamIdByName(included, parsed.teamName);
+  if (!parsedTeamId) return null;
+
+  const key = buildTeamPositionKey(parsedTeamId, parsed.positionName);
+  return positionsByTeamAndName.has(key) ? key : null;
+}
+
+function getPlanPersonTeamId(planPerson: RawPlanPerson): string | null {
+  const teamRel = planPerson.relationships?.team?.data;
+  if (!teamRel || Array.isArray(teamRel)) return null;
+  return teamRel.id || null;
+}
+
+function parseTeamAndPosition(
+  teamPositionName: string
+): { teamName: string; positionName: string } | null {
+  if (!teamPositionName.includes(" - ")) return null;
+  const parts = teamPositionName.split(" - ");
+  const teamName = (parts[0] || "").trim();
+  const positionName = parts.slice(1).join(" - ").trim();
+  if (!teamName || !positionName) return null;
+  return { teamName, positionName };
+}
+
+function findTeamIdByName(included: PCResource[], teamName: string): string | null {
+  const normalized = teamName.trim().toLowerCase();
+  if (!normalized) return null;
+
+  const team = included.find((resource) => {
+    if (resource.type !== "Team") return false;
+    const rawTeam = resource as unknown as RawTeam;
+    return ((rawTeam.attributes.name as string | undefined) || "").trim().toLowerCase() === normalized;
+  });
+
+  return team?.id || null;
 }
 
 async function getSeriesIdForPlan(

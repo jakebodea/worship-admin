@@ -84,22 +84,28 @@ export function PlanDateSelector({
           <Card
             key={plan.id}
             className={cn(
-              "cursor-pointer transition-all hover:shadow-md",
+              "p-0 overflow-hidden transition-all hover:shadow-md",
               selectedPlan?.id === plan.id &&
                 "ring-2 ring-primary ring-offset-2"
             )}
-            onClick={() => onSelect(plan)}
           >
-            <CardHeader>
-              <CardTitle className="text-lg">
-                {formatDate(plan.sortDate)}
-              </CardTitle>
-              {plan.title && (
-                <p className="text-sm text-muted-foreground mt-1">
-                  {plan.title}
-                </p>
-              )}
-            </CardHeader>
+            <button
+              type="button"
+              className="w-full text-left rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => onSelect(plan)}
+              aria-pressed={selectedPlan?.id === plan.id}
+            >
+              <CardHeader>
+                <CardTitle className="text-lg">
+                  {formatDate(plan.sortDate)}
+                </CardTitle>
+                {plan.title && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {plan.title}
+                  </p>
+                )}
+              </CardHeader>
+            </button>
           </Card>
         ))}
       </div>
