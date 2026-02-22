@@ -7,11 +7,14 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const rawServiceTypes = await pcClient.getServiceTypes({
-      "filter[archived]": "false",
+    const rawServiceTypes = await pcClient.getServiceTypes();
+
+    const activeRawServiceTypes = rawServiceTypes.filter((raw) => {
+      const archivedAt = (raw.attributes.archived_at as string | null) || null;
+      return !archivedAt;
     });
 
-    const serviceTypes: ServiceType[] = rawServiceTypes
+    const serviceTypes: ServiceType[] = activeRawServiceTypes
       .map((raw) => {
         const st = raw as unknown as RawServiceType;
         return {

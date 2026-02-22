@@ -4,6 +4,9 @@ import type { PCApiResponse, PCResource } from "./types";
 const PC_BASE_URL = "https://api.planningcenteronline.com";
 
 class PlanningCenterClient {
+  private serviceTypesCache: { expiresAt: number; data: PCResource[] } | null =
+    null;
+
   private getClientId(): string {
     const id = process.env.PLANNING_CENTER_CLIENT;
     if (!id) {
@@ -94,6 +97,46 @@ class PlanningCenterClient {
     }
 
     return allData;
+  }
+
+  // Fetch all pages of a paginated endpoint including included resources
+  async fetchAllWithIncluded<T>(
+    endpoint: string,
+    params: Record<string, string> = {},
+    maxPages: number = 5
+  ): Promise<{ data: T[]; included: PCResource[] }> {
+    const allData: T[] = [];
+    const allIncluded: PCResource[] = [];
+    const seenIncluded = new Set<string>();
+    let url = this.buildUrl(endpoint, { ...params, per_page: "100" });
+    let hasMore = true;
+    let pageCount = 0;
+
+    while (hasMore && pageCount < maxPages) {
+      pageCount++;
+      const response = await this.fetch<T[] | T>(url);
+      const data = Array.isArray(response.data)
+        ? response.data
+        : [response.data];
+      allData.push(...data);
+
+      for (const resource of response.included || []) {
+        const key = `${resource.type}:${resource.id}`;
+        if (!seenIncluded.has(key)) {
+          seenIncluded.add(key);
+          allIncluded.push(resource);
+        }
+      }
+
+      const nextUrl = response.links?.next;
+      if (nextUrl && nextUrl !== url) {
+        url = nextUrl;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    return { data: allData, included: allIncluded };
   }
 
   private buildUrl(
@@ -197,81 +240,34 @@ class PlanningCenterClient {
   // Get plan people with plan details included (for service history)
   async getPersonPlanPeopleWithPlans(
     personId: string,
-    params: Record<string, string> = {}
+    params: Record<string, string> = {},
+    maxPages: number = 2
   ): Promise<{ data: PCResource[]; included: PCResource[] }> {
-    // Build URL with include parameter
-    const url = this.buildUrl(
+    const response = await this.fetchAllWithIncluded<PCResource>(
       `/services/v2/people/${personId}/plan_people`,
-      { ...params, include: "plan,plan.service_type" }
+      { ...params, include: "plan,team" },
+      maxPages
     );
-    
-    const response = await this.fetch<PCResource[]>(url);
-    
+
     return {
-      data: Array.isArray(response.data) ? response.data : [response.data],
+      data: response.data,
       included: response.included || [],
     };
   }
 
-  // Get people for a specific team position
-  async getPeopleForPosition(
-    teamId: string,
-    positionId: string
-  ): Promise<{ data: PCResource[]; included: PCResource[] }> {
-    // Try with include parameter - the endpoint returns PersonTeamPositionAssignment resources
-    // and we want to include the related Person resources
-    const response = await this.fetch<PCResource[]>(
-      `/services/v2/teams/${teamId}/team_positions/${positionId}/people?include=person`
-    );
-    
-    return {
-      data: Array.isArray(response.data) ? response.data : [response.data],
-      included: response.included || [],
-    };
-  }
-  
-  // Alternative: Get people for a team position by fetching assignments and then persons
-  async getPeopleForTeamPositionWithPersons(
-    teamId: string,
-    positionId: string
-  ): Promise<{ assignments: PCResource[]; persons: PCResource[] }> {
-    // First get the assignments
-    const assignmentsResponse = await this.fetch<PCResource[]>(
-      `/services/v2/teams/${teamId}/team_positions/${positionId}/people`
-    );
-    
-    const assignments = Array.isArray(assignmentsResponse.data) 
-      ? assignmentsResponse.data 
-      : [assignmentsResponse.data];
-    
-    // Extract person IDs from assignments
-    const personIds = new Set<string>();
-    assignments.forEach((assignment) => {
-      const personRel = assignment.relationships?.person?.data;
-      if (personRel) {
-        const personId = Array.isArray(personRel) ? personRel[0]?.id : personRel.id;
-        if (personId) {
-          personIds.add(personId);
-        }
-      }
-    });
-    
-    // Fetch person data for each ID (batch if possible, or individual)
-    // For now, we'll return assignments and let the caller handle person fetching
-    // Or we could fetch persons here, but that adds API calls
-    
-    return {
-      assignments,
-      persons: assignmentsResponse.included?.filter(item => item.type === "Person") || [],
-    };
-  }
-
-  // Alias for consistency (same as getPeopleForPosition)
+  // Get person assignments for a specific position using documented resource path
   async getPeopleForTeamPosition(
-    teamId: string,
+    serviceTypeId: string,
     positionId: string
   ): Promise<{ data: PCResource[]; included: PCResource[] }> {
-    return this.getPeopleForPosition(teamId, positionId);
+    const response = await this.fetch<PCResource[]>(
+      `/services/v2/service_types/${serviceTypeId}/team_positions/${positionId}/person_team_position_assignments?include=person,team_position`
+    );
+
+    return {
+      data: Array.isArray(response.data) ? response.data : [response.data],
+      included: response.included || [],
+    };
   }
 
   // Get team positions for a person
@@ -307,6 +303,22 @@ class PlanningCenterClient {
     return this.fetchAll<PCResource>("/services/v2/service_types", params);
   }
 
+  async getServiceTypesCached(
+    ttlMs: number = 5 * 60 * 1000
+  ): Promise<PCResource[]> {
+    const now = Date.now();
+    if (this.serviceTypesCache && this.serviceTypesCache.expiresAt > now) {
+      return this.serviceTypesCache.data;
+    }
+
+    const data = await this.getServiceTypes();
+    this.serviceTypesCache = {
+      expiresAt: now + ttlMs,
+      data,
+    };
+    return data;
+  }
+
   async getServiceTypeTeamPositions(
     serviceTypeId: string
   ): Promise<PCResource[]> {
@@ -334,16 +346,68 @@ class PlanningCenterClient {
     serviceTypeId: string,
     params: Record<string, string> = {}
   ): Promise<PCResource[]> {
-    // Build URL with order parameter and merge with other params
-    const url = this.buildUrl(
+    return this.fetchAll<PCResource>(
       `/services/v2/service_types/${serviceTypeId}/plans`,
-      { ...params, order: "-sort_date", per_page: "25" }
+      { ...params, order: "-sort_date" },
+      3
     );
-    
-    const response = await this.fetch<PCResource[]>(url);
-    const data = Array.isArray(response.data) ? response.data : [response.data];
-    
-    return data;
+  }
+
+  // Fetch plans near a reference date with adaptive paging.
+  // Stops early once we have enough past and future plans.
+  async getPlansNearDate(
+    serviceTypeId: string,
+    referenceDate: Date,
+    pastTarget: number = 5,
+    futureTarget: number = 5,
+    maxPages: number = 3
+  ): Promise<PCResource[]> {
+    const allPlans: PCResource[] = [];
+    let url = this.buildUrl(`/services/v2/service_types/${serviceTypeId}/plans`, {
+      order: "-sort_date",
+      per_page: "100",
+    });
+    let pageCount = 0;
+    let hasMore = true;
+
+    const todayStart = new Date(referenceDate);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(referenceDate);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    while (hasMore && pageCount < maxPages) {
+      pageCount++;
+      const response = await this.fetch<PCResource[] | PCResource>(url);
+      const pageData = Array.isArray(response.data)
+        ? response.data
+        : [response.data];
+      allPlans.push(...pageData);
+
+      let pastCount = 0;
+      let futureCount = 0;
+      for (const plan of allPlans) {
+        const sortDateRaw = plan.attributes.sort_date as string | undefined;
+        if (!sortDateRaw) continue;
+        const sortDate = new Date(sortDateRaw);
+        if (isNaN(sortDate.getTime())) continue;
+
+        if (sortDate < todayStart) pastCount++;
+        else if (sortDate > todayEnd) futureCount++;
+      }
+
+      if (pastCount >= pastTarget && futureCount >= futureTarget) {
+        break;
+      }
+
+      const nextUrl = response.links?.next;
+      if (nextUrl && nextUrl !== url) {
+        url = nextUrl;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    return allPlans;
   }
 
   async getPlan(planId: string): Promise<PCResource> {

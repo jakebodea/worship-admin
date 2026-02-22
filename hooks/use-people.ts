@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { PersonWithAvailability } from "@/lib/types";
 
 export function usePeople(
+  serviceTypeId: string | null,
   teamId: string | null,
   positionId: string | null,
   planId: string | null = null,
@@ -18,16 +19,20 @@ export function usePeople(
     : null;
 
   return useQuery<PersonWithAvailability[]>({
-    queryKey: ["people", teamId, positionId, planId, dateKey],
+    queryKey: ["people", serviceTypeId, teamId, positionId, planId, dateKey],
     queryFn: async () => {
-      if (!positionId || !teamId) {
+      if (!positionId || !serviceTypeId) {
         return [];
       }
 
       const params = new URLSearchParams({
-        team_id: teamId,
+        service_type_id: serviceTypeId,
         position_id: positionId,
       });
+
+      if (teamId) {
+        params.append("team_id", teamId);
+      }
 
       if (planId) {
         params.append("plan_id", planId);
@@ -43,7 +48,7 @@ export function usePeople(
       }
       return response.json();
     },
-    enabled: !!positionId && !!teamId,
+    enabled: !!positionId && !!serviceTypeId,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }

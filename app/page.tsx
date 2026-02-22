@@ -28,6 +28,7 @@ export default function DashboardPage() {
   const selectedPositionObj = selectedTeamGroup?.positions.find((p) => p.id === selectedPosition);
 
   const { data: people, isLoading: peopleLoading } = usePeople(
+    selectedServiceType?.id || null,
     selectedTeam,
     selectedPosition,
     selectedPlan?.id || null,

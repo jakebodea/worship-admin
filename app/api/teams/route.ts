@@ -6,11 +6,11 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const rawTeams = await pcClient.getTeams({
-      "filter[archived]": "false",
-    });
+    const rawTeams = await pcClient.getTeams();
 
-    const teams: Team[] = rawTeams.map((rawTeam) => {
+    const teams: Team[] = rawTeams
+      .filter((rawTeam) => !(rawTeam.attributes.archived_at as string | null))
+      .map((rawTeam) => {
       const team = rawTeam as unknown as RawTeam;
       return {
         id: team.id,

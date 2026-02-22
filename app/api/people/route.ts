@@ -4,7 +4,6 @@ import { isServiceExcluded } from "@/lib/excluded-services";
 import type {
   PersonWithAvailability,
   RawPerson,
-  RawTeamPosition,
   RawBlockout,
   RawPlanPerson,
   RawPlan,
@@ -140,81 +139,69 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const positionId = searchParams.get("position_id");
-    const teamId = searchParams.get("team_id");
+    const serviceTypeId = searchParams.get("service_type_id");
     const dateStr = searchParams.get("date");
 
-    // Require both team_id and position_id for optimized query
-    if (!positionId || !teamId) {
+    // Require both service_type_id and position_id for documented assignment route
+    if (!positionId || !serviceTypeId) {
       return NextResponse.json([]);
     }
 
     // Parse date if provided (this is the plan's service date)
     const checkDate = dateStr ? new Date(dateStr) : null;
-    // Calculate 90 days ago relative to the plan date (or today if no date provided)
-    const referenceDate = checkDate || new Date();
-    const ninetyDaysAgo = new Date(referenceDate);
-    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-    // Step 1: Get ONLY people who can serve in this position (optimized endpoint)
-    const { data: peopleData } = await pcClient.getPeopleForTeamPosition(
-      teamId,
+    // Step 1: Get assignments for this position and include person resources
+    const { data: assignmentsData, included: assignmentsIncluded } =
+      await pcClient.getPeopleForTeamPosition(
+      serviceTypeId,
       positionId
     );
-    
-    // The endpoint returns Person resources directly in the data array (not PersonTeamPositionAssignment)
-    // So we can use the data array directly as Person resources
-    const personResources: RawPerson[] = peopleData
-      .filter((item) => item.type === "Person")
-      .map((item) => item as unknown as RawPerson);
+
+    const personResources: RawPerson[] = [];
+    const seenPersonIds = new Set<string>();
+
+    for (const assignment of assignmentsData) {
+      const personRel = assignment.relationships?.person?.data;
+      const personId = Array.isArray(personRel)
+        ? personRel[0]?.id
+        : personRel?.id;
+
+      if (!personId || seenPersonIds.has(personId)) {
+        continue;
+      }
+
+      const person = findIncluded(
+        assignmentsIncluded,
+        "Person",
+        personId
+      ) as unknown as RawPerson | undefined;
+
+      if (person) {
+        seenPersonIds.add(personId);
+        personResources.push(person);
+      }
+    }
 
     // Filter out archived people early
     const activePersonResources = personResources.filter(
       (person) => !person.attributes.archived_at
     );
 
+    // Fetch service type names once for response enrichment
+    const serviceTypes = await pcClient.getServiceTypesCached();
+    const serviceTypeNameById = new Map<string, string>();
+    serviceTypes.forEach((st) => {
+      if (st.type === "ServiceType") {
+        const typed = st as unknown as RawServiceType;
+        serviceTypeNameById.set(typed.id, (typed.attributes.name as string) || "");
+      }
+    });
+
     // Step 2 & 3: Check blockouts and get service history for each person
     const peopleWithData = await Promise.all(
       activePersonResources.map(async (rawPerson) => {
         const person = rawPerson as unknown as RawPerson;
-
-        // Get all team position assignments for this person to populate positions array
-        let positions: Array<{ id: string; name: string; teamId: string }> = [];
-        try {
-          const assignmentsResponse =
-            await pcClient.getPersonTeamPositionAssignments(person.id);
-
-          // Extract team positions from included resources
-          const teamPositions = assignmentsResponse.included.filter(
-            (item) => item.type === "TeamPosition"
-          );
-
-          positions = teamPositions.map((tp) => {
-            const pos = tp as unknown as RawTeamPosition;
-            const teamData = pos.relationships?.team?.data;
-            let teamId = "";
-
-            if (teamData) {
-              teamId = Array.isArray(teamData)
-                ? teamData[0]?.id || ""
-                : teamData.id || "";
-            }
-
-            if (!teamId) {
-              const team = assignmentsResponse.included.find(
-                (item) => item.type === "Team"
-              );
-              teamId = team?.id || "";
-            }
-
-            return {
-              id: pos.id,
-              name: (pos.attributes.name as string) || "",
-              teamId,
-            };
-          });
-        } catch {
-          // Failed to get positions for person
-        }
+        const referenceDate = checkDate || new Date();
 
         // Transform to Person type
         const transformedPerson: PersonWithAvailability = {
@@ -226,51 +213,38 @@ export async function GET(request: Request) {
           photoThumbnailUrl:
             (person.attributes.photo_thumbnail_url as string) || null,
           archived: !!person.attributes.archived_at,
-          positions,
+          positions: [],
         };
 
-        // Step 2: Check blockouts for the selected date
-        let isBlocked = false;
-        let blockouts: Blockout[] = [];
-        if (checkDate) {
-          try {
-            const rawBlockouts = await pcClient.getPersonBlockouts(person.id);
-            blockouts = rawBlockouts.map((raw) => {
-              const blockout = raw as unknown as RawBlockout;
-              return {
-                id: blockout.id,
-                reason: blockout.attributes.reason || "",
-                startsAt: new Date(blockout.attributes.starts_at as string),
-                endsAt: new Date(blockout.attributes.ends_at as string),
-                description: blockout.attributes.description || "",
-                share: blockout.attributes.share,
-              };
-            });
-
-            // Check if person is blocked for the selected date
-            isBlocked = blockouts.some((blockout) => {
-              return (
-                checkDate >= blockout.startsAt && checkDate <= blockout.endsAt
-              );
-            });
-          } catch {
-            // Failed to get blockouts for person
-          }
-        }
-
-        transformedPerson.isBlockedForDate = isBlocked;
-        transformedPerson.blockouts = blockouts;
-        transformedPerson.availability = isBlocked ? "blocked" : "available";
+        // Start blockouts fetch immediately so it can run in parallel with history fetch.
+        const blockoutsPromise: Promise<Blockout[]> = checkDate
+          ? pcClient
+              .getPersonBlockouts(person.id)
+              .then((rawBlockouts) =>
+                rawBlockouts.map((raw) => {
+                  const blockout = raw as unknown as RawBlockout;
+                  return {
+                    id: blockout.id,
+                    reason: blockout.attributes.reason || "",
+                    startsAt: new Date(blockout.attributes.starts_at as string),
+                    endsAt: new Date(blockout.attributes.ends_at as string),
+                    description: blockout.attributes.description || "",
+                    share: blockout.attributes.share,
+                  };
+                })
+              )
+              .catch(() => [])
+          : Promise.resolve([]);
 
         // Step 3: Get service history (last 90 days) for ANY position
         // This endpoint already returns history across all positions, which is what we want
         let serviceHistory: ServiceHistoryItem[] = [];
         try {
-          const historyResponse =
-            await pcClient.getPersonPlanPeopleWithPlans(person.id, {
-              "filter[after]": ninetyDaysAgo.toISOString().split("T")[0],
-              order: "-created_at",
-            });
+          const historyResponse = await pcClient.getPersonPlanPeopleWithPlans(
+            person.id,
+            {},
+            2
+          );
 
           const planPeople = historyResponse.data as unknown as RawPlanPerson[];
           const historyIncluded = historyResponse.included || [];
@@ -306,7 +280,7 @@ export async function GET(request: Request) {
           serviceHistory = filteredPlanPeople.map((pp) => {
             const planId = pp.relationships?.plan?.data;
             let plan: RawPlan | undefined;
-            let serviceType: RawServiceType | undefined;
+            let serviceTypeName: string | undefined;
 
             if (planId) {
               const planIdStr = Array.isArray(planId)
@@ -324,13 +298,7 @@ export async function GET(request: Request) {
                   const stId = Array.isArray(stData)
                     ? stData[0]?.id
                     : stData?.id;
-                  if (stId) {
-                    serviceType = findIncluded(
-                      historyIncluded,
-                      "ServiceType",
-                      stId
-                    ) as unknown as RawServiceType | undefined;
-                  }
+                  if (stId) serviceTypeName = serviceTypeNameById.get(stId);
                 }
               }
             }
@@ -357,12 +325,19 @@ export async function GET(request: Request) {
               date: serviceDate,
               teamPositionName: positionName,
               teamName,
-              serviceTypeName: serviceType?.attributes.name as
-                | string
-                | undefined,
+              serviceTypeName,
               planTitle: plan?.attributes.title as string | undefined,
               status: pp.attributes.status as string,
             };
+          });
+
+          // Keep only relevant range in-memory (without relying on undocumented filters)
+          serviceHistory = serviceHistory.filter((item) => {
+            const daysDiff = Math.floor(
+              (referenceDate.getTime() - item.date.getTime()) /
+                (1000 * 60 * 60 * 24)
+            );
+            return daysDiff <= 90;
           });
 
           // Sort by service date ascending (oldest first)
@@ -371,8 +346,6 @@ export async function GET(request: Request) {
           });
 
           // Calculate frequency metrics from ALL service history (before slicing for display)
-          // Use the plan's service date as reference, or today if no date provided
-          const referenceDate = checkDate || new Date();
           const frequency: ScheduleFrequency = {
             last30Days: 0,
             last60Days: 0,
@@ -453,6 +426,17 @@ export async function GET(request: Request) {
           };
         }
 
+        const blockouts = await blockoutsPromise;
+        const isBlocked = checkDate
+          ? blockouts.some(
+              (blockout) =>
+                checkDate >= blockout.startsAt && checkDate <= blockout.endsAt
+            )
+          : false;
+
+        transformedPerson.isBlockedForDate = isBlocked;
+        transformedPerson.blockouts = blockouts;
+        transformedPerson.availability = isBlocked ? "blocked" : "available";
         transformedPerson.serviceHistory = serviceHistory;
 
         return transformedPerson;

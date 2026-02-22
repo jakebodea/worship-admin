@@ -11,18 +11,24 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const { searchParams } = new URL(request.url);
+    const days = Number(searchParams.get("days") || "90");
+    const lookbackDays = Number.isFinite(days) && days > 0 ? days : 90;
+    const now = new Date();
+    const lookbackStart = new Date(now);
+    lookbackStart.setDate(lookbackStart.getDate() - lookbackDays);
 
-    // Fetch plan_people for this person with plan and service_type included
-    const historyResponse = await pcClient.getPersonPlanPeopleWithPlans(id, {
-      filter: "confirmed",
-      order: "-created_at",
-    });
+    const historyResponse = await pcClient.getPersonPlanPeopleWithPlans(
+      id,
+      {},
+      3
+    );
 
     const rawPlanPeople = historyResponse.data as unknown as RawPlanPerson[];
     const historyIncluded = historyResponse.included || [];
 
-    // Filter out plan_people that belong to excluded service types
-    const filteredPlanPeople = rawPlanPeople.filter((pp) => {
+    // Exclude records that belong to excluded service types.
+    const serviceFiltered = rawPlanPeople.filter((pp) => {
       const planId = pp.relationships?.plan?.data;
       if (planId) {
         const planIdStr = Array.isArray(planId)
@@ -49,40 +55,78 @@ export async function GET(
       return true; // Include if we can't determine service type or it's not excluded
     });
 
-    const planPeople: PlanPerson[] = filteredPlanPeople.map((raw) => {
+    // Keep only confirmed responses in-app instead of using undocumented filter params.
+    const confirmed = serviceFiltered.filter((pp) => {
+      const status = (pp.attributes.status || "").toString().toLowerCase();
+      return status === "confirmed" || status === "c";
+    });
+
+    const planPeople: PlanPerson[] = confirmed
+      .map((raw) => {
       const pp = raw as unknown as RawPlanPerson;
+      const planRel = pp.relationships?.plan?.data;
+      const planId = Array.isArray(planRel) ? planRel[0]?.id : planRel?.id;
+      const plan = planId
+        ? (findIncluded(historyIncluded, "Plan", planId) as unknown as
+            | RawPlan
+            | undefined)
+        : undefined;
+
+      const serviceDate = plan?.attributes.sort_date
+        ? new Date(plan.attributes.sort_date)
+        : new Date(pp.attributes.created_at);
+
       return {
         id: pp.id,
         status: pp.attributes.status,
-        createdAt: new Date(pp.attributes.created_at),
+        createdAt: serviceDate,
         teamPositionName: pp.attributes.team_position_name || "",
+        planTitle: (plan?.attributes.title as string | undefined) || undefined,
+        planDate: serviceDate,
         declineReason: pp.attributes.decline_reason,
       };
-    });
+      })
+      .filter((pp) => pp.createdAt >= lookbackStart);
+
+    // Sort newest first for display.
+    planPeople.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
     // Calculate frequency metrics
-    const now = new Date();
     const frequency: ScheduleFrequency = {
       last30Days: 0,
       last60Days: 0,
       last90Days: 0,
-      totalServed: planPeople.length,
-      upcomingServices: 0, // This endpoint only returns historical data
+      totalServed: 0,
+      upcomingServices: 0,
     };
 
-    planPeople.forEach((pp) => {
-      const daysAgo = Math.floor(
-        (now.getTime() - pp.createdAt.getTime()) / (1000 * 60 * 60 * 24)
-      );
+    const pastServiceDates = new Set<string>();
+    const futureServiceDates = new Set<string>();
 
-      if (daysAgo <= 30) frequency.last30Days++;
-      if (daysAgo <= 60) frequency.last60Days++;
-      if (daysAgo <= 90) frequency.last90Days++;
+    planPeople.forEach((pp) => {
+      const normalized = new Date(pp.createdAt);
+      normalized.setHours(0, 0, 0, 0);
+      const dayKey = normalized.toISOString().split("T")[0];
+      const daysAgo = Math.floor((now.getTime() - normalized.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysAgo >= 0) {
+        if (!pastServiceDates.has(dayKey)) {
+          pastServiceDates.add(dayKey);
+          if (daysAgo <= 30) frequency.last30Days++;
+          if (daysAgo <= 60) frequency.last60Days++;
+          if (daysAgo <= 90) frequency.last90Days++;
+        }
+      } else if (!futureServiceDates.has(dayKey)) {
+        futureServiceDates.add(dayKey);
+        frequency.upcomingServices++;
+      }
     });
 
-    // Get the most recent service date
-    if (planPeople.length > 0) {
-      frequency.lastServedDate = planPeople[0].createdAt;
+    frequency.totalServed = pastServiceDates.size;
+
+    const mostRecentPast = planPeople.find((pp) => pp.createdAt <= now);
+    if (mostRecentPast) {
+      frequency.lastServedDate = mostRecentPast.createdAt;
     }
 
     return NextResponse.json({

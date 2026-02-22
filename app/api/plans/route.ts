@@ -26,10 +26,7 @@ export async function GET(request: Request) {
     const endDate = new Date(today);
     endDate.setDate(endDate.getDate() + daysForward);
 
-    const rawPlans = await pcClient.getPlans(serviceTypeId, {
-      "filter[archived]": "false",
-      "filter[sort_date]": `${startDate.toISOString().split("T")[0]}..${endDate.toISOString().split("T")[0]}`,
-    });
+    const rawPlans = await pcClient.getPlansNearDate(serviceTypeId, today, 5, 5, 3);
 
     const plans: Plan[] = rawPlans
       .map((raw) => {
@@ -63,15 +60,21 @@ export async function GET(request: Request) {
       return a.sortDate.getTime() - b.sortDate.getTime();
     });
 
+    // Keep only plans near today without relying on undocumented query params
+    const boundedPlans = plans.filter((p) => {
+      if (!p.sortDate) return false;
+      return p.sortDate >= startDate && p.sortDate <= endDate;
+    });
+
     // Split into past and future plans relative to today
     const todayStart = new Date(today);
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date(today);
     todayEnd.setHours(23, 59, 59, 999);
 
-    const pastPlans = plans.filter((p) => p.sortDate && p.sortDate < todayStart);
-    const futurePlans = plans.filter((p) => p.sortDate && p.sortDate > todayEnd);
-    const todayPlans = plans.filter(
+    const pastPlans = boundedPlans.filter((p) => p.sortDate && p.sortDate < todayStart);
+    const futurePlans = boundedPlans.filter((p) => p.sortDate && p.sortDate > todayEnd);
+    const todayPlans = boundedPlans.filter(
       (p) => p.sortDate && p.sortDate >= todayStart && p.sortDate <= todayEnd
     );
 

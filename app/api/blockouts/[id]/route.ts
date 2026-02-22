@@ -5,28 +5,28 @@ import type { Blockout, RawBlockout } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    
-    // Fetch future blockouts for this person
-    const rawBlockouts = await pcClient.getPersonBlockouts(id, {
-      filter: "future",
-    });
 
-    const blockouts: Blockout[] = rawBlockouts.map((rawBlockout) => {
-      const blockout = rawBlockout as unknown as RawBlockout;
-      return {
-        id: blockout.id,
-        reason: blockout.attributes.reason || "",
-        startsAt: new Date(blockout.attributes.starts_at),
-        endsAt: new Date(blockout.attributes.ends_at),
-        description: blockout.attributes.description || "",
-        share: blockout.attributes.share,
-      };
-    });
+    const rawBlockouts = await pcClient.getPersonBlockouts(id);
+
+    const now = new Date();
+    const blockouts: Blockout[] = rawBlockouts
+      .map((rawBlockout) => {
+        const blockout = rawBlockout as unknown as RawBlockout;
+        return {
+          id: blockout.id,
+          reason: blockout.attributes.reason || "",
+          startsAt: new Date(blockout.attributes.starts_at),
+          endsAt: new Date(blockout.attributes.ends_at),
+          description: blockout.attributes.description || "",
+          share: blockout.attributes.share,
+        };
+      })
+      .filter((blockout) => blockout.endsAt >= now);
 
     return NextResponse.json(blockouts);
   } catch {

@@ -41,6 +41,10 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
+## Planning Center API Docs
+
+This repo includes scraped Planning Center API documentation (Services, People, Giving, and more). See [docs/planning-center-api/README.md](docs/planning-center-api/README.md) for details.
+
 ## Tech Stack
 
 - **Next.js 16** - React framework with App Router
@@ -120,7 +124,3 @@ All API routes are server-side and handle Planning Center authentication:
 - ✅ shadcn components for consistent UI
 - ✅ Responsive design (mobile-friendly)
 - ✅ All files under 300 LOC for maintainability
-
-## License
-
-MIT
