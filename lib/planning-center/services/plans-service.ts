@@ -1,5 +1,8 @@
 import type { PCResource } from "@/lib/types";
+import { logger } from "@/lib/logger";
 import { PlanningCenterCoreClient } from "@/lib/planning-center/core-client";
+
+const log = logger.for("planning-center/plans");
 
 export class PlanningCenterPlansService {
   constructor(private readonly core: PlanningCenterCoreClient) {}
@@ -13,6 +16,51 @@ export class PlanningCenterPlansService {
       { ...params, order: "-sort_date" },
       3
     );
+  }
+
+  /**
+   * Fetch plans from startDate onward using the API's filter=after param.
+   * Per PC API docs: "after — filter to plans with a time beginning after the after parameter"
+   * Filters server-side — avoids loading years of past plans. End date capped in memory.
+   */
+  async getPlansInDateRange(
+    serviceTypeId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<PCResource[]> {
+    const afterParam = startDate.toISOString().split("T")[0];
+    const beforeParam = endDate.toISOString().split("T")[0];
+
+    log.info(
+      { serviceTypeId, after: afterParam, before: beforeParam },
+      "Fetching plans in date range"
+    );
+
+    const rawPlans = await this.core.fetchAll<PCResource>(
+      `/services/v2/service_types/${serviceTypeId}/plans`,
+      {
+        order: "sort_date", // ascending: start date first
+        per_page: "100",
+        filter: "after",
+        after: afterParam,
+      },
+      3
+    );
+
+    // Cap at endDate in memory (API may not support before filter; trivial for ~20 plans)
+    const endTime = endDate.getTime();
+    const plans = rawPlans.filter((plan) => {
+      const sortDateStr = plan.attributes.sort_date as string | undefined;
+      if (!sortDateStr) return false;
+      const sortDate = new Date(sortDateStr);
+      return !isNaN(sortDate.getTime()) && sortDate.getTime() <= endTime;
+    });
+
+    log.info(
+      { serviceTypeId, count: plans.length, rawCount: rawPlans.length },
+      "Plans fetched"
+    );
+    return plans;
   }
 
   async getPlansNearDate(

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
-import { pcClient, findAllIncluded, findIncluded } from "@/lib/planning-center";
-import type { TeamPositionGroup, RawTeamPosition, RawTeam } from "@/lib/types";
+import { getTeamPositionsForServiceType } from "@/lib/use-cases/planning-center/get-team-positions";
 
 export const dynamic = "force-dynamic";
 
@@ -21,73 +20,7 @@ export async function GET(request: Request) {
       );
     }
 
-    // Get team positions for this service type with team info included
-    const response = await pcClient.getServiceTypeTeamPositionsWithTeams(serviceTypeId);
-
-    const teamPositions = Array.isArray(response.data) ? response.data : [response.data];
-    const included = response.included || [];
-
-    // Group positions by team
-    const teamMap = new Map<string, TeamPositionGroup>();
-
-    for (const tp of teamPositions) {
-      const position = tp as unknown as RawTeamPosition;
-      
-      // Get team from relationships or included
-      let teamId = "";
-      let teamName = "";
-
-      if (position.relationships?.team?.data) {
-        const teamData = position.relationships.team.data;
-        teamId = Array.isArray(teamData) ? teamData[0]?.id || "" : teamData?.id || "";
-      }
-
-      if (teamId) {
-        const team = findIncluded(included, "Team", teamId) as unknown as RawTeam | undefined;
-        if (team) {
-          teamName = team.attributes.name as string;
-        }
-      }
-
-      if (!teamId || !teamName) {
-        // Try to find team in included resources
-        const teams = findAllIncluded(included, "Team");
-        if (teams.length > 0) {
-          const team = teams[0] as unknown as RawTeam;
-          teamId = team.id;
-          teamName = team.attributes.name as string;
-        }
-      }
-
-      if (!teamId || !teamName) {
-        continue; // Skip if we can't find team info
-      }
-
-      if (!teamMap.has(teamId)) {
-        teamMap.set(teamId, {
-          teamId,
-          teamName,
-          positions: [],
-        });
-      }
-
-      const group = teamMap.get(teamId)!;
-      group.positions.push({
-        id: position.id,
-        name: position.attributes.name as string,
-        teamId,
-        teamName,
-      });
-    }
-
-    // Convert map to array and sort by team name
-    const groupedPositions: TeamPositionGroup[] = Array.from(teamMap.values());
-    groupedPositions.sort((a, b) => a.teamName.localeCompare(b.teamName));
-
-    // Sort positions within each team
-    groupedPositions.forEach((group) => {
-      group.positions.sort((a, b) => a.name.localeCompare(b.name));
-    });
+    const groupedPositions = await getTeamPositionsForServiceType(serviceTypeId);
 
     log.info(
       { serviceTypeId, teamCount: groupedPositions.length, positionCount: groupedPositions.reduce((sum, g) => sum + g.positions.length, 0) },

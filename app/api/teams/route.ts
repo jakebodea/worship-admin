@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
-import { pcClient } from "@/lib/planning-center";
-import type { Team, RawTeam } from "@/lib/types";
+import { getTeams } from "@/lib/use-cases/planning-center/get-teams";
 
 export const dynamic = "force-dynamic";
 
@@ -10,22 +9,7 @@ const log = logger.for("api/teams");
 export async function GET() {
   log.info("Fetching teams");
   try {
-    const rawTeams = await pcClient.getTeams();
-
-    const teams: Team[] = rawTeams
-      .filter((rawTeam) => !(rawTeam.attributes.archived_at as string | null))
-      .map((rawTeam) => {
-      const team = rawTeam as unknown as RawTeam;
-      return {
-        id: team.id,
-        name: team.attributes.name,
-        sequence: team.attributes.sequence,
-        rehearsalTeam: team.attributes.rehearsal_team,
-      };
-    });
-
-    // Sort by sequence
-    teams.sort((a, b) => a.sequence - b.sequence);
+    const teams = await getTeams();
 
     log.info({ count: teams.length }, "Teams fetched");
     return NextResponse.json(teams);

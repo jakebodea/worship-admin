@@ -1,5 +1,7 @@
 import type { PCApiResponse, PCResource } from "@/lib/types";
+import { logger } from "@/lib/logger";
 
+const log = logger.for("planning-center/core");
 const PC_BASE_URL = "https://api.planningcenteronline.com";
 const DEFAULT_TIMEOUT_MS = 15000;
 const MAX_RETRIES = 2;
@@ -59,6 +61,10 @@ export class PlanningCenterCoreClient {
           const canRetry =
             RETRYABLE_STATUS_CODES.has(response.status) && attempt < MAX_RETRIES;
           if (canRetry) {
+            log.debug(
+              { status: response.status, attempt: attempt + 1, url: url.replace(/\/$/, "").slice(-80) },
+              "Planning Center API retry"
+            );
             await sleep((attempt + 1) * 300);
             continue;
           }
@@ -90,6 +96,10 @@ export class PlanningCenterCoreClient {
         }
         const canRetry = attempt < MAX_RETRIES;
         if (!canRetry) break;
+        log.debug(
+          { attempt: attempt + 1, error: lastError.message.slice(0, 100) },
+          "Planning Center request failed, retrying"
+        );
         await sleep((attempt + 1) * 300);
       }
     }

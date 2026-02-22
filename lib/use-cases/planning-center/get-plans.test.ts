@@ -1,18 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import { getPlansForServiceType } from "@/lib/use-cases/planning-center/get-plans";
 
-const { getPlansNearDateMock } = vi.hoisted(() => ({
-  getPlansNearDateMock: vi.fn(),
+const { getPlansInDateRangeMock } = vi.hoisted(() => ({
+  getPlansInDateRangeMock: vi.fn(),
 }));
 
 vi.mock("@/lib/planning-center/services/plans-service", () => ({
   planningCenterPlansService: {
-    getPlansNearDate: getPlansNearDateMock,
+    getPlansInDateRange: getPlansInDateRangeMock,
   },
 }));
 
 describe("getPlansForServiceType", () => {
-  it("returns bounded, sorted plans near today", async () => {
+  it("returns bounded, sorted plans from today through next 2 months", async () => {
     const today = new Date();
     const format = (offsetDays: number) => {
       const d = new Date(today);
@@ -20,25 +20,7 @@ describe("getPlansForServiceType", () => {
       return d.toISOString();
     };
 
-    getPlansNearDateMock.mockResolvedValue([
-      {
-        id: "old",
-        type: "Plan",
-        attributes: {
-          title: "Too Old",
-          created_at: format(-200),
-          sort_date: format(-200),
-        },
-      },
-      {
-        id: "past-1",
-        type: "Plan",
-        attributes: {
-          title: "Past",
-          created_at: format(-10),
-          sort_date: format(-1),
-        },
-      },
+    getPlansInDateRangeMock.mockResolvedValue([
       {
         id: "today",
         type: "Plan",
@@ -61,7 +43,13 @@ describe("getPlansForServiceType", () => {
 
     const plans = await getPlansForServiceType("686882");
 
-    expect(plans.map((p) => p.id)).toEqual(["past-1", "today", "future-1"]);
-    expect(getPlansNearDateMock).toHaveBeenCalledWith("686882", expect.any(Date), 5, 5, 3);
+    expect(plans.map((p) => p.id)).toEqual(["today", "future-1"]);
+    expect(getPlansInDateRangeMock).toHaveBeenCalledWith(
+      "686882",
+      expect.any(Date),
+      expect.any(Date)
+    );
+    const [, startDate, endDate] = getPlansInDateRangeMock.mock.calls[0];
+    expect(endDate.getTime()).toBeGreaterThan(startDate.getTime());
   });
 });

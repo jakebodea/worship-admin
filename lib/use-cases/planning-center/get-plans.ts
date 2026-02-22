@@ -7,16 +7,13 @@ export async function getPlansForServiceType(
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const startDate = new Date(today);
-  startDate.setDate(startDate.getDate() - 90);
   const endDate = new Date(today);
-  endDate.setDate(endDate.getDate() + 90);
+  endDate.setDate(endDate.getDate() + 60); // Next 2 months
 
-  const rawPlans = await planningCenterPlansService.getPlansNearDate(
+  const rawPlans = await planningCenterPlansService.getPlansInDateRange(
     serviceTypeId,
-    today,
-    5,
-    5,
-    3
+    startDate,
+    endDate
   );
 
   const parsedPlans = rawPlans
@@ -45,19 +42,5 @@ export async function getPlansForServiceType(
   );
 
   plans.sort((a, b) => (a.sortDate?.getTime() || 0) - (b.sortDate?.getTime() || 0));
-
-  const todayStart = new Date(today);
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(today);
-  todayEnd.setHours(23, 59, 59, 999);
-
-  const pastPlans = plans.filter((p) => p.sortDate && p.sortDate < todayStart);
-  const futurePlans = plans.filter((p) => p.sortDate && p.sortDate > todayEnd);
-  const todayPlans = plans.filter(
-    (p) => p.sortDate && p.sortDate >= todayStart && p.sortDate <= todayEnd
-  );
-
-  const limitedPlans = [...pastPlans.slice(-5).reverse(), ...todayPlans, ...futurePlans.slice(0, 5)];
-  limitedPlans.sort((a, b) => (a.sortDate?.getTime() || 0) - (b.sortDate?.getTime() || 0));
-  return limitedPlans;
+  return plans;
 }

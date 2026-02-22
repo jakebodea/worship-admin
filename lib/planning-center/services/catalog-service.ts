@@ -1,5 +1,8 @@
 import type { PCResource } from "@/lib/types";
+import { logger } from "@/lib/logger";
 import { PlanningCenterCoreClient } from "@/lib/planning-center/core-client";
+
+const log = logger.for("planning-center/catalog");
 
 export class PlanningCenterCatalogService {
   private serviceTypesCache: { expiresAt: number; data: PCResource[] } | null =
@@ -51,8 +54,14 @@ export class PlanningCenterCatalogService {
       `/services/v2/service_types/${serviceTypeId}/team_positions?include=team`
     );
 
+    const data = Array.isArray(response.data) ? response.data : [response.data];
+    log.info(
+      { serviceTypeId, positionCount: data.length },
+      "Team positions fetched"
+    );
+
     return {
-      data: Array.isArray(response.data) ? response.data : [response.data],
+      data,
       included: response.included || [],
     };
   }

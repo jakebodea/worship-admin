@@ -270,8 +270,14 @@ class PlanningCenterClient {
       `/services/v2/service_types/${serviceTypeId}/team_positions/${positionId}/person_team_position_assignments?include=person,team_position`
     );
 
+    const data = Array.isArray(response.data) ? response.data : [response.data];
+    log.info(
+      { serviceTypeId, positionId, count: data.length },
+      "People for position fetched"
+    );
+
     return {
-      data: Array.isArray(response.data) ? response.data : [response.data],
+      data,
       included: response.included || [],
     };
   }
