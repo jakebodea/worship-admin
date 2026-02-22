@@ -29,6 +29,11 @@ export async function getPlansForServiceType(
         id: plan.id,
         title: plan.attributes.title as string,
         seriesTitle: plan.attributes.series_title as string | undefined,
+        seriesId:
+          !Array.isArray(plan.relationships?.series?.data) &&
+          plan.relationships?.series?.data
+            ? plan.relationships.series.data.id
+            : null,
         createdAt: new Date(plan.attributes.created_at as string),
         sortDate,
       };

@@ -148,6 +148,9 @@ export interface RawPlanPerson {
     plan?: {
       data: PCResourceIdentifier;
     };
+    team?: {
+      data: PCResourceIdentifier;
+    };
   };
 }
 
@@ -172,6 +175,7 @@ export interface Plan {
   id: string;
   title: string;
   seriesTitle?: string;
+  seriesId?: string | null;
   createdAt: Date;
   sortDate?: Date;
 }
@@ -188,6 +192,24 @@ export interface RawPlan {
   relationships?: {
     service_type?: {
       data: PCResourceIdentifier;
+    };
+    series?: {
+      data: PCResourceIdentifier | null;
+    };
+  };
+}
+
+export interface RawNeededPosition {
+  type: "NeededPosition";
+  id: string;
+  attributes: {
+    quantity?: number;
+    team_position_name?: string;
+    scheduled_to?: string;
+  };
+  relationships?: {
+    team?: {
+      data: PCResourceIdentifier | null;
     };
   };
 }
@@ -234,6 +256,9 @@ export interface PersonWithAvailability extends Person {
   blockouts?: Blockout[];
   serviceHistory?: ServiceHistoryItem[];
   isBlockedForDate?: boolean;
+  isScheduledForSelectedPlanPosition?: boolean;
+  isConfirmedForSelectedPlanPosition?: boolean;
+  scheduledPlanPersonId?: string;
   recommendationScore?: number;
   recommendationReasoning?: string[];
 }

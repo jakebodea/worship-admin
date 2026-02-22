@@ -1,38 +1,52 @@
-import { NextResponse } from "next/server";
+import { z } from "zod";
+import { ApiError } from "@/lib/http/api-error";
+import { handleRoute } from "@/lib/http/route-handler";
 import { logger } from "@/lib/logger";
-import { getTeamPositionsForServiceType } from "@/lib/use-cases/planning-center/get-team-positions";
+import { getNeededTeamPositionsForPlan } from "@/lib/use-cases/planning-center/get-team-positions";
 
 export const dynamic = "force-dynamic";
 
+const querySchema = z.object({
+  service_type_id: z.string().min(1),
+  plan_id: z.string().min(1),
+  series_id: z.string().min(1).optional(),
+});
+
 export async function GET(request: Request) {
   const log = logger.withRequest(request);
-  log.info("Fetching team positions");
+  return handleRoute(async () => {
+    log.info("Fetching team positions");
 
-  try {
     const { searchParams } = new URL(request.url);
-    const serviceTypeId = searchParams.get("service_type_id");
+    const parsed = querySchema.safeParse({
+      service_type_id: searchParams.get("service_type_id") ?? undefined,
+      plan_id: searchParams.get("plan_id") ?? undefined,
+      series_id: searchParams.get("series_id") ?? undefined,
+    });
 
-    if (!serviceTypeId) {
-      log.warn("Missing service_type_id parameter");
-      return NextResponse.json(
-        { error: "service_type_id query parameter is required" },
-        { status: 400 }
-      );
+    if (!parsed.success) {
+      log.warn({ issues: parsed.error.issues }, "Invalid team-positions query params");
+      throw new ApiError(400, "INVALID_REQUEST", "Invalid request", parsed.error.issues);
     }
 
-    const groupedPositions = await getTeamPositionsForServiceType(serviceTypeId);
+    const { service_type_id, plan_id, series_id } = parsed.data;
+    const groupedPositions = await getNeededTeamPositionsForPlan(
+      service_type_id,
+      plan_id,
+      series_id
+    );
 
     log.info(
-      { serviceTypeId, teamCount: groupedPositions.length, positionCount: groupedPositions.reduce((sum, g) => sum + g.positions.length, 0) },
-      "Team positions fetched"
+      {
+        serviceTypeId: service_type_id,
+        seriesId: series_id ?? null,
+        planId: plan_id,
+        teamCount: groupedPositions.length,
+        positionCount: groupedPositions.reduce((sum, g) => sum + g.positions.length, 0),
+      },
+      "Plan needed team positions fetched"
     );
-    return NextResponse.json(groupedPositions);
-  } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
-    log.error({ err }, "Failed to fetch team positions");
-    return NextResponse.json(
-      { error: "Failed to fetch team positions", details: err.message },
-      { status: 500 }
-    );
-  }
+
+    return groupedPositions;
+  });
 }

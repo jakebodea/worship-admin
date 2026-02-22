@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { HttpClientError, postJson } from "@/lib/http/client";
 import { Eye, EyeOff } from "lucide-react";
 
 export default function AuthPage() {
@@ -18,26 +19,19 @@ export default function AuthPage() {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/auth", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ password }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
+      const data = await postJson<{ success: boolean }>("/api/auth", { password });
+      if (data.success) {
         // Redirect to home page after successful authentication
         router.push("/");
         router.refresh();
-      } else {
-        setError(data.error || "Invalid password");
-        setPassword("");
       }
-    } catch {
-      setError("An error occurred. Please try again.");
+    } catch (error) {
+      if (error instanceof HttpClientError) {
+        setError(error.message || "Invalid password");
+      } else {
+        setError("An error occurred. Please try again.");
+      }
+      setPassword("");
     } finally {
       setLoading(false);
     }

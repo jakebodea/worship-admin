@@ -120,6 +120,19 @@ export class PlanningCenterPlansService {
     const response = await this.core.fetch<PCResource>(`/services/v2/plans/${planId}`);
     return response.data;
   }
+
+  async getPlanForServiceTypeWithSeries(
+    serviceTypeId: string,
+    planId: string
+  ): Promise<{ data: PCResource; included: PCResource[] }> {
+    const response = await this.core.fetch<PCResource>(
+      `/services/v2/service_types/${serviceTypeId}/plans/${planId}?include=series`
+    );
+    return {
+      data: response.data,
+      included: response.included || [],
+    };
+  }
 }
 
 export const planningCenterPlansService = new PlanningCenterPlansService(

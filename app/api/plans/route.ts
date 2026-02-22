@@ -1,35 +1,32 @@
-import { NextResponse } from "next/server";
+import { z } from "zod";
+import { ApiError } from "@/lib/http/api-error";
+import { handleRoute } from "@/lib/http/route-handler";
 import { logger } from "@/lib/logger";
 import { getPlansForServiceType } from "@/lib/use-cases/planning-center/get-plans";
 
 export const dynamic = "force-dynamic";
 
+const querySchema = z.object({
+  service_type_id: z.string().min(1),
+});
+
 export async function GET(request: Request) {
   const log = logger.withRequest(request);
-  log.info("Fetching plans");
-
-  try {
+  return handleRoute(async () => {
+    log.info("Fetching plans");
     const { searchParams } = new URL(request.url);
-    const serviceTypeId = searchParams.get("service_type_id");
-
-    if (!serviceTypeId) {
-      log.warn("Missing service_type_id parameter");
-      return NextResponse.json(
-        { error: "service_type_id query parameter is required" },
-        { status: 400 }
-      );
+    const parsed = querySchema.safeParse({
+      service_type_id: searchParams.get("service_type_id") ?? undefined,
+    });
+    if (!parsed.success) {
+      log.warn({ issues: parsed.error.issues }, "Invalid plans query params");
+      throw new ApiError(400, "INVALID_REQUEST", "Invalid request", parsed.error.issues);
     }
+    const { service_type_id } = parsed.data;
 
-    const plans = await getPlansForServiceType(serviceTypeId);
+    const plans = await getPlansForServiceType(service_type_id);
 
-    log.info({ serviceTypeId, count: plans.length }, "Plans fetched");
-    return NextResponse.json(plans);
-  } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
-    log.error({ err }, "Failed to fetch plans");
-    return NextResponse.json(
-      { error: "Failed to fetch plans", details: err.message },
-      { status: 500 }
-    );
-  }
+    log.info({ serviceTypeId: service_type_id, count: plans.length }, "Plans fetched");
+    return plans;
+  });
 }

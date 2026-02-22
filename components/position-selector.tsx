@@ -13,6 +13,8 @@ import { useTeamPositions } from "@/hooks/use-team-positions";
 
 interface PositionSelectorProps {
   serviceTypeId: string | null;
+  planId: string | null;
+  seriesId: string | null;
   selectedTeam: string | null;
   selectedPosition: string | null;
   onTeamChange: (teamId: string) => void;
@@ -21,13 +23,15 @@ interface PositionSelectorProps {
 
 export function PositionSelector({
   serviceTypeId,
+  planId,
+  seriesId,
   selectedTeam,
   selectedPosition,
   onTeamChange,
   onPositionChange,
 }: PositionSelectorProps) {
   const { data: teamPositionGroups, isLoading } =
-    useTeamPositions(serviceTypeId);
+    useTeamPositions(serviceTypeId, planId, seriesId);
 
   const availablePositions = useMemo(() => {
     if (!teamPositionGroups || !selectedTeam) return [];

@@ -10,10 +10,6 @@ export class PlanningCenterCatalogService {
 
   constructor(private readonly core: PlanningCenterCoreClient) {}
 
-  async getTeams(params: Record<string, string> = {}): Promise<PCResource[]> {
-    return this.core.fetchAll<PCResource>("/services/v2/teams", params);
-  }
-
   async getTeam(teamId: string): Promise<PCResource> {
     const response = await this.core.fetch<PCResource>(`/services/v2/teams/${teamId}`);
     return response.data;
@@ -41,12 +37,6 @@ export class PlanningCenterCatalogService {
     return data;
   }
 
-  async getServiceTypeTeamPositions(serviceTypeId: string): Promise<PCResource[]> {
-    return this.core.fetchAll<PCResource>(
-      `/services/v2/service_types/${serviceTypeId}/team_positions?include=team`
-    );
-  }
-
   async getServiceTypeTeamPositionsWithTeams(
     serviceTypeId: string
   ): Promise<{ data: PCResource[]; included: PCResource[] }> {
@@ -64,6 +54,40 @@ export class PlanningCenterCatalogService {
       data,
       included: response.included || [],
     };
+  }
+
+  async getPlanNeededPositionsWithTeams(
+    seriesId: string,
+    planId: string
+  ): Promise<{ data: PCResource[]; included: PCResource[] }> {
+    const response = await this.core.fetchAllWithIncluded<PCResource>(
+      `/services/v2/series/${seriesId}/plans/${planId}/needed_positions`,
+      { include: "team" }
+    );
+
+    log.info(
+      { seriesId, planId, neededPositionCount: response.data.length },
+      "Plan needed positions fetched"
+    );
+
+    return response;
+  }
+
+  async getServiceTypePlanNeededPositionsWithTeams(
+    serviceTypeId: string,
+    planId: string
+  ): Promise<{ data: PCResource[]; included: PCResource[] }> {
+    const response = await this.core.fetchAllWithIncluded<PCResource>(
+      `/services/v2/service_types/${serviceTypeId}/plans/${planId}/needed_positions`,
+      { include: "team" }
+    );
+
+    log.info(
+      { serviceTypeId, planId, neededPositionCount: response.data.length },
+      "Service type plan needed positions fetched"
+    );
+
+    return response;
   }
 }
 

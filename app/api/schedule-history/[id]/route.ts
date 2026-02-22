@@ -1,37 +1,50 @@
-import { NextResponse } from "next/server";
+import { z } from "zod";
+import { ApiError } from "@/lib/http/api-error";
+import { handleRoute } from "@/lib/http/route-handler";
 import { logger } from "@/lib/logger";
 import { getScheduleHistory } from "@/lib/use-cases/planning-center/get-schedule-history";
 
 export const dynamic = "force-dynamic";
+
+const paramsSchema = z.object({
+  id: z.string().min(1),
+});
+
+const querySchema = z.object({
+  days: z.coerce.number().int().positive().optional(),
+});
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const log = logger.withRequest(request);
-  const { id } = await params;
-  const { searchParams } = new URL(request.url);
-  const days = Number(searchParams.get("days") || "90");
-  const lookbackDays = Number.isFinite(days) && days > 0 ? days : 90;
-  log.info({ personId: id, lookbackDays }, "Fetching schedule history");
-
-  try {
+  return handleRoute(async () => {
+    const parsedParams = paramsSchema.safeParse(await params);
+    if (!parsedParams.success) {
+      log.warn({ issues: parsedParams.error.issues }, "Invalid schedule-history route params");
+      throw new ApiError(400, "INVALID_REQUEST", "Invalid request", parsedParams.error.issues);
+    }
+    const { id } = parsedParams.data;
+    const { searchParams } = new URL(request.url);
+    const parsedQuery = querySchema.safeParse({
+      days: searchParams.get("days") ?? undefined,
+    });
+    if (!parsedQuery.success) {
+      log.warn({ issues: parsedQuery.error.issues, personId: id }, "Invalid schedule-history query params");
+      throw new ApiError(400, "INVALID_REQUEST", "Invalid request", parsedQuery.error.issues);
+    }
+    const lookbackDays = parsedQuery.data.days ?? 90;
+    log.info({ personId: id, lookbackDays }, "Fetching schedule history");
     const { planPeople, frequency } = await getScheduleHistory(id, lookbackDays);
 
     log.info(
       { personId: id, planPeopleCount: planPeople.length, totalServed: frequency.totalServed },
       "Schedule history fetched"
     );
-    return NextResponse.json({
+    return {
       planPeople,
       frequency,
-    });
-  } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
-    log.error({ err, personId: id }, "Failed to fetch schedule history");
-    return NextResponse.json(
-      { error: "Failed to fetch schedule history", details: err.message },
-      { status: 500 }
-    );
-  }
+    };
+  });
 }

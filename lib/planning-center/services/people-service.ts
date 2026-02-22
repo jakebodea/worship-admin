@@ -129,6 +129,39 @@ export class PlanningCenterPeopleService {
       included: response.included || [],
     };
   }
+
+  /**
+   * Schedule a person to a plan for a team. Creates a PlanPerson in Planning Center Services.
+   */
+  async createPlanPerson(
+    serviceTypeId: string,
+    personId: string,
+    planId: string,
+    teamId: string,
+    teamPositionName: string
+  ): Promise<PCResource> {
+    const response = await this.core.fetch<PCResource>(
+      `/services/v2/service_types/${serviceTypeId}/plans/${planId}/team_members`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          data: {
+            type: "PlanPerson",
+            attributes: {
+              status: "U",
+              person_id: personId,
+              team_id: teamId,
+              team_position_name: teamPositionName,
+            },
+          },
+        }),
+      }
+    );
+    return response.data;
+  }
 }
 
 export const planningCenterPeopleService = new PlanningCenterPeopleService(

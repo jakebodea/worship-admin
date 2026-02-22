@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
+import { getJson } from "@/lib/http/client";
 import type { PersonWithAvailability } from "@/lib/types";
+import { queryKeys } from "@/lib/query-keys";
 
 export function usePeople(
   serviceTypeId: string | null,
@@ -19,7 +21,13 @@ export function usePeople(
     : null;
 
   return useQuery<PersonWithAvailability[]>({
-    queryKey: ["people", serviceTypeId, teamId, positionId, planId, dateKey],
+    queryKey: queryKeys.people(
+      serviceTypeId,
+      teamId,
+      positionId,
+      planId,
+      dateKey
+    ),
     queryFn: async () => {
       if (!positionId || !serviceTypeId) {
         return [];
@@ -42,11 +50,7 @@ export function usePeople(
         params.append("date", dateObj.toISOString().split("T")[0]);
       }
 
-      const response = await fetch(`/api/people?${params.toString()}`);
-      if (!response.ok) {
-        throw new Error("Failed to fetch people");
-      }
-      return response.json();
+      return getJson<PersonWithAvailability[]>(`/api/people?${params.toString()}`);
     },
     enabled: !!positionId && !!serviceTypeId,
     staleTime: 5 * 60 * 1000, // 5 minutes

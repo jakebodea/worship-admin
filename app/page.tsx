@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useReducer } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Info } from "lucide-react";
 import { PersonCard } from "@/components/person-card";
 import { ServiceTypeSelector } from "@/components/service-type-selector";
@@ -11,22 +12,108 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { usePeople } from "@/hooks/use-people";
 import { useTeamPositions } from "@/hooks/use-team-positions";
+import { queryKeys } from "@/lib/query-keys";
 import type { ServiceType, Plan } from "@/lib/types";
 
 type Step = 1 | 2 | 3;
 
+interface DashboardState {
+  step: Step;
+  selectedServiceType: ServiceType | null;
+  selectedPlan: Plan | null;
+  selectedTeam: string | null;
+  selectedPosition: string | null;
+}
+
+type DashboardAction =
+  | { type: "serviceTypeSelected"; serviceType: ServiceType }
+  | { type: "planSelected"; plan: Plan }
+  | { type: "teamChanged"; teamId: string }
+  | { type: "positionChanged"; positionId: string }
+  | { type: "back" };
+
+const initialState: DashboardState = {
+  step: 1,
+  selectedServiceType: null,
+  selectedPlan: null,
+  selectedTeam: null,
+  selectedPosition: null,
+};
+
+function dashboardReducer(state: DashboardState, action: DashboardAction): DashboardState {
+  switch (action.type) {
+    case "serviceTypeSelected":
+      return {
+        step: 2,
+        selectedServiceType: action.serviceType,
+        selectedPlan: null,
+        selectedTeam: null,
+        selectedPosition: null,
+      };
+    case "planSelected":
+      return {
+        ...state,
+        step: 3,
+        selectedPlan: action.plan,
+        selectedTeam: null,
+        selectedPosition: null,
+      };
+    case "teamChanged":
+      return {
+        ...state,
+        selectedTeam: action.teamId,
+        selectedPosition: null,
+      };
+    case "positionChanged":
+      return {
+        ...state,
+        selectedPosition: action.positionId,
+      };
+    case "back":
+      if (state.step === 2) {
+        return {
+          step: 1,
+          selectedServiceType: null,
+          selectedPlan: null,
+          selectedTeam: null,
+          selectedPosition: null,
+        };
+      }
+      if (state.step === 3) {
+        return {
+          ...state,
+          step: 2,
+          selectedPlan: null,
+          selectedTeam: null,
+          selectedPosition: null,
+        };
+      }
+      return state;
+    default:
+      return state;
+  }
+}
+
 export default function DashboardPage() {
-  const [step, setStep] = useState<Step>(1);
-  const [selectedServiceType, setSelectedServiceType] = useState<ServiceType | null>(null);
-  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
-  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
-  const [selectedPosition, setSelectedPosition] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(dashboardReducer, initialState);
+  const {
+    step,
+    selectedServiceType,
+    selectedPlan,
+    selectedTeam,
+    selectedPosition,
+  } = state;
 
   // Get team and position names for display
-  const { data: teamPositionGroups } = useTeamPositions(selectedServiceType?.id || null);
+  const { data: teamPositionGroups } = useTeamPositions(
+    selectedServiceType?.id || null,
+    selectedPlan?.id || null,
+    selectedPlan?.seriesId || null
+  );
   const selectedTeamGroup = teamPositionGroups?.find((g) => g.teamId === selectedTeam);
   const selectedPositionObj = selectedTeamGroup?.positions.find((p) => p.id === selectedPosition);
 
+  const queryClient = useQueryClient();
   const { data: people, isLoading: peopleLoading } = usePeople(
     selectedServiceType?.id || null,
     selectedTeam,
@@ -35,43 +122,43 @@ export default function DashboardPage() {
     selectedPlan?.sortDate || null
   );
 
+  const handleScheduleSuccess = () => {
+    const dateKey = selectedPlan?.sortDate
+      ? new Date(selectedPlan.sortDate).toISOString()
+      : null;
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.people(
+        selectedServiceType?.id || null,
+        selectedTeam,
+        selectedPosition,
+        selectedPlan?.id || null,
+        dateKey
+      ),
+    });
+  };
+
+  const handleScheduleError = (message: string) => {
+    console.error("Schedule error:", message);
+  };
+
   const handleServiceTypeSelect = (serviceType: ServiceType) => {
-    setSelectedServiceType(serviceType);
-    setStep(2);
-    // Clear subsequent selections
-    setSelectedPlan(null);
-    setSelectedTeam(null);
-    setSelectedPosition(null);
+    dispatch({ type: "serviceTypeSelected", serviceType });
   };
 
   const handlePlanSelect = (plan: Plan) => {
-    setSelectedPlan(plan);
-    setStep(3);
-    // Clear position selections
-    setSelectedTeam(null);
-    setSelectedPosition(null);
+    dispatch({ type: "planSelected", plan });
   };
 
   const handleBack = () => {
-    if (step === 2) {
-      setStep(1);
-      setSelectedServiceType(null);
-      setSelectedPlan(null);
-    } else if (step === 3) {
-      setStep(2);
-      setSelectedPlan(null);
-      setSelectedTeam(null);
-      setSelectedPosition(null);
-    }
+    dispatch({ type: "back" });
   };
 
   const handleTeamChange = (teamId: string) => {
-    setSelectedTeam(teamId);
-    setSelectedPosition(null); // Reset position when team changes
+    dispatch({ type: "teamChanged", teamId });
   };
 
   const handlePositionChange = (positionId: string) => {
-    setSelectedPosition(positionId);
+    dispatch({ type: "positionChanged", positionId });
   };
 
   return (
@@ -152,6 +239,8 @@ export default function DashboardPage() {
           <div className="space-y-6">
             <PositionSelector
               serviceTypeId={selectedServiceType?.id || null}
+              planId={selectedPlan?.id || null}
+              seriesId={selectedPlan?.seriesId || null}
               selectedTeam={selectedTeam}
               selectedPosition={selectedPosition}
               onTeamChange={handleTeamChange}
@@ -215,7 +304,16 @@ export default function DashboardPage() {
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                       {people.map((person) => (
-                        <PersonCard key={person.id} person={person} />
+                        <PersonCard
+                          key={person.id}
+                          person={person}
+                          serviceTypeId={selectedServiceType?.id ?? null}
+                          planId={selectedPlan?.id ?? null}
+                          teamId={selectedTeam ?? null}
+                          positionId={selectedPosition ?? null}
+                          onScheduleSuccess={handleScheduleSuccess}
+                          onScheduleError={handleScheduleError}
+                        />
                       ))}
                     </div>
                   </>
