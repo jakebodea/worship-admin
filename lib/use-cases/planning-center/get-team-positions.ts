@@ -63,13 +63,15 @@ export async function getNeededTeamPositionsForPlan(
     const positionName = (position.attributes.name as string | undefined)?.trim();
     if (!teamId || !teamName || !positionName) continue;
 
-    positionsByTeamAndName.set(buildTeamPositionKey(teamId, positionName), {
+    const slot: TeamPosition = {
       id: position.id,
       name: positionName,
       teamId,
       teamName,
       neededCount: 0,
-    });
+    };
+
+    positionsByTeamAndName.set(buildTeamPositionKey(teamId, positionName), slot);
   }
 
   for (const np of neededPositions) {
@@ -117,6 +119,7 @@ export async function getNeededTeamPositionsForPlan(
   }
 
   applyPlanTeamMemberSummary(planTeamMembers, planTeamMembersIncluded, positionsByTeamAndName);
+  addFilledPositionsToGroups(teamMap, positionsByTeamAndName);
 
   const groupedPositions: TeamPositionGroup[] = Array.from(teamMap.values());
   groupedPositions.sort((a, b) => a.teamName.localeCompare(b.teamName));
@@ -157,6 +160,31 @@ export async function getNeededTeamPositionsForPlan(
   }
 
   return groupedPositions;
+}
+
+function addFilledPositionsToGroups(
+  teamMap: Map<string, TeamPositionGroup>,
+  positionsByTeamAndName: Map<string, TeamPosition>
+) {
+  for (const slot of positionsByTeamAndName.values()) {
+    const filledCount = (slot.filledConfirmedCount ?? 0) + (slot.filledPendingCount ?? 0);
+    if (filledCount === 0) continue;
+    if (!slot.teamId || !slot.teamName) continue;
+
+    if (!teamMap.has(slot.teamId)) {
+      teamMap.set(slot.teamId, {
+        teamId: slot.teamId,
+        teamName: slot.teamName,
+        positions: [],
+      });
+    }
+
+    const group = teamMap.get(slot.teamId)!;
+    const exists = group.positions.some((position) => position.id === slot.id);
+    if (!exists) {
+      group.positions.push(slot);
+    }
+  }
 }
 
 function getTeamInfo(

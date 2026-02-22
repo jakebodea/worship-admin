@@ -624,9 +624,11 @@ function SlotBadgeCluster({
           </HoverCardContent>
         </HoverCard>
       )}
-      <Badge variant="destructive" className="shrink-0">
-        {position.neededCount ?? 1}
-      </Badge>
+      {(position.neededCount ?? 0) > 0 ? (
+        <Badge variant="destructive" className="shrink-0">
+          {position.neededCount}
+        </Badge>
+      ) : null}
     </div>
   );
 }
