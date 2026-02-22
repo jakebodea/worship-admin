@@ -138,7 +138,7 @@ function buildHistoryGroups(items: ServiceHistoryItem[]): HistoryGroup[] {
     bySchedule.get(key)!.push(item);
   }
 
-  return order.map((key) => {
+  const baseGroups = order.map((key) => {
     const groupItems = [...(bySchedule.get(key) || [])].sort(
       (a, b) => toDate(a.date).getTime() - toDate(b.date).getTime()
     );
@@ -164,6 +164,42 @@ function buildHistoryGroups(items: ServiceHistoryItem[]): HistoryGroup[] {
 
     return { dayKey: key, primary, additionalServices, rehearsals };
   });
+
+  const mergedGroups = new Map<string, HistoryGroup>();
+  const mergedOrder: string[] = [];
+
+  for (const group of baseGroups) {
+    const mergeKey = [
+      toDayKey(group.primary.date) || group.dayKey,
+      group.primary.teamName || "",
+      group.primary.serviceTypeName || "",
+      group.primary.planTitle || "",
+      (group.primary.status || "").trim().toLowerCase(),
+    ].join("|");
+
+    const existing = mergedGroups.get(mergeKey);
+    if (!existing) {
+      mergedGroups.set(mergeKey, {
+        dayKey: mergeKey,
+        primary: group.primary,
+        additionalServices: [...group.additionalServices],
+        rehearsals: [...group.rehearsals],
+      });
+      mergedOrder.push(mergeKey);
+      continue;
+    }
+
+    existing.additionalServices.push(group.primary, ...group.additionalServices);
+
+    const seenRehearsalIds = new Set(existing.rehearsals.map((item) => item.id));
+    for (const rehearsal of group.rehearsals) {
+      if (seenRehearsalIds.has(rehearsal.id)) continue;
+      existing.rehearsals.push(rehearsal);
+      seenRehearsalIds.add(rehearsal.id);
+    }
+  }
+
+  return mergedOrder.map((key) => mergedGroups.get(key)!);
 }
 
 function formatCombinedPositionLabel(primary: ServiceHistoryItem, additionalServices: ServiceHistoryItem[]) {
@@ -465,21 +501,8 @@ export function PersonCard({
                             key={rehearsal.id}
                             className="rounded-sm bg-muted/40 px-2 py-1.5 text-[11px] text-muted-foreground"
                           >
-                            <div className="flex flex-wrap items-center justify-between gap-1">
-                              <div className="font-medium">
-                                {formatDisplayDate(rehearsal.date)}
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <Badge
-                                  variant="outline"
-                                  className={cn(
-                                    "h-4 px-1 text-[10px]",
-                                    getHistoryStatusBadgeClass(rehearsal.status)
-                                  )}
-                                >
-                                  {formatHistoryStatusLabel(rehearsal.status)}
-                                </Badge>
-                              </div>
+                            <div className="font-medium">
+                              {formatDisplayDate(rehearsal.date)}
                             </div>
                           </div>
                         ))}

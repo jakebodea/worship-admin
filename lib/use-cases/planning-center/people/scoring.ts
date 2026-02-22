@@ -8,8 +8,10 @@ function calculateRecommendationScore(
   const reasoning: string[] = [];
 
   if (!frequency) {
-    reasoning.push("No service history available");
-    return { score: 50, reasoning };
+    // Treat missing frequency data like a clean/no-load candidate instead of
+    // artificially pushing them down the list with a low fallback score.
+    reasoning.push("No service history available (treated as no recent/upcoming load)");
+    return { score: 130, reasoning };
   }
 
   const formatDate = (date: Date) =>

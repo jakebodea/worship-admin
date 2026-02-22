@@ -33,6 +33,20 @@ function person(id: string, frequency: ScheduleFrequency): PersonWithAvailabilit
   };
 }
 
+function personWithoutFrequency(id: string): PersonWithAvailability {
+  return {
+    id,
+    firstName: id,
+    lastName: "Test",
+    fullName: `${id} Test`,
+    photoUrl: null,
+    photoThumbnailUrl: null,
+    archived: false,
+    positions: [],
+    isBlockedForDate: false,
+  };
+}
+
 describe("scoreAndNormalizePeople", () => {
   it("penalizes upcoming rehearsals less than upcoming services and explains rehearsal impact", () => {
     const referenceDate = new Date("2026-02-22T00:00:00Z");
@@ -67,5 +81,18 @@ describe("scoreAndNormalizePeople", () => {
       serviceHeavy.recommendationScore ?? 0
     );
     expect(rehearsalHeavy.recommendationReasoning?.join(" ")).toContain("Rehearsal");
+  });
+
+  it("does not rank missing frequency data below a clean candidate by default", () => {
+    const referenceDate = new Date("2026-02-22T00:00:00Z");
+
+    const missingFrequency = personWithoutFrequency("missing");
+    const cleanFrequency = person("clean", baseFrequency({}));
+
+    const people = [missingFrequency, cleanFrequency];
+    scoreAndNormalizePeople(people, referenceDate);
+
+    expect(missingFrequency.recommendationScore).toBe(cleanFrequency.recommendationScore);
+    expect(missingFrequency.recommendationReasoning?.join(" ")).toContain("No service history available");
   });
 });
