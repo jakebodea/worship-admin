@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { getScheduleHistory } from "@/lib/use-cases/planning-center/get-schedule-history";
 
-const { getPersonPlanPeopleWithPlansMock } = vi.hoisted(() => ({
-  getPersonPlanPeopleWithPlansMock: vi.fn(),
+const { getPersonSchedulesMock } = vi.hoisted(() => ({
+  getPersonSchedulesMock: vi.fn(),
 }));
 
 vi.mock("@/lib/planning-center/services/people-service", () => ({
   planningCenterPeopleService: {
-    getPersonPlanPeopleWithPlans: getPersonPlanPeopleWithPlansMock,
+    getPersonSchedules: getPersonSchedulesMock,
   },
 }));
 
@@ -20,37 +20,52 @@ describe("getScheduleHistory", () => {
       return d.toISOString();
     };
 
-    getPersonPlanPeopleWithPlansMock.mockResolvedValue({
+    getPersonSchedulesMock.mockResolvedValue({
       data: [
         {
-          id: "pp-1",
-          type: "PlanPerson",
+          id: "sch-1",
+          type: "Schedule",
           attributes: {
             status: "Confirmed",
-            created_at: iso(-5),
+            sort_date: iso(-5),
+            team_name: "Band",
+            service_type_name: "Sunday",
             team_position_name: "Band - Electric",
           },
-          relationships: { plan: { data: { id: "p-1", type: "Plan" } } },
+          relationships: {
+            plan: { data: { id: "p-1", type: "Plan" } },
+            service_type: { data: { id: "ok-st", type: "ServiceType" } },
+          },
         },
         {
-          id: "pp-2",
-          type: "PlanPerson",
+          id: "sch-2",
+          type: "Schedule",
           attributes: {
             status: "U",
-            created_at: iso(-3),
+            sort_date: iso(-3),
+            team_name: "Band",
+            service_type_name: "Sunday",
             team_position_name: "Band - Electric",
           },
-          relationships: { plan: { data: { id: "p-2", type: "Plan" } } },
+          relationships: {
+            plan: { data: { id: "p-2", type: "Plan" } },
+            service_type: { data: { id: "ok-st", type: "ServiceType" } },
+          },
         },
         {
-          id: "pp-3",
-          type: "PlanPerson",
+          id: "sch-3",
+          type: "Schedule",
           attributes: {
             status: "C",
-            created_at: iso(-2),
+            sort_date: iso(-2),
+            team_name: "Band",
+            service_type_name: "Excluded",
             team_position_name: "Band - Electric",
           },
-          relationships: { plan: { data: { id: "p-3", type: "Plan" } } },
+          relationships: {
+            plan: { data: { id: "p-3", type: "Plan" } },
+            service_type: { data: { id: "1106935", type: "ServiceType" } },
+          },
         },
       ],
       included: [
@@ -76,7 +91,7 @@ describe("getScheduleHistory", () => {
     });
 
     const result = await getScheduleHistory("person-1", 90);
-    expect(result.planPeople.map((p) => p.id)).toEqual(["pp-1"]);
+    expect(result.planPeople.map((p) => p.id)).toEqual(["sch-1"]);
     expect(result.frequency.last30Days).toBe(1);
     expect(result.frequency.totalServed).toBe(1);
   });

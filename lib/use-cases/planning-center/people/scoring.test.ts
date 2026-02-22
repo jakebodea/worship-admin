@@ -1,0 +1,71 @@
+import { describe, expect, it } from "vitest";
+import type { PersonWithAvailability, ScheduleFrequency } from "@/lib/types";
+import { scoreAndNormalizePeople } from "@/lib/use-cases/planning-center/people/scoring";
+
+function baseFrequency(partial: Partial<ScheduleFrequency>): ScheduleFrequency {
+  return {
+    last30Days: 0,
+    last60Days: 0,
+    last90Days: 0,
+    totalServed: 0,
+    upcomingServices: 0,
+    rehearsalLast30Days: 0,
+    rehearsalLast60Days: 0,
+    rehearsalLast90Days: 0,
+    totalRehearsals: 0,
+    upcomingRehearsals: 0,
+    ...partial,
+  };
+}
+
+function person(id: string, frequency: ScheduleFrequency): PersonWithAvailability {
+  return {
+    id,
+    firstName: id,
+    lastName: "Test",
+    fullName: `${id} Test`,
+    photoUrl: null,
+    photoThumbnailUrl: null,
+    archived: false,
+    positions: [],
+    frequency,
+    isBlockedForDate: false,
+  };
+}
+
+describe("scoreAndNormalizePeople", () => {
+  it("penalizes upcoming rehearsals less than upcoming services and explains rehearsal impact", () => {
+    const referenceDate = new Date("2026-02-22T00:00:00Z");
+    const nextDate = new Date("2026-02-25T00:00:00Z");
+
+    const rehearsalHeavy = person(
+      "rehearsal",
+      baseFrequency({
+        totalServed: 3,
+        lastServedDate: new Date("2026-01-01T00:00:00Z"),
+        upcomingRehearsals: 1,
+        nextRehearsalDate: nextDate,
+        rehearsalLast30Days: 1,
+        totalRehearsals: 1,
+      })
+    );
+
+    const serviceHeavy = person(
+      "service",
+      baseFrequency({
+        totalServed: 3,
+        lastServedDate: new Date("2026-01-01T00:00:00Z"),
+        upcomingServices: 1,
+        nextUpcomingDate: nextDate,
+      })
+    );
+
+    const people = [rehearsalHeavy, serviceHeavy];
+    scoreAndNormalizePeople(people, referenceDate);
+
+    expect((rehearsalHeavy.recommendationScore ?? 0)).toBeGreaterThan(
+      serviceHeavy.recommendationScore ?? 0
+    );
+    expect(rehearsalHeavy.recommendationReasoning?.join(" ")).toContain("Rehearsal");
+  });
+});

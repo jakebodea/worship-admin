@@ -1,23 +1,26 @@
 import { planningCenterPeopleService } from "@/lib/planning-center/services/people-service";
-import { planningCenterCatalogService } from "@/lib/planning-center/services/catalog-service";
 import {
   type PersonWithAvailability,
-  type RawPerson,
+  type PCResource,
   type RawPlanPerson,
+  type RawPlan,
+  type RawPlanTime,
 } from "@/lib/types";
 import { applySelectedPlanStatus } from "@/lib/use-cases/planning-center/people/matching";
-import { buildHistoryAndFrequencyForPerson } from "@/lib/use-cases/planning-center/people/history";
+import {
+  buildHistoryAndFrequencyForPlanPeople,
+} from "@/lib/use-cases/planning-center/people/history";
 import { scoreAndNormalizePeople, sortPeopleForSelection } from "@/lib/use-cases/planning-center/people/scoring";
 import {
   applyAvailability,
   buildBlockoutsPromise,
   buildSelectedPlanMatchContext,
-  buildServiceTypeNameMap,
   createBasePerson,
   getAssignedPeopleFromAssignments,
   getDefaultFrequency,
 } from "@/lib/use-cases/planning-center/people/transforms";
 import { mapWithConcurrency } from "@/lib/use-cases/planning-center/shared";
+import { findIncluded } from "@/lib/planning-center/utils";
 
 interface Params {
   serviceTypeId: string;
@@ -48,9 +51,18 @@ export async function getPeopleForPosition({
     teamId,
     planId
   );
+  const planTimesCache = new Map<string, Promise<PCResource[]>>();
 
-  const serviceTypes = await planningCenterCatalogService.getServiceTypesCached();
-  const serviceTypeNameById = buildServiceTypeNameMap(serviceTypes);
+  const getPlanTimesForPlanCached = (planServiceTypeId: string, planIdValue: string) => {
+    const key = `${planServiceTypeId}:${planIdValue}`;
+    const existing = planTimesCache.get(key);
+    if (existing) return existing;
+    const promise = planningCenterPeopleService
+      .getPlanTimesForPlan(planServiceTypeId, planIdValue)
+      .catch(() => []);
+    planTimesCache.set(key, promise);
+    return promise;
+  };
 
   const peopleWithData = await mapWithConcurrency(
     activePeople,
@@ -60,25 +72,63 @@ export async function getPeopleForPosition({
       const blockoutsPromise = buildBlockoutsPromise(rawPerson.id, checkDate);
 
       try {
-        const historyResponse = await planningCenterPeopleService.getPersonPlanPeopleWithPlans(
+        const planPeopleResponse = await planningCenterPeopleService.getPersonPlanPeopleWithPlans(
           rawPerson.id,
           {},
           2
         );
-        const planPeople = historyResponse.data as unknown as RawPlanPerson[];
-        const historyIncluded = historyResponse.included || [];
+        const planPeople = planPeopleResponse.data as unknown as RawPlanPerson[];
+        const historyIncluded = planPeopleResponse.included || [];
 
-        const historyResult = buildHistoryAndFrequencyForPerson(
+        const uniquePlanKeys = new Map<string, { serviceTypeId: string; planId: string }>();
+        for (const pp of planPeople) {
+          const timesLen = Array.isArray(pp.relationships?.times?.data)
+            ? pp.relationships?.times?.data.length
+            : 0;
+          const serviceTimesLen = Array.isArray(pp.relationships?.service_times?.data)
+            ? pp.relationships?.service_times?.data.length
+            : 0;
+          const couldHaveRehearsalOrOtherTimes = timesLen > serviceTimesLen;
+          if (!couldHaveRehearsalOrOtherTimes) continue;
+
+          const planRel = pp.relationships?.plan?.data;
+          const ppPlanId = Array.isArray(planRel) ? planRel[0]?.id : planRel?.id;
+          if (!ppPlanId) continue;
+          const plan = findIncluded(historyIncluded, "Plan", ppPlanId) as RawPlan | undefined;
+          const stRel = plan?.relationships?.service_type?.data;
+          const ppServiceTypeId = Array.isArray(stRel) ? stRel[0]?.id : stRel?.id;
+          if (!ppServiceTypeId) continue;
+          uniquePlanKeys.set(`${ppServiceTypeId}:${ppPlanId}`, {
+            serviceTypeId: ppServiceTypeId,
+            planId: ppPlanId,
+          });
+        }
+
+        const planTimesLists = await Promise.all(
+          [...uniquePlanKeys.values()].map(({ serviceTypeId: stId, planId: pId }) =>
+            getPlanTimesForPlanCached(stId, pId)
+          )
+        );
+        const planTimeById = new Map<string, RawPlanTime>();
+        for (const list of planTimesLists) {
+          for (const resource of list) {
+            if (resource.type !== "PlanTime") continue;
+            planTimeById.set(resource.id, resource as unknown as RawPlanTime);
+          }
+        }
+
+        const historyResult = buildHistoryAndFrequencyForPlanPeople(
           planPeople,
           historyIncluded,
-          serviceTypeNameById,
           referenceDate,
-          selectedMatchContext
+          selectedMatchContext,
+          planTimeById,
+          Number.POSITIVE_INFINITY
         );
 
         person.frequency = historyResult.frequency;
         person.serviceHistory = historyResult.serviceHistory;
-        applySelectedPlanStatus(person, historyResult.matchedPlanPerson);
+        applySelectedPlanStatus(person, historyResult.matchedSchedule);
       } catch {
         person.frequency = getDefaultFrequency();
         person.serviceHistory = [];

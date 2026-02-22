@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   getPeopleForTeamPosition: vi.fn(),
   getPersonBlockouts: vi.fn(),
   getPersonPlanPeopleWithPlans: vi.fn(),
+  getPlanTimesForPlan: vi.fn(),
+  getPersonSchedules: vi.fn(),
   getServiceTypesCached: vi.fn(),
   isServiceExcluded: vi.fn(() => false),
 }));
@@ -15,6 +17,8 @@ vi.mock("@/lib/planning-center/services/people-service", () => ({
     getPeopleForTeamPosition: mocks.getPeopleForTeamPosition,
     getPersonBlockouts: mocks.getPersonBlockouts,
     getPersonPlanPeopleWithPlans: mocks.getPersonPlanPeopleWithPlans,
+    getPlanTimesForPlan: mocks.getPlanTimesForPlan,
+    getPersonSchedules: mocks.getPersonSchedules,
   },
 }));
 
@@ -96,26 +100,39 @@ function plan(id: string, serviceTypeId: string, sortDate: string): PCResource {
   };
 }
 
-function planPerson(params: {
+function planPersonEntry(params: {
   id: string;
   planId: string;
   teamId: string;
   status: string;
   teamPositionName: string;
-  createdAt?: string;
+  timesIds?: string[];
+  serviceTimesIds?: string[];
 }): PCResource {
+  const relationships: PCResource["relationships"] = {
+    plan: { data: { type: "Plan", id: params.planId } },
+    team: { data: { type: "Team", id: params.teamId } },
+  };
+  if (params.timesIds) {
+    relationships.times = {
+      data: params.timesIds.map((id) => ({ type: "PlanTime", id })),
+    };
+  }
+  if (params.serviceTimesIds) {
+    relationships.service_times = {
+      data: params.serviceTimesIds.map((id) => ({ type: "PlanTime", id })),
+    };
+  }
+
   return {
     type: "PlanPerson",
     id: params.id,
     attributes: {
       status: params.status,
-      created_at: params.createdAt ?? "2026-02-01T00:00:00Z",
+      created_at: "2026-02-01T00:00:00Z",
       team_position_name: params.teamPositionName,
     },
-    relationships: {
-      plan: { data: { type: "Plan", id: params.planId } },
-      team: { data: { type: "Team", id: params.teamId } },
-    },
+    relationships,
   };
 }
 
@@ -137,6 +154,7 @@ describe("getPeopleForPosition", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.isServiceExcluded.mockReturnValue(false);
+    mocks.getPlanTimesForPlan.mockResolvedValue([]);
   });
 
   it("marks selected plan scheduled/confirmed flags and sorts confirmed/scheduled before available/blocked", async () => {
@@ -175,7 +193,7 @@ describe("getPeopleForPosition", () => {
       if (personId === "p-confirmed") {
         return {
           data: [
-            planPerson({
+            planPersonEntry({
               id: "pp-confirmed",
               planId,
               teamId,
@@ -190,7 +208,7 @@ describe("getPeopleForPosition", () => {
       if (personId === "p-scheduled") {
         return {
           data: [
-            planPerson({
+            planPersonEntry({
               id: "pp-scheduled",
               planId,
               teamId,
@@ -269,7 +287,7 @@ describe("getPeopleForPosition", () => {
     mocks.getPersonBlockouts.mockResolvedValue([]);
     mocks.getPersonPlanPeopleWithPlans.mockResolvedValue({
       data: [
-        planPerson({
+        planPersonEntry({
           id: "pp1",
           planId,
           teamId,
@@ -315,7 +333,7 @@ describe("getPeopleForPosition", () => {
     mocks.getPersonBlockouts.mockResolvedValue([]);
     mocks.getPersonPlanPeopleWithPlans.mockResolvedValue({
       data: [
-        planPerson({
+        planPersonEntry({
           id: "pp1",
           planId,
           teamId,
@@ -360,14 +378,14 @@ describe("getPeopleForPosition", () => {
     mocks.getPersonBlockouts.mockResolvedValue([]);
     mocks.getPersonPlanPeopleWithPlans.mockResolvedValue({
       data: [
-        planPerson({
+        planPersonEntry({
           id: "pp-included",
           planId: "plan-included",
           teamId: "team-1",
           status: "U",
           teamPositionName: "Band - Vocals",
         }),
-        planPerson({
+        planPersonEntry({
           id: "pp-excluded",
           planId: "plan-excluded",
           teamId: "team-1",
@@ -376,7 +394,7 @@ describe("getPeopleForPosition", () => {
         }),
       ],
       included: [
-        plan("plan-included", serviceTypeId, "2026-02-10"),
+        plan("plan-included", serviceTypeId, "2026-02-12"),
         plan("plan-excluded", excludedServiceTypeId, "2026-02-11"),
       ],
     });
@@ -390,6 +408,6 @@ describe("getPeopleForPosition", () => {
     expect(result).toHaveLength(1);
     expect(result[0]?.frequency?.totalServed).toBe(1);
     expect(result[0]?.serviceHistory).toHaveLength(1);
-    expect(result[0]?.serviceHistory?.[0]?.id).toBe("pp-included");
+    expect(result[0]?.serviceHistory?.[0]?.sourceScheduleId).toBe("pp-included");
   });
 });

@@ -1,5 +1,6 @@
 import type {
   RawPlanPerson,
+  RawSchedule,
   ScheduleFrequency,
   ServiceHistoryItem,
 } from "@/lib/types";
@@ -14,6 +15,5 @@ export interface SelectedPlanMatchContext {
 export interface HistoryBuildResult {
   serviceHistory: ServiceHistoryItem[];
   frequency: ScheduleFrequency;
-  matchedPlanPerson?: RawPlanPerson;
+  matchedSchedule?: RawSchedule | RawPlanPerson;
 }
-

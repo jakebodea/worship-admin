@@ -16,8 +16,13 @@ export function getDefaultFrequency(): ScheduleFrequency {
     last30Days: 0,
     last60Days: 0,
     last90Days: 0,
+    rehearsalLast30Days: 0,
+    rehearsalLast60Days: 0,
+    rehearsalLast90Days: 0,
     totalServed: 0,
+    totalRehearsals: 0,
     upcomingServices: 0,
+    upcomingRehearsals: 0,
   };
 }
 
@@ -33,6 +38,7 @@ export function createBasePerson(rawPerson: RawPerson): PersonWithAvailability {
     positions: [],
     isScheduledForSelectedPlanPosition: false,
     isConfirmedForSelectedPlanPosition: false,
+    isDeclinedForSelectedPlanPosition: false,
   };
 }
 
@@ -136,4 +142,3 @@ export function applyAvailability(
   person.blockouts = blockouts;
   person.availability = isBlocked ? "blocked" : "available";
 }
-

@@ -543,7 +543,13 @@ export function DashboardPage() {
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
                     {people.map((person) => (
                       <PersonCard
-                        key={person.id}
+                        key={[
+                          person.id,
+                          selectedServiceType?.id ?? "no-st",
+                          selectedPlan?.id ?? "no-plan",
+                          selectedTeam ?? "no-team",
+                          selectedPosition ?? "no-position",
+                        ].join(":")}
                         person={person}
                         serviceTypeId={selectedServiceType?.id ?? null}
                         planId={selectedPlan?.id ?? null}

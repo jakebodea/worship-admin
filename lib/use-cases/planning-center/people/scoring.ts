@@ -29,6 +29,7 @@ function calculateRecommendationScore(
     : 999;
   const recencyBonus = Math.min(Math.max(daysSinceLastServed, 0), 30);
   const upcomingPenalty = (frequency.upcomingServices || 0) * 20;
+  const upcomingRehearsalPenalty = (frequency.upcomingRehearsals || 0) * 8;
 
   let proximityPenalty = 0;
   if (frequency.nextUpcomingDate) {
@@ -40,7 +41,26 @@ function calculateRecommendationScore(
     else if (daysUntilNext <= 14) proximityPenalty = 15;
   }
 
-  const rawScore = baseScore + recencyBonus - upcomingPenalty - proximityPenalty;
+  let rehearsalProximityPenalty = 0;
+  if (frequency.nextRehearsalDate) {
+    const daysUntilRehearsal = Math.floor(
+      (frequency.nextRehearsalDate.getTime() - referenceDate.getTime()) /
+        (1000 * 60 * 60 * 24)
+    );
+    if (daysUntilRehearsal <= 7) rehearsalProximityPenalty = 12;
+    else if (daysUntilRehearsal <= 14) rehearsalProximityPenalty = 6;
+  }
+
+  const recentRehearsalPenalty = (frequency.rehearsalLast30Days || 0) * 4;
+
+  const rawScore =
+    baseScore +
+    recencyBonus -
+    upcomingPenalty -
+    proximityPenalty -
+    recentRehearsalPenalty -
+    upcomingRehearsalPenalty -
+    rehearsalProximityPenalty;
 
   if (frequency.lastServedDate === undefined && frequency.totalServed === 0) {
     reasoning.push("No past services scheduled");
@@ -74,8 +94,30 @@ function calculateRecommendationScore(
     else if (daysUntilNext <= 21) reasoning.push(`Minor penalty: scheduled ${daysUntilNext} days after`);
   }
 
+  if (frequency.upcomingRehearsals > 0 && frequency.nextRehearsalDate) {
+    const nextRehearsalStr = formatDate(frequency.nextRehearsalDate);
+    const daysUntilRehearsal = Math.floor(
+      (frequency.nextRehearsalDate.getTime() - referenceDate.getTime()) /
+        (1000 * 60 * 60 * 24)
+    );
+    reasoning.push(
+      frequency.upcomingRehearsals === 1
+        ? `Rehearsal upcoming: ${daysUntilRehearsal} day${daysUntilRehearsal === 1 ? "" : "s"} after on ${nextRehearsalStr}`
+        : `Rehearsals upcoming: ${frequency.upcomingRehearsals} scheduled (${daysUntilRehearsal} days after on ${nextRehearsalStr})`
+    );
+
+    if (daysUntilRehearsal <= 7) reasoning.push(`Slight rehearsal penalty: rehearsal ${daysUntilRehearsal} day${daysUntilRehearsal === 1 ? "" : "s"} after`);
+    else if (daysUntilRehearsal <= 14) reasoning.push(`Minor rehearsal penalty: rehearsal ${daysUntilRehearsal} days after`);
+  }
+
   if (frequency.last30Days >= 3) {
     reasoning.push(`Ranked lower: served ${frequency.last30Days} days in the last 30 days`);
+  }
+
+  if (frequency.rehearsalLast30Days >= 2) {
+    reasoning.push(
+      `Light penalty: rehearsed ${frequency.rehearsalLast30Days} day${frequency.rehearsalLast30Days === 1 ? "" : "s"} in the last 30 days`
+    );
   }
 
   return { score: rawScore, reasoning };
@@ -122,4 +164,3 @@ export function sortPeopleForSelection(people: PersonWithAvailability[]) {
     return a.fullName.localeCompare(b.fullName);
   });
 }
-

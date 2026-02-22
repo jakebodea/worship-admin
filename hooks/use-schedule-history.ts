@@ -22,8 +22,13 @@ export function useScheduleHistory(
             last30Days: 0,
             last60Days: 0,
             last90Days: 0,
+            rehearsalLast30Days: 0,
+            rehearsalLast60Days: 0,
+            rehearsalLast90Days: 0,
             totalServed: 0,
+            totalRehearsals: 0,
             upcomingServices: 0,
+            upcomingRehearsals: 0,
           },
         };
       }

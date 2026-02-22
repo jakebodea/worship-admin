@@ -103,6 +103,34 @@ export class PlanningCenterPeopleService {
     };
   }
 
+  async getPersonSchedules(
+    personId: string,
+    params: Record<string, string> = {},
+    maxPages: number = 2
+  ): Promise<{ data: PCResource[]; included: PCResource[] }> {
+    const response = await this.core.fetchAllWithIncluded<PCResource>(
+      `/services/v2/people/${personId}/schedules`,
+      { include: "plan_times", ...params },
+      maxPages
+    );
+
+    return {
+      data: response.data,
+      included: response.included || [],
+    };
+  }
+
+  async getPlanTimesForPlan(
+    serviceTypeId: string,
+    planId: string,
+    params: Record<string, string> = {}
+  ): Promise<PCResource[]> {
+    return this.core.fetchAll<PCResource>(
+      `/services/v2/service_types/${serviceTypeId}/plans/${planId}/plan_times`,
+      params
+    );
+  }
+
   async getPeopleForTeamPosition(
     serviceTypeId: string,
     positionId: string

@@ -166,6 +166,68 @@ export interface RawPlanPerson {
     person?: {
       data: PCResourceIdentifier | null;
     };
+    times?: {
+      data?: PCResourceIdentifier[];
+      links?: {
+        related?: string;
+      };
+    };
+    service_times?: {
+      data?: PCResourceIdentifier[];
+      links?: {
+        related?: string;
+      };
+    };
+  };
+}
+
+// Schedule Types (Person schedule history / recommendations)
+export interface RawSchedule {
+  type: "Schedule";
+  id: string;
+  attributes: {
+    status: string;
+    sort_date?: string;
+    team_name?: string;
+    team_position_name?: string;
+    service_type_name?: string;
+    decline_reason?: string;
+  };
+  relationships?: {
+    plan?: {
+      data: PCResourceIdentifier | null;
+    };
+    team?: {
+      data: PCResourceIdentifier | null;
+    };
+    service_type?: {
+      data: PCResourceIdentifier | null;
+    };
+    plan_person?: {
+      data: PCResourceIdentifier | null;
+    };
+    plan_times?: {
+      data: PCResourceIdentifier[];
+      links?: {
+        related?: string;
+      };
+    };
+    times?: {
+      data: PCResourceIdentifier[];
+      links?: {
+        related?: string;
+      };
+    };
+  };
+}
+
+export interface RawPlanTime {
+  type: "PlanTime";
+  id: string;
+  attributes: {
+    starts_at?: string;
+    ends_at?: string;
+    time_type?: "service" | "rehearsal" | "other" | string;
   };
 }
 
@@ -232,12 +294,14 @@ export interface RawNeededPosition {
 // Service History Item Types
 export interface ServiceHistoryItem {
   id: string;
+  sourceScheduleId: string;
   date: Date;
   teamPositionName: string;
   teamName?: string;
   serviceTypeName?: string;
   planTitle?: string;
   status: string;
+  timeType?: "service" | "rehearsal" | "other";
 }
 
 // Team Position Group Types
@@ -255,10 +319,21 @@ export interface ScheduleFrequency {
   last90Days: number;
   lastServedDate?: Date; // Most recent service BEFORE the plan date
   totalServed: number; // Total past services
+
+  // Past rehearsals (before the reference/plan date)
+  rehearsalLast30Days: number;
+  rehearsalLast60Days: number;
+  rehearsalLast90Days: number;
+  lastRehearsalDate?: Date;
+  totalRehearsals: number;
   
   // Upcoming services (after the reference/plan date)
   upcomingServices: number; // Number of services scheduled AFTER the plan date
   nextUpcomingDate?: Date; // Next scheduled service AFTER the plan date
+
+  // Upcoming rehearsals (after the reference/plan date)
+  upcomingRehearsals: number;
+  nextRehearsalDate?: Date;
 }
 
 // UI Helper Types
@@ -273,6 +348,7 @@ export interface PersonWithAvailability extends Person {
   isBlockedForDate?: boolean;
   isScheduledForSelectedPlanPosition?: boolean;
   isConfirmedForSelectedPlanPosition?: boolean;
+  isDeclinedForSelectedPlanPosition?: boolean;
   scheduledPlanPersonId?: string;
   recommendationScore?: number;
   recommendationReasoning?: string[];

@@ -1,31 +1,35 @@
-import type { PersonWithAvailability, RawPlanPerson } from "@/lib/types";
+import type { PersonWithAvailability, RawPlanPerson, RawSchedule } from "@/lib/types";
 import type { SelectedPlanMatchContext } from "@/lib/use-cases/planning-center/people/types";
 
-export function findMatchingPlanPersonForSelectedPosition(
-  planPeople: RawPlanPerson[],
+type SchedulableRecord = RawSchedule | RawPlanPerson;
+
+export function findMatchingScheduleForSelectedPosition<T extends SchedulableRecord>(
+  schedules: T[],
   context: SelectedPlanMatchContext
-): RawPlanPerson | undefined {
+): T | undefined {
   const { planId, teamId, selectedPositionName, selectedTeamName } = context;
   if (!planId || !selectedPositionName) return undefined;
 
-  return planPeople.find((pp) => {
-    const ppPlanRel = pp.relationships?.plan?.data;
-    const ppPlanId = Array.isArray(ppPlanRel) ? ppPlanRel[0]?.id : ppPlanRel?.id;
-    if (ppPlanId !== planId) return false;
+  return schedules.find((schedule) => {
+    const planRel = schedule.relationships?.plan?.data;
+    const schedulePlanId = Array.isArray(planRel) ? planRel[0]?.id : planRel?.id;
+    if (schedulePlanId !== planId) return false;
 
     if (teamId) {
-      const ppTeamRel = pp.relationships?.team?.data;
-      const ppTeamId = Array.isArray(ppTeamRel) ? ppTeamRel[0]?.id : ppTeamRel?.id;
-      if (ppTeamId && ppTeamId !== teamId) return false;
+      const teamRel = schedule.relationships?.team?.data;
+      const scheduleTeamId = Array.isArray(teamRel) ? teamRel[0]?.id : teamRel?.id;
+      if (scheduleTeamId && scheduleTeamId !== teamId) return false;
     }
 
-    const teamPositionName = (pp.attributes.team_position_name as string) || "";
+    const teamPositionName =
+      (schedule.attributes.team_position_name as string | undefined) || "";
+
     if (teamPositionName.includes(" - ")) {
       const parts = teamPositionName.split(" - ");
-      const ppTeamName = parts[0];
-      const ppPositionName = parts.slice(1).join(" - ");
-      if (selectedTeamName && ppTeamName !== selectedTeamName) return false;
-      return ppPositionName === selectedPositionName;
+      const scheduleTeamName = parts[0];
+      const schedulePositionName = parts.slice(1).join(" - ");
+      if (selectedTeamName && scheduleTeamName !== selectedTeamName) return false;
+      return schedulePositionName === selectedPositionName;
     }
 
     return teamPositionName === selectedPositionName;
@@ -34,14 +38,22 @@ export function findMatchingPlanPersonForSelectedPosition(
 
 export function applySelectedPlanStatus(
   person: PersonWithAvailability,
-  matchedPlanPerson?: RawPlanPerson
+  matchedSchedule?: SchedulableRecord
 ) {
-  if (!matchedPlanPerson) return;
+  if (!matchedSchedule) return;
 
   person.isScheduledForSelectedPlanPosition = true;
-  const status = (matchedPlanPerson.attributes.status as string | undefined) || "";
+  const status = (matchedSchedule.attributes.status as string | undefined) || "";
+  const normalizedStatus = status.toLowerCase();
   person.isConfirmedForSelectedPlanPosition =
-    status === "C" || status.toLowerCase() === "confirmed";
-  person.scheduledPlanPersonId = matchedPlanPerson.id;
-}
+    status === "C" || normalizedStatus === "confirmed";
+  person.isDeclinedForSelectedPlanPosition =
+    status === "D" || normalizedStatus === "declined";
 
+  const planPersonRel = (matchedSchedule.relationships as { plan_person?: { data?: { id: string } | { id: string }[] | null } } | undefined)
+    ?.plan_person?.data;
+  const planPersonId = Array.isArray(planPersonRel)
+    ? planPersonRel[0]?.id
+    : planPersonRel?.id;
+  person.scheduledPlanPersonId = planPersonId || matchedSchedule.id;
+}
