@@ -119,25 +119,27 @@ function toDayKey(value: Date | string | undefined): string | null {
 }
 
 type HistoryGroup = {
+  dayKey: string;
   primary: ServiceHistoryItem;
+  additionalServices: ServiceHistoryItem[];
   rehearsals: ServiceHistoryItem[];
 };
 
 function buildHistoryGroups(items: ServiceHistoryItem[]): HistoryGroup[] {
-  const bySchedule = new Map<string, ServiceHistoryItem[]>();
+  const byDay = new Map<string, ServiceHistoryItem[]>();
   const order: string[] = [];
 
   for (const item of items) {
-    const key = item.sourceScheduleId || item.id;
-    if (!bySchedule.has(key)) {
-      bySchedule.set(key, []);
+    const key = toDayKey(item.date) || item.sourceScheduleId || item.id;
+    if (!byDay.has(key)) {
+      byDay.set(key, []);
       order.push(key);
     }
-    bySchedule.get(key)!.push(item);
+    byDay.get(key)!.push(item);
   }
 
   return order.map((key) => {
-    const groupItems = [...(bySchedule.get(key) || [])].sort(
+    const groupItems = [...(byDay.get(key) || [])].sort(
       (a, b) => toDate(a.date).getTime() - toDate(b.date).getTime()
     );
     const primary =
@@ -147,6 +149,10 @@ function buildHistoryGroups(items: ServiceHistoryItem[]): HistoryGroup[] {
 
     const primaryDayKey = toDayKey(primary.date);
     const seenRehearsalDays = new Set<string>();
+    const additionalServices = groupItems.filter((item) => {
+      if (item.id === primary.id) return false;
+      return item.timeType !== "rehearsal";
+    });
     const rehearsals = groupItems.filter((item) => {
       if (item.id === primary.id || item.timeType !== "rehearsal") return false;
       const rehearsalDayKey = toDayKey(item.date);
@@ -156,8 +162,20 @@ function buildHistoryGroups(items: ServiceHistoryItem[]): HistoryGroup[] {
       return true;
     });
 
-    return { primary, rehearsals };
+    return { dayKey: key, primary, additionalServices, rehearsals };
   });
+}
+
+function formatCombinedPositionLabel(primary: ServiceHistoryItem, additionalServices: ServiceHistoryItem[]) {
+  const positions = [primary, ...additionalServices]
+    .map((item) => item.teamPositionName?.trim())
+    .filter((value): value is string => Boolean(value));
+
+  const uniquePositions = Array.from(new Set(positions));
+  const positionText = uniquePositions.join(", ");
+  if (!positionText) return "Unknown position";
+
+  return primary.teamName ? `${primary.teamName} - ${positionText}` : positionText;
 }
 
 export function PersonCard({
@@ -303,7 +321,7 @@ export function PersonCard({
   return (
     <Card
       className={cn(
-        "relative overflow-hidden border transition-shadow hover:shadow-md",
+        "relative flex h-full flex-col overflow-hidden border transition-shadow hover:shadow-md",
         statusStyles.cardClass
       )}
     >
@@ -386,7 +404,7 @@ export function PersonCard({
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-1 flex-col space-y-4">
         <section className="space-y-2">
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -405,10 +423,10 @@ export function PersonCard({
             </div>
           ) : (
             <div className="space-y-2">
-              {historyGroups.map(({ primary, rehearsals }) => {
+              {historyGroups.map(({ dayKey, primary, additionalServices, rehearsals }) => {
                 return (
                   <div
-                    key={primary.id}
+                    key={dayKey}
                     className="rounded-md border bg-muted/20 px-3 py-2"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -426,8 +444,7 @@ export function PersonCard({
                       </div>
                     </div>
                     <div className="mt-1 text-xs text-foreground">
-                      {primary.teamName ? `${primary.teamName} - ` : ""}
-                      {primary.teamPositionName}
+                      {formatCombinedPositionLabel(primary, additionalServices)}
                       {primary.serviceTypeName ? (
                         <span className="text-muted-foreground">
                           {" "}
@@ -475,7 +492,7 @@ export function PersonCard({
           )}
         </section>
 
-        <section className="space-y-2 border-t pt-3">
+        <section className="mt-auto space-y-2 border-t pt-3">
           {!isScheduled ? (
             <Button
               size="sm"

@@ -236,35 +236,6 @@ export function DashboardPage() {
     }
   }, [collapsedTeamsByPlan]);
 
-  useEffect(() => {
-    if (step !== 3 || teamPositionsLoading) return;
-    if (!teamPositionGroups || teamPositionGroups.length === 0) return;
-    if (selectedTeam && selectedPosition) return;
-
-    const firstGroup = teamPositionGroups[0];
-    const firstPosition = firstGroup?.positions[0];
-    if (!firstGroup || !firstPosition) return;
-
-    navigateTo(
-      {
-        serviceTypeId: selectedServiceType?.id ?? null,
-        planId: selectedPlan?.id ?? null,
-        teamId: firstGroup.teamId,
-        positionId: firstPosition.id,
-      },
-      "replace"
-    );
-  }, [
-    navigateTo,
-    selectedPlan?.id,
-    selectedPosition,
-    selectedServiceType?.id,
-    selectedTeam,
-    step,
-    teamPositionGroups,
-    teamPositionsLoading,
-  ]);
-
   const handleScheduleSuccess = () => {
     const dateKey = selectedPlan?.sortDate ? new Date(selectedPlan.sortDate).toISOString() : null;
 
@@ -275,6 +246,14 @@ export function DashboardPage() {
         selectedPosition,
         selectedPlan?.id ?? null,
         dateKey
+      ),
+    });
+
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.teamPositions(
+        selectedServiceType?.id ?? null,
+        selectedPlan?.id ?? null,
+        selectedPlan?.seriesId ?? null
       ),
     });
   };
@@ -524,7 +503,7 @@ export function DashboardPage() {
                 {!selectedPosition ? (
                   <Card>
                     <CardContent className="px-4 py-10 text-center text-sm text-muted-foreground">
-                      Select a slot to view people.
+                      Select a position to schedule a person.
                     </CardContent>
                   </Card>
                 ) : peopleLoading ? (
