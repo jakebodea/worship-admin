@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ApiError } from "@/lib/http/api-error";
-import { handleRoute } from "@/lib/http/route-handler";
+import { handlePlanningCenterRoute } from "@/lib/http/planning-center-route";
 import { logger } from "@/lib/logger";
 import { getScheduleHistory } from "@/lib/use-cases/planning-center/get-schedule-history";
 
@@ -19,7 +19,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const log = logger.withRequest(request);
-  return handleRoute(async () => {
+  return handlePlanningCenterRoute(request, async () => {
     const parsedParams = paramsSchema.safeParse(await params);
     if (!parsedParams.success) {
       log.warn({ issues: parsedParams.error.issues }, "Invalid schedule-history route params");

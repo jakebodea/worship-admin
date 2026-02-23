@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ApiError } from "@/lib/http/api-error";
-import { handleRoute } from "@/lib/http/route-handler";
+import { handlePlanningCenterRoute } from "@/lib/http/planning-center-route";
 import { logger } from "@/lib/logger";
 import { getFutureBlockoutsForPerson } from "@/lib/use-cases/planning-center/get-person-blockouts";
 
@@ -15,7 +15,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const log = logger.withRequest(request);
-  return handleRoute(async () => {
+  return handlePlanningCenterRoute(request, async () => {
     const parsedParams = paramsSchema.safeParse(await params);
     if (!parsedParams.success) {
       log.warn({ issues: parsedParams.error.issues }, "Invalid blockouts route params");
