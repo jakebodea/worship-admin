@@ -125,9 +125,28 @@ export function ServicePlanTableSelector({
     () => (serviceTypes ?? []).map((serviceType) => serviceType.id),
     [serviceTypes]
   );
+  const validServiceTypeIdSet = useMemo(
+    () => new Set(allServiceTypeIds),
+    [allServiceTypeIds]
+  );
   const effectiveSelectedServiceTypeIds = useMemo(() => {
-    return selectedServiceTypeIds ?? allServiceTypeIds;
-  }, [allServiceTypeIds, selectedServiceTypeIds]);
+    if (selectedServiceTypeId) {
+      return validServiceTypeIdSet.has(selectedServiceTypeId)
+        ? [selectedServiceTypeId]
+        : [];
+    }
+
+    if (selectedServiceTypeIds === null) {
+      return allServiceTypeIds;
+    }
+
+    return selectedServiceTypeIds.filter((id) => validServiceTypeIdSet.has(id));
+  }, [
+    allServiceTypeIds,
+    selectedServiceTypeId,
+    selectedServiceTypeIds,
+    validServiceTypeIdSet,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -142,23 +161,6 @@ export function ServicePlanTableSelector({
       // Ignore storage write failures (private mode/quota).
     }
   }, [selectedServiceTypeIds]);
-
-  useEffect(() => {
-    if (!serviceTypes || serviceTypes.length === 0) return;
-
-    const validServiceTypeIds = new Set(serviceTypes.map((serviceType) => serviceType.id));
-    setSelectedServiceTypeIds((currentIds) => {
-      if (selectedServiceTypeId) {
-        return validServiceTypeIds.has(selectedServiceTypeId) ? [selectedServiceTypeId] : [];
-      }
-
-      if (currentIds === null) {
-        return serviceTypes.map((serviceType) => serviceType.id);
-      }
-
-      return currentIds.filter((id) => validServiceTypeIds.has(id));
-    });
-  }, [selectedServiceTypeId, serviceTypes]);
 
   const selectedServiceTypeIdSet = useMemo(
     () => new Set(effectiveSelectedServiceTypeIds),
