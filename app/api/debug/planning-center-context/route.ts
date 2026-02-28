@@ -9,6 +9,10 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   return handleRoute(async () => {
+    if (process.env.NODE_ENV === "production") {
+      throw new ApiError(404, "NOT_FOUND", "Not found");
+    }
+
     const session = await auth.api.getSession({
       headers: request.headers,
     });

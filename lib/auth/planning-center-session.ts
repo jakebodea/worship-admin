@@ -30,7 +30,7 @@ export function getSelectedPlanningCenterAccountId(request: Request): string | n
 }
 
 export type PlanningCenterUserAuthContext = {
-  session: Awaited<ReturnType<typeof auth.api.getSession>>;
+  session: NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;
   accessToken: string;
   scopes: string[];
   accountId: string;
