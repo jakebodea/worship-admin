@@ -275,13 +275,6 @@ export function ServicePlanTableSelector({
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-2xl font-semibold">Choose Service + Date</h2>
-        <p className="text-muted-foreground">
-          Filter by service type, date window, or text search. Results stay within the same upcoming date range as before.
-        </p>
-      </div>
-
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_200px]">
         <div className="relative">
           <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
