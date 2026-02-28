@@ -1,6 +1,7 @@
 "use client";
 
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePlans } from "@/hooks/use-plans";
 import type { Plan } from "@/lib/types";
@@ -89,9 +90,10 @@ export function PlanDateSelector({
                 "ring-2 ring-primary ring-offset-2"
             )}
           >
-            <button
+            <Button
               type="button"
-              className="w-full text-left rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              variant="ghost"
+              className="h-auto w-full items-start justify-start rounded-xl px-0 py-0 text-left hover:bg-transparent"
               onClick={() => onSelect(plan)}
               aria-pressed={selectedPlan?.id === plan.id}
             >
@@ -105,7 +107,7 @@ export function PlanDateSelector({
                   </p>
                 )}
               </CardHeader>
-            </button>
+            </Button>
           </Card>
         ))}
       </div>

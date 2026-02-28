@@ -154,10 +154,11 @@ export function AccountMenu() {
                   const orgName = account.identity?.organizationName || "Unknown organization";
 
                   return (
-                    <button
+                    <Button
                       key={account.id}
                       type="button"
-                      className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left hover:bg-accent"
+                      variant="ghost"
+                      className="h-auto w-full justify-between px-2 py-2 text-left"
                       onClick={() => void handleSelectAccount(account.id)}
                       disabled={Boolean(switchingAccountId) || isSigningOut}
                     >
@@ -169,7 +170,7 @@ export function AccountMenu() {
                           <Check className="size-4" />
                         ) : null}
                       </span>
-                    </button>
+                    </Button>
                   );
                 })}
               </div>

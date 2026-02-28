@@ -3,7 +3,7 @@
 import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, ChevronDown, ListChecks } from "lucide-react";
+import { ArrowLeft, ChevronDown } from "lucide-react";
 import { PersonCard } from "@/components/person-card";
 import { ServicePlanTableSelector } from "@/components/service-plan-table-selector";
 import { AccountMenu } from "@/components/account-menu";
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePeople } from "@/hooks/use-people";
 import { usePlans } from "@/hooks/use-plans";
@@ -62,24 +63,6 @@ function buildScheduleUrl({ serviceTypeId, planId, teamId, positionId }: RouteSe
 
   const query = searchParams.toString();
   return query ? `/schedule?${query}` : "/schedule";
-}
-
-function flattenSlots(teamPositionGroups: TeamPositionGroup[] | undefined): SlotRef[] {
-  if (!teamPositionGroups) return [];
-
-  const slots: SlotRef[] = [];
-  for (const group of teamPositionGroups) {
-    for (const position of group.positions) {
-      slots.push({
-        teamId: group.teamId,
-        teamName: group.teamName,
-        positionId: position.id,
-        positionName: position.name,
-      });
-    }
-  }
-
-  return slots;
 }
 
 function formatPlanDate(date: Date | string | undefined) {
@@ -178,12 +161,6 @@ export function DashboardPage() {
     selectedPosition,
     selectedPlan?.id ?? null,
     selectedPlan?.sortDate ?? null
-  );
-
-  const slotList = useMemo(() => flattenSlots(teamPositionGroups), [teamPositionGroups]);
-  const selectedSlotIndex = useMemo(
-    () => slotList.findIndex((slot) => slot.teamId === selectedTeam && slot.positionId === selectedPosition),
-    [slotList, selectedTeam, selectedPosition]
   );
 
   useEffect(() => {
@@ -288,13 +265,6 @@ export function DashboardPage() {
     });
   };
 
-  const moveToRelativeSlot = (direction: 1 | -1) => {
-    if (selectedSlotIndex < 0) return;
-    const next = slotList[selectedSlotIndex + direction];
-    if (!next) return;
-    handleSlotSelect(next);
-  };
-
   const planSubtitle = selectedPlan?.seriesTitle || selectedPlan?.title || null;
 
   const toggleTeamCollapsed = (teamId: string) => {
@@ -312,9 +282,24 @@ export function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-6 md:py-8">
-        <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+    <div
+      className={cn(
+        "bg-background min-h-screen",
+        hasSelectedPlan && "xl:h-screen xl:overflow-hidden"
+      )}
+    >
+      <div
+        className={cn(
+          "container mx-auto px-4",
+          hasSelectedPlan ? "py-4 md:py-5 xl:flex xl:h-full xl:flex-col" : "py-6 md:py-8"
+        )}
+      >
+        <div
+          className={cn(
+            "flex flex-wrap items-start justify-between gap-3",
+            hasSelectedPlan ? "mb-4 xl:shrink-0" : "mb-6"
+          )}
+        >
           <div>
             {hasSelectedPlan && selectedServiceType && selectedPlan ? (
               <>
@@ -355,40 +340,9 @@ export function DashboardPage() {
         )}
 
         {hasSelectedPlan && (
-          <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
-              <aside className="overflow-hidden rounded-xl border bg-card/60 xl:sticky xl:top-6 xl:h-[calc(100vh-6rem)]">
-                <div className="border-b px-4 py-4">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <ListChecks className="size-4 text-muted-foreground" />
-                    <span>Slots</span>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">Choose team and position.</p>
-                </div>
-                <div className="border-b px-4 py-3">
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => moveToRelativeSlot(-1)}
-                      disabled={selectedSlotIndex <= 0}
-                    >
-                      <ArrowLeft className="size-4" />
-                      Prev
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => moveToRelativeSlot(1)}
-                      disabled={selectedSlotIndex < 0 || selectedSlotIndex >= slotList.length - 1}
-                    >
-                      Next
-                      <ArrowRight className="size-4" />
-                    </Button>
-                  </div>
-                </div>
-                <div className="space-y-4 px-4 py-4 xl:max-h-[calc(100vh-15rem)] xl:overflow-y-auto">
+          <div className="grid gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[320px_minmax(0,1fr)]">
+              <Card className="shrink-0 gap-0 border-0 py-0 shadow-none">
+                <div className="space-y-3 px-3 pb-3">
                   {teamPositionsLoading ? (
                     <div className="space-y-2">
                       {Array.from({ length: 8 }).map((_, index) => (
@@ -400,90 +354,22 @@ export function DashboardPage() {
                   ) : (
                     <div className="space-y-4">
                       {teamPositionGroups.map((group) => (
-                        <Collapsible
+                        <TeamSlotsCollapsible
                           key={group.teamId}
-                          open={!collapsedTeams[group.teamId]}
-                          onOpenChange={() => toggleTeamCollapsed(group.teamId)}
-                          className="space-y-2"
-                        >
-                          <CollapsibleTrigger asChild>
-                            <button
-                              type="button"
-                              className="flex w-full items-center justify-between rounded-md px-1 py-1 text-left hover:bg-muted"
-                            >
-                              <div className="flex min-w-0 items-center gap-2">
-                                <ChevronDown
-                                  className={cn(
-                                    "size-4 text-muted-foreground transition-transform duration-200 ease-out",
-                                    collapsedTeams[group.teamId] && "-rotate-90"
-                                  )}
-                                />
-                                <p className="truncate text-sm font-medium">{group.teamName}</p>
-                              </div>
-                              <Badge variant="secondary">
-                                {group.positions.reduce(
-                                  (sum, position) => sum + (position.neededCount ?? 1),
-                                  0
-                                )}
-                              </Badge>
-                            </button>
-                          </CollapsibleTrigger>
-
-                          <CollapsibleContent
-                            className={cn(
-                              "grid overflow-hidden transition-all",
-                              "data-[state=open]:grid-rows-[1fr] data-[state=closed]:grid-rows-[0fr]",
-                              "data-[state=open]:opacity-100 data-[state=closed]:opacity-0",
-                              "data-[state=open]:duration-200 data-[state=closed]:duration-150",
-                              "data-[state=open]:ease-out data-[state=closed]:ease-in"
-                            )}
-                          >
-                            <div className="min-h-0 space-y-1 pt-1">
-                            {group.positions.map((position) => {
-                              const active =
-                                group.teamId === selectedTeam && position.id === selectedPosition;
-
-                              return (
-                                <div
-                                  key={position.id}
-                                  className={cn(
-                                    "flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition-colors",
-                                    active ? "border-primary bg-primary/5" : "hover:bg-muted"
-                                  )}
-                                >
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleSlotSelect({
-                                        teamId: group.teamId,
-                                        teamName: group.teamName,
-                                        positionId: position.id,
-                                        positionName: position.name,
-                                      })
-                                    }
-                                    className="min-w-0 flex-1 text-left"
-                                    aria-pressed={active}
-                                  >
-                                    <span className="truncate pr-2">{position.name}</span>
-                                  </button>
-                                  <SlotBadgeCluster
-                                    position={position}
-                                    teamName={group.teamName}
-                                    positionName={position.name}
-                                  />
-                                </div>
-                              );
-                            })}
-                            </div>
-                          </CollapsibleContent>
-                        </Collapsible>
+                          group={group}
+                          isCollapsed={!!collapsedTeams[group.teamId]}
+                          selectedTeam={selectedTeam}
+                          selectedPosition={selectedPosition}
+                          onToggle={toggleTeamCollapsed}
+                          onSelect={handleSlotSelect}
+                        />
                       ))}
                     </div>
                   )}
                 </div>
-              </aside>
+              </Card>
 
-              <div className="space-y-4">
+              <ScrollArea className="xl:min-h-0 xl:h-full">
                 {!selectedPosition ? (
                   <Card>
                     <CardContent className="px-4 py-10 text-center text-sm text-muted-foreground">
@@ -491,7 +377,7 @@ export function DashboardPage() {
                     </CardContent>
                   </Card>
                 ) : peopleLoading ? (
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-3 pb-2 md:grid-cols-2 2xl:grid-cols-3">
                     {Array.from({ length: 8 }).map((_, i) => (
                       <Skeleton key={i} className="h-64 w-full" />
                     ))}
@@ -503,7 +389,7 @@ export function DashboardPage() {
                     </CardContent>
                   </Card>
                 ) : (
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-3 pb-2 md:grid-cols-2 2xl:grid-cols-3">
                     {people.map((person) => (
                       <PersonCard
                         key={[
@@ -524,11 +410,116 @@ export function DashboardPage() {
                     ))}
                   </div>
                 )}
-              </div>
+              </ScrollArea>
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+function TeamSlotsCollapsible({
+  group,
+  isCollapsed,
+  selectedTeam,
+  selectedPosition,
+  onToggle,
+  onSelect,
+}: {
+  group: TeamPositionGroup;
+  isCollapsed: boolean;
+  selectedTeam: string | null;
+  selectedPosition: string | null;
+  onToggle: (teamId: string) => void;
+  onSelect: (slot: SlotRef) => void;
+}) {
+  const openNeededCount = group.positions.reduce(
+    (sum, position) => sum + (position.neededCount ?? 1),
+    0
+  );
+
+  return (
+    <Collapsible
+      open={!isCollapsed}
+      onOpenChange={() => onToggle(group.teamId)}
+      className="overflow-hidden rounded-md border border-border/50 bg-background/90"
+    >
+      <CollapsibleTrigger asChild>
+        <Button
+          variant="ghost"
+          className="h-auto w-full justify-between gap-3 rounded-none px-3 py-2 text-left hover:bg-muted/25"
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <ChevronDown
+              className={cn(
+                "size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-out",
+                isCollapsed && "-rotate-90"
+              )}
+            />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{group.teamName}</p>
+              <p className="text-[11px] text-muted-foreground">
+                {group.positions.length} positions
+              </p>
+            </div>
+          </div>
+          <Badge variant="secondary" className="shrink-0">
+            {openNeededCount}
+          </Badge>
+        </Button>
+      </CollapsibleTrigger>
+
+      <CollapsibleContent
+        className={cn(
+          "grid overflow-hidden transition-all",
+          "data-[state=open]:grid-rows-[1fr] data-[state=closed]:grid-rows-[0fr]",
+          "data-[state=open]:opacity-100 data-[state=closed]:opacity-0",
+          "data-[state=open]:duration-200 data-[state=closed]:duration-150",
+          "data-[state=open]:ease-out data-[state=closed]:ease-in"
+        )}
+      >
+        <div className="min-h-0 bg-muted/10">
+          {group.positions.map((position, index) => {
+            const active =
+              group.teamId === selectedTeam && position.id === selectedPosition;
+
+            return (
+              <div
+                key={position.id}
+                className={cn(
+                  "flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm transition-colors",
+                  index > 0 && "border-t border-border/40",
+                  active ? "bg-background/90" : "hover:bg-muted/20"
+                )}
+              >
+                <Button
+                  variant="ghost"
+                  onClick={() =>
+                    onSelect({
+                      teamId: group.teamId,
+                      teamName: group.teamName,
+                      positionId: position.id,
+                      positionName: position.name,
+                    })
+                  }
+                  className="h-auto min-w-0 flex-1 justify-start px-0 py-1 text-left hover:bg-transparent"
+                  aria-pressed={active}
+                >
+                  <span className={cn("block truncate pr-2", active && "font-medium")}>
+                    {position.name}
+                  </span>
+                </Button>
+                <SlotBadgeCluster
+                  position={position}
+                  teamName={group.teamName}
+                  positionName={position.name}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -551,8 +542,10 @@ function SlotBadgeCluster({
       {confirmed > 0 && (
         <HoverCard openDelay={120} closeDelay={120}>
           <HoverCardTrigger asChild>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-auto px-0 py-0 hover:bg-transparent"
               onClick={(event) => event.stopPropagation()}
             >
               <Badge
@@ -561,7 +554,7 @@ function SlotBadgeCluster({
               >
                 {confirmed}
               </Badge>
-            </button>
+            </Button>
           </HoverCardTrigger>
           <HoverCardContent
             align="end"
@@ -581,8 +574,10 @@ function SlotBadgeCluster({
       {pending > 0 && (
         <HoverCard openDelay={120} closeDelay={120}>
           <HoverCardTrigger asChild>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-auto px-0 py-0 hover:bg-transparent"
               onClick={(event) => event.stopPropagation()}
             >
               <Badge
@@ -591,7 +586,7 @@ function SlotBadgeCluster({
               >
                 {pending}
               </Badge>
-            </button>
+            </Button>
           </HoverCardTrigger>
           <HoverCardContent
             align="end"

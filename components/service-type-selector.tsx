@@ -1,6 +1,7 @@
 "use client";
 
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useServiceTypes } from "@/hooks/use-service-types";
 import type { ServiceType } from "@/lib/types";
@@ -58,16 +59,17 @@ export function ServiceTypeSelector({
                 "ring-2 ring-primary ring-offset-2"
             )}
           >
-            <button
+            <Button
               type="button"
-              className="w-full text-left rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              variant="ghost"
+              className="h-auto w-full items-start justify-start rounded-xl px-0 py-0 text-left hover:bg-transparent"
               onClick={() => onSelect(serviceType)}
               aria-pressed={selectedServiceType === serviceType.id}
             >
               <CardHeader>
                 <CardTitle>{serviceType.name}</CardTitle>
               </CardHeader>
-            </button>
+            </Button>
           </Card>
         ))}
       </div>

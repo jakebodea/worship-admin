@@ -357,7 +357,7 @@ export function PersonCard({
   return (
     <Card
       className={cn(
-        "relative flex h-full flex-col overflow-hidden border transition-shadow hover:shadow-md",
+        "relative flex h-full flex-col gap-4 overflow-hidden border-border/50 py-4 shadow-none transition-shadow hover:shadow-sm",
         statusStyles.cardClass
       )}
     >
@@ -369,18 +369,7 @@ export function PersonCard({
           )}
         />
       ) : null}
-      <div
-        className={cn(
-          "absolute inset-x-0 top-0 h-1",
-          statusVariant === "confirmed" && "bg-emerald-500/70",
-          statusVariant === "scheduled" && "bg-amber-500/70",
-          statusVariant === "declined" && "bg-red-500/70",
-          statusVariant === "blocked" && "bg-red-500/70",
-          statusVariant === "available" && "bg-slate-200"
-        )}
-      />
-
-      <CardHeader className="pb-3 pt-4">
+      <CardHeader className="pb-2 pt-0">
         <div className="flex items-start gap-3">
           <Avatar className="h-10 w-10 ring-1 ring-border">
             <AvatarImage src={person.photoThumbnailUrl || undefined} alt={person.fullName} />
@@ -440,8 +429,8 @@ export function PersonCard({
         </div>
       </CardHeader>
 
-      <CardContent className="flex flex-1 flex-col space-y-4">
-        <section className="space-y-2">
+      <CardContent className="flex flex-1 flex-col space-y-3">
+        <section className="space-y-1.5">
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Recent Schedule History
@@ -454,7 +443,7 @@ export function PersonCard({
           </div>
 
           {historyGroups.length === 0 ? (
-            <div className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+            <div className="rounded-md border border-dashed border-border/60 px-3 py-2 text-xs text-muted-foreground">
               No recent schedule history
             </div>
           ) : (
@@ -463,7 +452,7 @@ export function PersonCard({
                 return (
                   <div
                     key={dayKey}
-                    className="rounded-md border bg-muted/20 px-3 py-2"
+                    className="rounded-md border border-border/60 bg-muted/15 px-3 py-2"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="text-xs font-medium">{formatDisplayDate(primary.date)}</div>
@@ -495,7 +484,7 @@ export function PersonCard({
                     ) : null}
 
                     {rehearsals.length > 0 ? (
-                      <div className="mt-2 space-y-1.5 border-l-2 border-muted pl-2">
+                      <div className="mt-2 space-y-1.5 border-l-2 border-border/50 pl-2">
                         {rehearsals.map((rehearsal) => (
                           <div
                             key={rehearsal.id}
@@ -515,7 +504,7 @@ export function PersonCard({
           )}
         </section>
 
-        <section className="mt-auto space-y-2 border-t pt-3">
+        <section className="mt-auto space-y-2 border-t border-border/60 pt-2.5">
           {!isScheduled ? (
             <Button
               size="sm"
