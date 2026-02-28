@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowRight, ChevronDown, ListChecks } from "lucide-react";
 import { PersonCard } from "@/components/person-card";
 import { PlanDateSelector } from "@/components/plan-date-selector";
 import { ServiceTypeSelector } from "@/components/service-type-selector";
+import { AccountMenu } from "@/components/account-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -347,12 +348,15 @@ export function DashboardPage() {
               </>
             )}
           </div>
-          {step > 1 && (
-            <Button variant="ghost" onClick={handleBack}>
-              <ArrowLeft className="size-4" />
-              {step === 2 ? "Back" : "Change Plan"}
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {step > 1 && (
+              <Button variant="ghost" onClick={handleBack}>
+                <ArrowLeft className="size-4" />
+                {step === 2 ? "Back" : "Change Plan"}
+              </Button>
+            )}
+            <AccountMenu />
+          </div>
         </div>
 
         {step === 1 && (

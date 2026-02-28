@@ -49,9 +49,19 @@ if (process.env.NODE_ENV !== "production") {
 export const auth = betterAuth({
   baseURL: baseUrl,
   secret,
-  database: new PostgresDialect({
-    pool,
-  }),
+  database: {
+    type: "postgres",
+    dialect: new PostgresDialect({
+      pool,
+    }),
+  },
+  account: {
+    accountLinking: {
+      enabled: true,
+      trustedProviders: ["planning-center"],
+      updateUserInfoOnLink: true,
+    },
+  },
   socialProviders: {},
   plugins: [
     nextCookies(),
@@ -64,6 +74,8 @@ export const auth = betterAuth({
           clientId: planningCenterClientId,
           clientSecret: planningCenterClientSecret,
           scopes: ["openid", "services", "people"],
+          // Force Planning Center to prompt for login so users can switch accounts/org context.
+          prompt: "login",
           pkce: true,
           accessType: "offline",
           authentication: "basic",
@@ -73,4 +85,3 @@ export const auth = betterAuth({
     }),
   ],
 });
-
