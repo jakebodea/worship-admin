@@ -6,6 +6,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { buttonVariants } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { FilledPositionPerson, TeamPosition, TeamPositionGroup } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -67,28 +68,32 @@ function TeamColumn({
 
   return (
     <section className="w-[420px] shrink-0">
-      <header className="mb-2 flex items-baseline justify-between gap-2">
-        <h3 className="truncate text-lg font-semibold">{group.teamName}</h3>
-        <p className="text-xs text-muted-foreground tabular-nums">
-          {totalNeeded > 0 ? `${totalScheduled}/${totalNeeded}` : `${totalScheduled}`}
-        </p>
-      </header>
+      <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
+        <header className="flex items-baseline justify-between gap-2 px-4 py-3">
+          <h3 className="truncate text-lg font-semibold">{group.teamName}</h3>
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {totalNeeded > 0 ? `${totalScheduled}/${totalNeeded}` : `${totalScheduled}`}
+          </p>
+        </header>
 
-      <Accordion
-        type="multiple"
-        defaultValue={group.positions.map((position) => position.id)}
-        className="w-full rounded-md border border-border/40 bg-background/60 px-2"
-      >
-        {group.positions.map((position) => (
-          <PositionAccordionItem
-            key={position.id}
-            teamId={group.teamId}
-            teamName={group.teamName}
-            position={position}
-            onSelectPosition={onSelectPosition}
-          />
-        ))}
-      </Accordion>
+        <Accordion
+          type="multiple"
+          defaultValue={group.positions.map((position) => position.id)}
+          className="w-full px-3 py-1"
+        >
+          {group.positions.map((position, index) => (
+            <div key={position.id}>
+              <PositionAccordionItem
+                teamId={group.teamId}
+                teamName={group.teamName}
+                position={position}
+                onSelectPosition={onSelectPosition}
+              />
+              {index < group.positions.length - 1 ? <Separator className="opacity-35" /> : null}
+            </div>
+          ))}
+        </Accordion>
+      </div>
     </section>
   );
 }
@@ -111,8 +116,8 @@ function PositionAccordionItem({
   const people = position.filledPeople ?? [];
 
   return (
-    <AccordionItem value={position.id} className="border-border/40">
-      <AccordionTrigger className="gap-1 py-2 hover:no-underline">
+    <AccordionItem value={position.id} className="rounded-sm border-b-0 transition-colors hover:bg-muted/60">
+      <AccordionTrigger className="gap-1 rounded-none px-1 py-3 hover:no-underline">
         <div className="flex w-full min-w-0 items-center gap-2">
           <span className="truncate text-sm font-medium">{position.name}</span>
           <span className="text-xs text-muted-foreground tabular-nums">
@@ -140,7 +145,18 @@ function PositionAccordionItem({
         </div>
       </AccordionTrigger>
 
-      <AccordionContent className="pb-2 pt-0">
+      <AccordionContent
+        className="cursor-pointer pb-3 pt-0"
+        onClick={(event) => {
+          const target = event.target as HTMLElement;
+          if (target.closest("button, a, input, textarea, select, [role='button']")) return;
+
+          const trigger = event.currentTarget
+            .closest("[data-slot='accordion-item']")
+            ?.querySelector<HTMLButtonElement>("[data-slot='accordion-trigger']");
+          trigger?.click();
+        }}
+      >
         {people.length === 0 ? (
           <p className="pl-1 text-xs text-muted-foreground">No one</p>
         ) : (
