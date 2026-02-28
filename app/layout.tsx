@@ -14,17 +14,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Agape Planning Center Helper",
-  description: "Planning Center worship team scheduling helper",
+  title: "worshipadmin.com",
+  description: "Church-agnostic Planning Center scheduling tools for worship admins.",
   openGraph: {
-    title: "Agape Planning Center Helper",
-    description: "Planning Center worship team scheduling helper",
+    title: "worshipadmin.com",
+    description: "Church-agnostic Planning Center scheduling tools for worship admins.",
     type: "website",
   },
   twitter: {
     card: "summary",
-    title: "Agape Planning Center Helper",
-    description: "Planning Center worship team scheduling helper",
+    title: "worshipadmin.com",
+    description: "Church-agnostic Planning Center scheduling tools for worship admins.",
   },
 };
 

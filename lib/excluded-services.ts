@@ -1,15 +1,19 @@
 /**
- * Globally excluded service type IDs.
+ * Globally excluded service type IDs configured via env.
+ * Set PLANNING_CENTER_EXCLUDED_SERVICE_IDS to a comma-separated list.
  * These service types will be filtered out from:
  * - Service types list
  * - Person service history records
  * - Schedule history records
  */
+const rawExcludedServiceIds = process.env.PLANNING_CENTER_EXCLUDED_SERVICE_IDS ?? "";
 export const EXCLUDED_SERVICE_IDS: string[] = [
-  "1025407", // Junior Academy Worship Team
-  "1106935", // Worship Leading Classes
-  "1280704", // Children's Ministry
-  "1039924", // Special Services & Meetings
+  ...new Set(
+    rawExcludedServiceIds
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean)
+  ),
 ];
 
 /**

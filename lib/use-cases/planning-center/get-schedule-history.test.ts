@@ -11,6 +11,10 @@ vi.mock("@/lib/planning-center/services/people-service", () => ({
   },
 }));
 
+vi.mock("@/lib/excluded-services", () => ({
+  isServiceExcluded: vi.fn((serviceId: string) => serviceId === "st-excluded"),
+}));
+
 describe("getScheduleHistory", () => {
   it("keeps confirmed non-excluded records and computes frequency", async () => {
     const now = new Date();
@@ -64,7 +68,7 @@ describe("getScheduleHistory", () => {
           },
           relationships: {
             plan: { data: { id: "p-3", type: "Plan" } },
-            service_type: { data: { id: "1106935", type: "ServiceType" } },
+            service_type: { data: { id: "st-excluded", type: "ServiceType" } },
           },
         },
       ],
@@ -85,7 +89,7 @@ describe("getScheduleHistory", () => {
           id: "p-3",
           type: "Plan",
           attributes: { title: "Excluded Plan", sort_date: iso(-2), created_at: iso(-2) },
-          relationships: { service_type: { data: { id: "1106935", type: "ServiceType" } } },
+          relationships: { service_type: { data: { id: "st-excluded", type: "ServiceType" } } },
         },
       ],
     });
