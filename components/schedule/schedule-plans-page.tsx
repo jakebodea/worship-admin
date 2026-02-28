@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useCallback } from "react";
+import { startTransition, useCallback, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AccountMenu } from "@/components/account-menu";
 import { ServicePlanTableSelector } from "@/components/service-plan-table-selector";
@@ -15,9 +15,15 @@ function buildPlanWorkspaceUrl(serviceTypeId: string, planId: string): string {
 export function SchedulePlansPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const searchQuery = searchParams.toString();
 
-  const selectedServiceTypeId = searchParams.get("serviceTypeId");
-  const selectedPlanId = searchParams.get("planId");
+  useEffect(() => {
+    if (!searchQuery) return;
+
+    startTransition(() => {
+      router.replace("/schedule");
+    });
+  }, [router, searchQuery]);
 
   const handleServicePlanSelect = useCallback(
     ({ serviceTypeId, planId }: { serviceTypeId: string; planId: string }) => {
@@ -43,8 +49,8 @@ export function SchedulePlansPage() {
         </div>
 
         <ServicePlanTableSelector
-          selectedServiceTypeId={selectedServiceTypeId}
-          selectedPlanId={selectedPlanId}
+          selectedServiceTypeId={null}
+          selectedPlanId={null}
           onSelect={handleServicePlanSelect}
         />
       </div>

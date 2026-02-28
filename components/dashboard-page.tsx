@@ -168,16 +168,6 @@ export function DashboardPage() {
     selectedPlan?.sortDate ?? null
   );
 
-  const lineupTeamGroups = useMemo(() => {
-    if (!teamPositionGroups) return [];
-    return teamPositionGroups
-      .map((group) => ({
-        ...group,
-        positions: group.positions.filter((position) => (position.neededCount ?? 0) > 0),
-      }))
-      .filter((group) => group.positions.length > 0);
-  }, [teamPositionGroups]);
-
   useEffect(() => {
     const hasServiceTypeInUrl = !!routeIds.serviceTypeId;
     const hasPlanInUrl = !!routeIds.planId;
@@ -230,15 +220,12 @@ export function DashboardPage() {
   }, [collapsedTeamsByPlan]);
 
   const handleScheduleSuccess = () => {
-    const dateKey = selectedPlan?.sortDate ? new Date(selectedPlan.sortDate).toISOString() : null;
-
     queryClient.invalidateQueries({
-      queryKey: queryKeys.people(
+      queryKey: queryKeys.peopleForSlot(
         selectedServiceType?.id ?? null,
         selectedTeam,
         selectedPosition,
-        selectedPlan?.id ?? null,
-        dateKey
+        selectedPlan?.id ?? null
       ),
     });
 
@@ -256,14 +243,8 @@ export function DashboardPage() {
   };
 
   const handleBack = () => {
-    const search = new URLSearchParams();
-    if (selectedServiceType?.id) search.set("serviceTypeId", selectedServiceType.id);
-    if (selectedPlan?.id) search.set("planId", selectedPlan.id);
-    const query = search.toString();
-    const nextUrl = query ? `/schedule?${query}` : "/schedule";
-
     startTransition(() => {
-      router.push(nextUrl);
+      router.push("/schedule");
     });
   };
 
@@ -397,7 +378,7 @@ export function DashboardPage() {
 
             <TabsContent value="lineup" className="mt-0 xl:min-h-0 xl:flex-1">
               <LineupTab
-                groups={lineupTeamGroups}
+                groups={teamPositionGroups ?? []}
                 isLoading={teamPositionsLoading}
                 onSelectPosition={handleSlotSelect}
               />

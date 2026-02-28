@@ -4,7 +4,7 @@ import { CalendarDays } from "lucide-react";
 import type { SlotRef } from "@/components/schedule/types";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { FilledPositionPerson, TeamPosition, TeamPositionGroup } from "@/lib/types";
@@ -36,7 +36,7 @@ export function LineupTab({
   if (groups.length === 0) {
     return (
       <div className="rounded-md border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
-        No teams with needed slots for this plan.
+        No slots found for this plan.
       </div>
     );
   }
@@ -118,11 +118,12 @@ function PositionAccordionItem({
           <span className="text-xs text-muted-foreground tabular-nums">
             {needed > 0 ? `${scheduledCount}/${needed}` : `${scheduledCount}`}
           </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="ml-auto size-7 shrink-0"
-            aria-label={`Open ${position.name} in scheduler`}
+          <span
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "icon" }),
+              "ml-auto size-7 cursor-pointer"
+            )}
+            title={`Open ${position.name} in scheduler`}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -135,7 +136,7 @@ function PositionAccordionItem({
             }}
           >
             <CalendarDays className="size-4" />
-          </Button>
+          </span>
         </div>
       </AccordionTrigger>
 

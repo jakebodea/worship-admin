@@ -13,6 +13,12 @@ export const queryKeys = {
     planId: string | null,
     dateKey: string | null
   ) => ["people", serviceTypeId, teamId, positionId, planId, dateKey] as const,
+  peopleForSlot: (
+    serviceTypeId: string | null,
+    teamId: string | null,
+    positionId: string | null,
+    planId: string | null
+  ) => ["people", serviceTypeId, teamId, positionId, planId] as const,
   blockouts: (personId: string | null) => ["blockouts", personId] as const,
   scheduleHistory: (personId: string | null, days: number) =>
     ["schedule-history", personId, days] as const,
