@@ -18,6 +18,13 @@ import type {
 
 const log = logger.for("use-case/get-team-positions");
 
+interface NeededPositionsResolution {
+  response: { data: PCResource[]; included: PCResource[] };
+  resolvedSeriesId: string | null;
+  neededPositionSource: "series-plan" | "service-type-plan";
+  usedSeriesFallback: boolean;
+}
+
 export async function getNeededTeamPositionsForPlan(
   serviceTypeId: string,
   planId: string,
@@ -28,19 +35,13 @@ export async function getNeededTeamPositionsForPlan(
     "Fetching needed team positions for plan"
   );
 
-  const resolvedSeriesId = seriesId || (await getSeriesIdForPlan(serviceTypeId, planId));
-  const [teamPositionResponse, neededPositionResponse, planTeamMembersResponse] = await Promise.all([
+  const [teamPositionResponse, neededPositionsResolution, planTeamMembersResponse] = await Promise.all([
     planningCenterCatalogService.getServiceTypeTeamPositionsWithTeams(serviceTypeId),
-    // Some plans are not attached to a Series (no `series` relationship in payload),
-    // so `needed_positions` must be fetched from the service-type scoped plan path.
-    resolvedSeriesId
-      ? planningCenterCatalogService.getPlanNeededPositionsWithTeams(resolvedSeriesId, planId)
-      : planningCenterCatalogService.getServiceTypePlanNeededPositionsWithTeams(
-          serviceTypeId,
-          planId
-        ),
+    resolveNeededPositions(serviceTypeId, planId, seriesId ?? null),
     planningCenterPeopleService.getPlanTeamMembers(serviceTypeId, planId),
   ]);
+  const { response: neededPositionResponse, resolvedSeriesId, neededPositionSource, usedSeriesFallback } =
+    neededPositionsResolution;
 
   const teamPositions = Array.isArray(teamPositionResponse.data)
     ? teamPositionResponse.data
@@ -132,7 +133,8 @@ export async function getNeededTeamPositionsForPlan(
       serviceTypeId,
       planId,
       seriesId: resolvedSeriesId ?? null,
-      neededPositionSource: resolvedSeriesId ? "series-plan" : "service-type-plan",
+      neededPositionSource,
+      usedSeriesFallback,
       serviceTypeTeamPositionCount: teamPositions.length,
       neededPositionCount: neededPositions.length,
       planTeamMemberCount: planTeamMembers.length,
@@ -372,40 +374,85 @@ function findTeamIdByName(included: PCResource[], teamName: string): string | nu
   return team?.id || null;
 }
 
+async function resolveNeededPositions(
+  serviceTypeId: string,
+  planId: string,
+  seriesId: string | null
+): Promise<NeededPositionsResolution> {
+  if (seriesId) {
+    return {
+      response: await planningCenterCatalogService.getPlanNeededPositionsWithTeams(seriesId, planId),
+      resolvedSeriesId: seriesId,
+      neededPositionSource: "series-plan",
+      usedSeriesFallback: false,
+    };
+  }
+
+  try {
+    return {
+      response: await planningCenterCatalogService.getServiceTypePlanNeededPositionsWithTeams(
+        serviceTypeId,
+        planId
+      ),
+      resolvedSeriesId: null,
+      neededPositionSource: "service-type-plan",
+      usedSeriesFallback: false,
+    };
+  } catch (error) {
+    log.warn(
+      {
+        serviceTypeId,
+        planId,
+        error: error instanceof Error ? error.message.slice(0, 280) : String(error).slice(0, 280),
+      },
+      "Service-type needed positions fetch failed, trying series lookup fallback"
+    );
+
+    const resolvedSeriesId = await getSeriesIdForPlan(serviceTypeId, planId);
+    if (!resolvedSeriesId) {
+      throw error;
+    }
+
+    return {
+      response: await planningCenterCatalogService.getPlanNeededPositionsWithTeams(
+        resolvedSeriesId,
+        planId
+      ),
+      resolvedSeriesId,
+      neededPositionSource: "series-plan",
+      usedSeriesFallback: true,
+    };
+  }
+}
+
 async function getSeriesIdForPlan(
   serviceTypeId: string,
   planId: string
 ): Promise<string | null> {
-  const unscopedPlan = await planningCenterPlansService.getPlan(planId);
-  const unscopedSeriesId = extractSeriesIdFromPlanResource(unscopedPlan as PCResource);
-  if (unscopedSeriesId) {
-    log.info({ planId, source: "unscoped-plan", seriesId: unscopedSeriesId }, "Resolved series ID");
-    return unscopedSeriesId;
-  }
-
   const scopedPlan = await planningCenterPlansService.getPlanForServiceTypeWithSeries(
     serviceTypeId,
     planId
   );
-  const scopedSeriesId =
+  const resolvedSeriesId =
     extractSeriesIdFromPlanResource(scopedPlan.data) ||
     extractSeriesIdFromIncluded(scopedPlan.included);
 
-  log.warn(
-    {
-      planId,
-      serviceTypeId,
-      unscopedHasSeriesRelationshipData: hasSeriesRelationshipData(unscopedPlan as PCResource),
-      unscopedSeriesLink: getSeriesRelationshipLink(unscopedPlan as PCResource),
-      scopedHasSeriesRelationshipData: hasSeriesRelationshipData(scopedPlan.data),
-      scopedSeriesLink: getSeriesRelationshipLink(scopedPlan.data),
-      scopedIncludedTypes: scopedPlan.included.map((r) => r.type),
-      scopedResolvedSeriesId: scopedSeriesId,
-    },
-    "Series resolution fallback details"
-  );
+  if (resolvedSeriesId) {
+    log.info({ planId, serviceTypeId, resolvedSeriesId }, "Resolved series ID for fallback");
+  } else {
+    log.warn(
+      {
+        planId,
+        serviceTypeId,
+        hasSeriesRelationshipData: hasSeriesRelationshipData(scopedPlan.data),
+        seriesRelationshipLink: getSeriesRelationshipLink(scopedPlan.data),
+        includedTypes: scopedPlan.included.map((r) => r.type),
+      },
+      "Unable to resolve series ID for needed positions fallback"
+    );
+  }
 
-  return scopedSeriesId;
+  return resolvedSeriesId;
 }
 
 function extractSeriesIdFromPlanResource(plan: PCResource): string | null {

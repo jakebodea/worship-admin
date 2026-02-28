@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useQueries } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { ServiceTypeMultiSelect } from "@/components/service-type-multi-select";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { useMyScheduledPlans } from "@/hooks/use-my-scheduled-plans";
 import { useServiceTypes } from "@/hooks/use-service-types";
+import { createTeamPositionsQueryOptions } from "@/hooks/use-team-positions";
 import { getJson } from "@/lib/http/client";
 import { queryKeys } from "@/lib/query-keys";
 import type { Plan } from "@/lib/types";
@@ -36,6 +37,7 @@ interface ServicePlanTableSelectorProps {
 
 type DateRangeFilter = "all" | "14" | "30" | "60";
 const SERVICE_TYPE_FILTER_STORAGE_KEY = "schedule:selected-service-type-ids";
+const TEAM_POSITIONS_PREFETCH_DELAY_MS = 300;
 
 interface ServicePlanRow {
   serviceTypeId: string;
@@ -44,6 +46,7 @@ interface ServicePlanRow {
   planId: string;
   planTitle: string;
   seriesTitle: string | null;
+  seriesId: string | null;
   sortDate: Date;
 }
 
@@ -99,6 +102,8 @@ export function ServicePlanTableSelector({
   selectedPlanId,
   onSelect,
 }: ServicePlanTableSelectorProps) {
+  const queryClient = useQueryClient();
+  const prefetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { data: serviceTypes, isLoading: serviceTypesLoading } = useServiceTypes();
 
   const planQueries = useQueries({
@@ -178,6 +183,7 @@ export function ServicePlanTableSelector({
           planId: plan.id,
           planTitle: plan.title,
           seriesTitle: plan.seriesTitle ?? null,
+          seriesId: plan.seriesId ?? null,
           sortDate,
         });
       }
@@ -239,6 +245,31 @@ export function ServicePlanTableSelector({
     () => new Set(myScheduledPlans?.planIds ?? []),
     [myScheduledPlans?.planIds]
   );
+  const prefetchTeamPositions = useCallback(
+    (row: ServicePlanRow) => {
+      void queryClient.prefetchQuery(
+        createTeamPositionsQueryOptions(row.serviceTypeId, row.planId, row.seriesId)
+      );
+    },
+    [queryClient]
+  );
+  const cancelDelayedPrefetch = useCallback(() => {
+    if (!prefetchTimeoutRef.current) return;
+    clearTimeout(prefetchTimeoutRef.current);
+    prefetchTimeoutRef.current = null;
+  }, []);
+  const scheduleDelayedPrefetch = useCallback(
+    (row: ServicePlanRow) => {
+      cancelDelayedPrefetch();
+      prefetchTimeoutRef.current = setTimeout(() => {
+        prefetchTimeoutRef.current = null;
+        prefetchTeamPositions(row);
+      }, TEAM_POSITIONS_PREFETCH_DELAY_MS);
+    },
+    [cancelDelayedPrefetch, prefetchTeamPositions]
+  );
+
+  useEffect(() => cancelDelayedPrefetch, [cancelDelayedPrefetch]);
 
   return (
     <div className="space-y-4">
@@ -342,6 +373,8 @@ export function ServicePlanTableSelector({
                         planId: row.planId,
                       })
                     }
+                    onMouseEnter={() => scheduleDelayedPrefetch(row)}
+                    onMouseLeave={cancelDelayedPrefetch}
                     onKeyDown={(event) => {
                       if (event.key !== "Enter" && event.key !== " ") return;
                       event.preventDefault();

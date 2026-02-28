@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   getPlanNeededPositionsWithTeams: vi.fn(),
   getServiceTypePlanNeededPositionsWithTeams: vi.fn(),
   getPlanTeamMembers: vi.fn(),
-  getPlan: vi.fn(),
   getPlanForServiceTypeWithSeries: vi.fn(),
 }));
 
@@ -28,7 +27,6 @@ vi.mock("@/lib/planning-center/services/people-service", () => ({
 
 vi.mock("@/lib/planning-center/services/plans-service", () => ({
   planningCenterPlansService: {
-    getPlan: mocks.getPlan,
     getPlanForServiceTypeWithSeries: mocks.getPlanForServiceTypeWithSeries,
   },
 }));
@@ -128,22 +126,6 @@ describe("getNeededTeamPositionsForPlan", () => {
   });
 
   it("falls back to service-type plan needed_positions for no-series plans and matches/dedupes", async () => {
-    mocks.getPlan.mockResolvedValue({
-      type: "Plan",
-      id: "plan-1",
-      attributes: { title: "Test", created_at: "2026-01-01T00:00:00Z" },
-      relationships: { series: { data: null } },
-    });
-    mocks.getPlanForServiceTypeWithSeries.mockResolvedValue({
-      data: {
-        type: "Plan",
-        id: "plan-1",
-        attributes: { title: "Test", created_at: "2026-01-01T00:00:00Z" },
-        relationships: {},
-      },
-      included: [],
-    });
-
     mocks.getServiceTypeTeamPositionsWithTeams.mockResolvedValue({
       data: [
         teamPosition("tp-band-vocals", "team-band", "Vocals"),
@@ -171,6 +153,7 @@ describe("getNeededTeamPositionsForPlan", () => {
       "st-1",
       "plan-1"
     );
+    expect(mocks.getPlanForServiceTypeWithSeries).not.toHaveBeenCalled();
     expect(mocks.getPlanNeededPositionsWithTeams).not.toHaveBeenCalled();
     expect(result).toEqual([
       {
@@ -214,7 +197,6 @@ describe("getNeededTeamPositionsForPlan", () => {
 
     const result = await getNeededTeamPositionsForPlan("st-1", "plan-1", "series-123");
 
-    expect(mocks.getPlan).not.toHaveBeenCalled();
     expect(mocks.getPlanForServiceTypeWithSeries).not.toHaveBeenCalled();
     expect(mocks.getPlanNeededPositionsWithTeams).toHaveBeenCalledWith(
       "series-123",
@@ -224,14 +206,45 @@ describe("getNeededTeamPositionsForPlan", () => {
     expect(result[0]?.positions[0]?.name).toBe("Drums");
   });
 
-  it("adds confirmed and pending fill summaries with people names", async () => {
-    mocks.getPlan.mockResolvedValue({
-      type: "Plan",
-      id: "plan-1",
-      attributes: { title: "Test", created_at: "2026-01-01T00:00:00Z" },
-      relationships: { series: { data: null } },
+  it("falls back to series endpoint when service-type needed positions fails", async () => {
+    mocks.getServiceTypeTeamPositionsWithTeams.mockResolvedValue({
+      data: [teamPosition("tp-1", "team-1", "Drums")],
+      included: [team("team-1", "Band")],
     });
-    mocks.getPlanForServiceTypeWithSeries.mockResolvedValue({ data: { type: "Plan", id: "plan-1", attributes: { title: "Test", created_at: "2026-01-01T00:00:00Z" }, relationships: {} }, included: [] });
+    mocks.getServiceTypePlanNeededPositionsWithTeams.mockRejectedValue(
+      new Error("Planning Center API error: 404")
+    );
+    mocks.getPlanForServiceTypeWithSeries.mockResolvedValue({
+      data: {
+        type: "Plan",
+        id: "plan-1",
+        attributes: { title: "Test", created_at: "2026-01-01T00:00:00Z" },
+        relationships: {
+          series: {
+            data: { type: "Series", id: "series-1" },
+          },
+        },
+      },
+      included: [],
+    });
+    mocks.getPlanNeededPositionsWithTeams.mockResolvedValue({
+      data: [neededPosition("np-1", "team-1", "Drums", 1)],
+      included: [team("team-1", "Band")],
+    });
+
+    const result = await getNeededTeamPositionsForPlan("st-1", "plan-1");
+
+    expect(mocks.getServiceTypePlanNeededPositionsWithTeams).toHaveBeenCalledWith(
+      "st-1",
+      "plan-1"
+    );
+    expect(mocks.getPlanForServiceTypeWithSeries).toHaveBeenCalledWith("st-1", "plan-1");
+    expect(mocks.getPlanNeededPositionsWithTeams).toHaveBeenCalledWith("series-1", "plan-1");
+    expect(result).toHaveLength(1);
+    expect(result[0]?.positions[0]?.name).toBe("Drums");
+  });
+
+  it("adds confirmed and pending fill summaries with people names", async () => {
     mocks.getServiceTypeTeamPositionsWithTeams.mockResolvedValue({
       data: [
         teamPosition("tp-vocals", "team-band", "Vocals"),
@@ -302,13 +315,6 @@ describe("getNeededTeamPositionsForPlan", () => {
   });
 
   it("keeps needed count independent and falls back to unknown person when include is missing", async () => {
-    mocks.getPlan.mockResolvedValue({
-      type: "Plan",
-      id: "plan-1",
-      attributes: { title: "Test", created_at: "2026-01-01T00:00:00Z" },
-      relationships: { series: { data: null } },
-    });
-    mocks.getPlanForServiceTypeWithSeries.mockResolvedValue({ data: { type: "Plan", id: "plan-1", attributes: { title: "Test", created_at: "2026-01-01T00:00:00Z" }, relationships: {} }, included: [] });
     mocks.getServiceTypeTeamPositionsWithTeams.mockResolvedValue({
       data: [teamPosition("tp-1", "team-1", "Drums")],
       included: [team("team-1", "Band")],
