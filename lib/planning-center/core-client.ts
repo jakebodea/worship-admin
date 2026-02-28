@@ -1,5 +1,6 @@
 import type { PCApiResponse, PCResource } from "@/lib/types";
 import { logger } from "@/lib/logger";
+import { getPlanningCenterRequestAccessToken } from "@/lib/planning-center/request-auth-context";
 
 const log = logger.for("planning-center/core");
 const PC_BASE_URL = "https://api.planningcenteronline.com";
@@ -8,6 +9,12 @@ const MAX_RETRIES = 2;
 const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 
 export class PlanningCenterCoreClient {
+  constructor(
+    private readonly auth?: {
+      accessToken: string;
+    }
+  ) {}
+
   private getClientId(): string {
     const id = process.env.PLANNING_CENTER_CLIENT;
     if (!id) {
@@ -25,6 +32,15 @@ export class PlanningCenterCoreClient {
   }
 
   private getAuthHeader(): string {
+    const requestAccessToken = getPlanningCenterRequestAccessToken();
+    if (requestAccessToken) {
+      return `Bearer ${requestAccessToken}`;
+    }
+
+    if (this.auth?.accessToken) {
+      return `Bearer ${this.auth.accessToken}`;
+    }
+
     const credentials = Buffer.from(
       `${this.getClientId()}:${this.getPat()}`
     ).toString("base64");

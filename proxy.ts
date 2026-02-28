@@ -2,32 +2,31 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { logger } from "@/lib/logger";
 
-const AUTH_COOKIE_NAME = "auth-token";
-const AUTH_COOKIE_VALUE = "authenticated";
+const AUTH_COOKIE_NAME = "better-auth.session_token";
 const log = logger.for("middleware");
 
 export function proxy(request: NextRequest) {
   const authCookie = request.cookies.get(AUTH_COOKIE_NAME);
 
-  // Allow access to auth API route
   if (request.nextUrl.pathname.startsWith("/api/auth")) {
     return NextResponse.next();
   }
 
-  // Check if user is authenticated
-  if (authCookie?.value === AUTH_COOKIE_VALUE) {
+  if (request.nextUrl.pathname === "/auth") {
     return NextResponse.next();
   }
 
-  // Redirect to password page if not authenticated
-  if (request.nextUrl.pathname !== "/auth") {
-    log.info({ path: request.nextUrl.pathname }, "Redirecting unauthenticated request to /auth");
-    const url = request.nextUrl.clone();
-    url.pathname = "/auth";
-    return NextResponse.redirect(url);
+  if (authCookie?.value) {
+    return NextResponse.next();
   }
 
-  return NextResponse.next();
+  log.info(
+    { path: request.nextUrl.pathname },
+    "Redirecting unauthenticated request to /auth"
+  );
+  const url = request.nextUrl.clone();
+  url.pathname = "/auth";
+  return NextResponse.redirect(url);
 }
 
 export const config = {

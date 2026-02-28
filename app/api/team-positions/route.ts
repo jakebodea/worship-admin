@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ApiError } from "@/lib/http/api-error";
-import { handleRoute } from "@/lib/http/route-handler";
+import { handlePlanningCenterRoute } from "@/lib/http/planning-center-route";
 import { logger } from "@/lib/logger";
 import { getNeededTeamPositionsForPlan } from "@/lib/use-cases/planning-center/get-team-positions";
 
@@ -14,7 +14,7 @@ const querySchema = z.object({
 
 export async function GET(request: Request) {
   const log = logger.withRequest(request);
-  return handleRoute(async () => {
+  return handlePlanningCenterRoute(request, async () => {
     log.info("Fetching team positions");
 
     const { searchParams } = new URL(request.url);

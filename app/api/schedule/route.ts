@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ApiError } from "@/lib/http/api-error";
-import { handleRoute } from "@/lib/http/route-handler";
+import { handlePlanningCenterRoute } from "@/lib/http/planning-center-route";
 import { logger } from "@/lib/logger";
 import { planningCenterPeopleService } from "@/lib/planning-center/services/people-service";
 import { planningCenterCatalogService } from "@/lib/planning-center/services/catalog-service";
@@ -20,7 +20,7 @@ const bodySchema = z.object({
 
 export async function POST(request: Request) {
   const log = logger.withRequest(request);
-  return handleRoute(async () => {
+  return handlePlanningCenterRoute(request, async () => {
     try {
       const parsed = bodySchema.safeParse(await request.json());
       if (!parsed.success) {

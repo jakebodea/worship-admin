@@ -1,9 +1,14 @@
-import { planningCenterCatalogService } from "@/lib/planning-center/services/catalog-service";
+import {
+  planningCenterCatalogService,
+  type PlanningCenterCatalogService,
+} from "@/lib/planning-center/services/catalog-service";
 import { isServiceExcluded } from "@/lib/excluded-services";
 import type { RawServiceType, ServiceType } from "@/lib/types";
 
-export async function getServiceTypes(): Promise<ServiceType[]> {
-  const rawServiceTypes = await planningCenterCatalogService.getServiceTypes();
+export async function getServiceTypes(
+  catalogService: Pick<PlanningCenterCatalogService, "getServiceTypes"> = planningCenterCatalogService
+): Promise<ServiceType[]> {
+  const rawServiceTypes = await catalogService.getServiceTypes();
   const activeRawServiceTypes = rawServiceTypes.filter((raw) => {
     const archivedAt = (raw.attributes.archived_at as string | null) || null;
     return !archivedAt;

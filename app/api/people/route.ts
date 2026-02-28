@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { handleRoute } from "@/lib/http/route-handler";
+import { handlePlanningCenterRoute } from "@/lib/http/planning-center-route";
 import { logger } from "@/lib/logger";
 import { getPeopleForPosition } from "@/lib/use-cases/planning-center/get-people-for-position";
 
@@ -15,8 +15,7 @@ const querySchema = z.object({
 
 export async function GET(request: Request) {
   const log = logger.withRequest(request);
-
-  return handleRoute(async () => {
+  return handlePlanningCenterRoute(request, async () => {
     log.info("Request started");
 
     const { searchParams } = new URL(request.url);
