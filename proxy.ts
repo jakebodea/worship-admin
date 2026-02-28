@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { getSessionCookie } from "better-auth/cookies";
 import { logger } from "@/lib/logger";
 
-const AUTH_COOKIE_NAME = "better-auth.session_token";
 const log = logger.for("middleware");
 
 export function proxy(request: NextRequest) {
-  const authCookie = request.cookies.get(AUTH_COOKIE_NAME);
+  const sessionCookie = getSessionCookie(request);
 
   if (request.nextUrl.pathname.startsWith("/api/auth")) {
     return NextResponse.next();
@@ -16,7 +16,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (authCookie?.value) {
+  if (sessionCookie) {
     return NextResponse.next();
   }
 

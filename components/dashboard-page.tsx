@@ -8,7 +8,6 @@ import { AccountMenu } from "@/components/account-menu";
 import { LineupTab } from "@/components/schedule/lineup-tab";
 import { ScheduleViewTab } from "@/components/schedule/schedule-view-tab";
 import type { SlotRef } from "@/components/schedule/types";
-import { ServicePlanTableSelector } from "@/components/service-plan-table-selector";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePeople } from "@/hooks/use-people";
@@ -67,7 +66,7 @@ function buildScheduleUrl({
   if (view === "lineup") searchParams.set("view", "lineup");
 
   const query = searchParams.toString();
-  return query ? `/schedule?${query}` : "/schedule";
+  return query ? `/schedule/plan?${query}` : "/schedule/plan";
 }
 
 function formatPlanDate(date: Date | string | undefined) {
@@ -256,29 +255,15 @@ export function DashboardPage() {
     console.error("Schedule error:", message);
   };
 
-  const handleServicePlanSelect = ({
-    serviceTypeId,
-    planId,
-  }: {
-    serviceTypeId: string;
-    planId: string;
-  }) => {
-    navigateTo({
-      serviceTypeId,
-      planId,
-      teamId: null,
-      positionId: null,
-      view: "schedule",
-    });
-  };
-
   const handleBack = () => {
-    navigateTo({
-      serviceTypeId: null,
-      planId: null,
-      teamId: null,
-      positionId: null,
-      view: "schedule",
+    const search = new URLSearchParams();
+    if (selectedServiceType?.id) search.set("serviceTypeId", selectedServiceType.id);
+    if (selectedPlan?.id) search.set("planId", selectedPlan.id);
+    const query = search.toString();
+    const nextUrl = query ? `/schedule?${query}` : "/schedule";
+
+    startTransition(() => {
+      router.push(nextUrl);
     });
   };
 
@@ -349,8 +334,12 @@ export function DashboardPage() {
               </>
             ) : (
               <>
-                <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Schedule</h1>
-                <p className="text-muted-foreground">Choose a service plan, then fill the open slots.</p>
+                <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
+                  Select a Plan
+                </h1>
+                <p className="text-muted-foreground">
+                  Open the schedule table to choose a plan before editing lineup details.
+                </p>
               </>
             )}
           </div>
@@ -367,11 +356,14 @@ export function DashboardPage() {
         </div>
 
         {!hasSelectedPlan && (
-          <ServicePlanTableSelector
-            selectedServiceTypeId={selectedServiceType?.id ?? null}
-            selectedPlanId={selectedPlan?.id ?? null}
-            onSelect={handleServicePlanSelect}
-          />
+          <div className="rounded-lg border border-dashed p-6">
+            <p className="text-sm text-muted-foreground">
+              No valid plan is selected. Return to the schedule list to pick one.
+            </p>
+            <Button variant="outline" className="mt-4" onClick={handleBack}>
+              Go to Schedule Table
+            </Button>
+          </div>
         )}
 
         {hasSelectedPlan && (

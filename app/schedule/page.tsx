@@ -1,10 +1,10 @@
 import { Suspense } from "react";
-import { DashboardPage } from "@/components/dashboard-page";
+import { SchedulePlansPage } from "@/components/schedule/schedule-plans-page";
 
 export default function SchedulePage() {
   return (
     <Suspense fallback={null}>
-      <DashboardPage />
+      <SchedulePlansPage />
     </Suspense>
   );
 }

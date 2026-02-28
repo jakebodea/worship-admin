@@ -315,8 +315,8 @@ export function ServicePlanTableSelector({
 
       <div className="overflow-hidden rounded-lg border">
         <Table>
-          <TableHeader>
-            <TableRow>
+          <TableHeader className="bg-muted">
+            <TableRow className="hover:bg-muted">
               <TableHead className="w-[30%] px-4">Service Type</TableHead>
               <TableHead className="w-[20%] px-4">Date</TableHead>
               <TableHead className="w-[25%] px-4">Series</TableHead>
