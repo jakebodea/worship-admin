@@ -5,8 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, ChevronDown, ListChecks } from "lucide-react";
 import { PersonCard } from "@/components/person-card";
-import { PlanDateSelector } from "@/components/plan-date-selector";
-import { ServiceTypeSelector } from "@/components/service-type-selector";
+import { ServicePlanTableSelector } from "@/components/service-plan-table-selector";
 import { AccountMenu } from "@/components/account-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -20,10 +19,8 @@ import { usePlans } from "@/hooks/use-plans";
 import { useServiceTypes } from "@/hooks/use-service-types";
 import { useTeamPositions } from "@/hooks/use-team-positions";
 import { queryKeys } from "@/lib/query-keys";
-import type { FilledPositionPerson, Plan, ServiceType, TeamPosition, TeamPositionGroup } from "@/lib/types";
+import type { FilledPositionPerson, TeamPosition, TeamPositionGroup } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-type Step = 1 | 2 | 3;
 
 interface RouteSelectionIds {
   serviceTypeId: string | null;
@@ -173,7 +170,7 @@ export function DashboardPage() {
   const selectedPlanId = selectedPlan?.id ?? null;
   const collapsedTeams = selectedPlanId ? (collapsedTeamsByPlan[selectedPlanId] ?? {}) : {};
 
-  const step: Step = selectedPlan ? 3 : selectedServiceType ? 2 : 1;
+  const hasSelectedPlan = Boolean(selectedServiceType && selectedPlan);
 
   const { data: people, isLoading: peopleLoading } = usePeople(
     selectedServiceType?.id ?? null,
@@ -263,33 +260,23 @@ export function DashboardPage() {
     console.error("Schedule error:", message);
   };
 
-  const handleServiceTypeSelect = (serviceType: ServiceType) => {
-    navigateTo({ serviceTypeId: serviceType.id, planId: null, teamId: null, positionId: null });
-  };
-
-  const handlePlanSelect = (plan: Plan) => {
+  const handleServicePlanSelect = ({
+    serviceTypeId,
+    planId,
+  }: {
+    serviceTypeId: string;
+    planId: string;
+  }) => {
     navigateTo({
-      serviceTypeId: selectedServiceType?.id ?? null,
-      planId: plan.id,
+      serviceTypeId,
+      planId,
       teamId: null,
       positionId: null,
     });
   };
 
   const handleBack = () => {
-    if (step === 2) {
-      navigateTo({ serviceTypeId: null, planId: null, teamId: null, positionId: null });
-      return;
-    }
-
-    if (step === 3) {
-      navigateTo({
-        serviceTypeId: selectedServiceType?.id ?? null,
-        planId: null,
-        teamId: null,
-        positionId: null,
-      });
-    }
+    navigateTo({ serviceTypeId: null, planId: null, teamId: null, positionId: null });
   };
 
   const handleSlotSelect = (slot: SlotRef) => {
@@ -329,7 +316,7 @@ export function DashboardPage() {
       <div className="container mx-auto px-4 py-6 md:py-8">
         <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
           <div>
-            {step === 3 && selectedServiceType && selectedPlan ? (
+            {hasSelectedPlan && selectedServiceType && selectedPlan ? (
               <>
                 <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
                   {selectedServiceType.name}
@@ -343,38 +330,31 @@ export function DashboardPage() {
               <>
                 <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Schedule</h1>
                 <p className="text-muted-foreground">
-                  Pick a slot, then schedule from the candidate cards.
+                  Choose a service plan, then fill the open slots.
                 </p>
               </>
             )}
           </div>
           <div className="flex items-center gap-2">
-            {step > 1 && (
+            {hasSelectedPlan && (
               <Button variant="ghost" onClick={handleBack}>
                 <ArrowLeft className="size-4" />
-                {step === 2 ? "Back" : "Change Plan"}
+                Change Plan
               </Button>
             )}
             <AccountMenu />
           </div>
         </div>
 
-        {step === 1 && (
-          <ServiceTypeSelector
-            selectedServiceType={selectedServiceType?.id ?? null}
-            onSelect={handleServiceTypeSelect}
+        {!hasSelectedPlan && (
+          <ServicePlanTableSelector
+            selectedServiceTypeId={selectedServiceType?.id ?? null}
+            selectedPlanId={selectedPlan?.id ?? null}
+            onSelect={handleServicePlanSelect}
           />
         )}
 
-        {step === 2 && (
-          <PlanDateSelector
-            serviceTypeId={selectedServiceType?.id ?? null}
-            selectedPlan={selectedPlan}
-            onSelect={handlePlanSelect}
-          />
-        )}
-
-        {step === 3 && (
+        {hasSelectedPlan && (
           <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
               <aside className="overflow-hidden rounded-xl border bg-card/60 xl:sticky xl:top-6 xl:h-[calc(100vh-6rem)]">
                 <div className="border-b px-4 py-4">

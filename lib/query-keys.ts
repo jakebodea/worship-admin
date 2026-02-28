@@ -16,5 +16,6 @@ export const queryKeys = {
   blockouts: (personId: string | null) => ["blockouts", personId] as const,
   scheduleHistory: (personId: string | null, days: number) =>
     ["schedule-history", personId, days] as const,
+  myScheduledPlans: (planIdsKey: string) =>
+    ["my-scheduled-plans", planIdsKey] as const,
 } as const;
-
