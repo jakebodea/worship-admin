@@ -1,138 +1,134 @@
-# Worship Team Scheduler
+# worshipadmin.com
 
-A Planning Center-integrated scheduling helper that helps you schedule worship team members by showing their availability, blockout dates, and scheduling frequency.
+Planning Center scheduling tools for worship admins.
 
-## Features
+## Overview
 
-- **Team Member Directory** - View all active worship team members with their positions
-- **Team Filtering** - Filter members by specific teams (Worship, Tech, etc.)
-- **Availability Status** - See who has blockouts for specific dates
-- **Scheduling Frequency** - Visual indicators showing how often each person has served
-- **Smart Scheduling** - Easily identify who is available AND hasn't served recently
+This app helps teams schedule people into open positions for specific plans by combining:
+
+- service type and plan selection
+- needed team positions grouped by team
+- people matching for the selected team/position
+- availability and recent scheduling history context
+- one-click scheduling into Planning Center
+
+The root route (`/`) redirects to `/schedule`.
 
 ## Setup
 
-### 1. Get Planning Center Credentials
-
-1. Visit [Planning Center API](https://api.planningcenteronline.com/oauth/applications)
-2. Create a new Personal Access Token
-3. Copy your Application ID and Personal Access Token
-
-### 2. Configure Environment Variables
-
-Create a `.env.local` file in the project root:
-
-```bash
-PLANNING_CENTER_CLIENT=your_app_id_here
-PLANNING_CENTER_PAT=your_personal_access_token_here
-```
-
-### 3. Install Dependencies
+### 1. Install dependencies
 
 ```bash
 bun install
 ```
 
-### 4. Run Development Server
+### 2. Configure environment variables
+
+Create a local env file from the template:
 
 ```bash
-bun dev
+cp .env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Required values are documented in `.env.example`:
 
-## Planning Center API Docs
+- `BETTER_AUTH_URL`
+- `BETTER_AUTH_SECRET`
+- `DATABASE_URL`
+- `PLANNING_CENTER_OAUTH_CLIENT_ID`
+- `PLANNING_CENTER_OAUTH_CLIENT_SECRET`
 
-This repo includes scraped Planning Center API documentation (Services, People, Giving, and more). See [docs/planning-center-api/README.md](docs/planning-center-api/README.md) for details.
+Optional:
 
-## Tech Stack
+- `PLANNING_CENTER_EXCLUDED_SERVICE_IDS`
 
-- **Next.js 16** - React framework with App Router
-- **TypeScript** - Type-safe code
-- **TanStack Query** - Data fetching and caching
-- **shadcn/ui** - Beautiful, accessible UI components
-- **Tailwind CSS** - Utility-first styling
-- **Planning Center API** - Church management data
+### 3. Configure Planning Center OAuth callback URL
 
-## How It Works
+In your Planning Center OAuth app settings, add:
 
-The app fetches data from Planning Center Services API:
+- Local: `http://localhost:3000/api/auth/oauth2/callback/planning-center`
+- Production: `https://worshipadmin.com/api/auth/oauth2/callback/planning-center`
 
-1. **People** - All team members with their assigned positions
-2. **Teams** - Available teams for filtering
-3. **Blockouts** - Dates when people are unavailable
-4. **Plan People** - Historical scheduling data to calculate frequency
+### 4. Run auth migrations
 
-Each person card shows:
-- Name and photo
-- Team positions (badges)
-- Availability status for selected date
-- Scheduling frequency (30/60/90 days)
-- Last served date
-
-## Color Coding
-
-- 🟢 **Green** - Good to schedule (served 0-1 times in last 30 days)
-- 🟡 **Yellow** - Served recently (2 times in last 30 days)
-- 🔴 **Red** - Served frequently (3+ times in last 30 days)
-
-## Project Structure
-
+```bash
+bun run auth:migrate
 ```
-app/
-  api/              # Next.js API routes
-  page.tsx          # Main dashboard
-  layout.tsx        # Root layout with providers
-  globals.css       # Global styles (light theme only)
 
-components/
-  person-card.tsx           # Individual team member card
-  availability-badge.tsx    # Available/Blocked status
-  frequency-indicator.tsx   # Scheduling frequency display
-  team-filter.tsx           # Team dropdown filter
-  date-range-picker.tsx     # Date selection
-  providers.tsx             # React Query provider
-  ui/                       # shadcn components
+### 5. Start the app
 
-hooks/
-  use-people.ts             # Fetch all people
-  use-teams.ts              # Fetch all teams
-  use-blockouts.ts          # Fetch person blockouts
-  use-schedule-history.ts   # Fetch scheduling history
-
-lib/
-  http/                     # Shared API error/handler utilities
-  planning-center/
-    core-client.ts          # Raw Planning Center HTTP client
-    services/               # API adapter services (plans/people/catalog)
-    utils.ts                # Included-resource helper utilities
-  use-cases/                # Business logic per endpoint
-  types.ts                  # TypeScript type definitions
+```bash
+bun run dev
 ```
+
+Open `http://localhost:3000`.
 
 ## API Routes
 
-All API routes are server-side and handle Planning Center authentication:
+All routes are server-side and use authenticated Planning Center access where required.
 
-- `GET /api/people` - All active team members with positions
-- `GET /api/teams` - All active teams
-- `GET /api/blockouts/[id]` - Blockouts for a specific person
-- `GET /api/schedule-history/[id]` - Scheduling history for a person
+- `GET /api/service-types`
+- `GET /api/plans?service_type_id=...`
+- `GET /api/team-positions?service_type_id=...&plan_id=...`
+- `GET /api/people?service_type_id=...&position_id=...`
+- `GET /api/blockouts/[id]`
+- `GET /api/schedule-history/[id]?days=...`
+- `POST /api/my-scheduled-plans`
+- `POST /api/schedule`
+- `GET/POST /api/planning-center/accounts`
+- `GET /api/debug/planning-center-context` (debug endpoint)
+- `ALL /api/auth/[...all]` (Better Auth handler)
+
+## Project Structure
+
+```text
+app/
+  api/                       # Next.js API routes
+  auth/page.tsx              # Sign-in route
+  schedule/page.tsx          # Main scheduling UI route
+
+components/
+  dashboard-page.tsx         # Main schedule workflow UI
+  person-card.tsx            # Person row/card with schedule actions
+  service-plan-table-selector.tsx
+  account-menu.tsx
+  ui/                        # UI primitives
+
+hooks/
+  use-service-types.ts
+  use-plans.ts
+  use-team-positions.ts
+  use-people.ts
+  use-schedule-history.ts
+  use-blockouts.ts
+  use-my-scheduled-plans.ts
+
+lib/
+  use-cases/planning-center/ # Business logic
+  planning-center/services/  # Planning Center API wrappers
+  http/                      # Shared route/client helpers
+  auth.ts                    # Better Auth config
+```
+
+## Development Commands
+
+- `bun run dev`
+- `bun run build`
+- `bun run start`
+- `bun run lint`
+- `bun run typecheck`
+- `bun run test`
+- `bun run test:watch`
 
 ## Testing
 
 ```bash
-npm test
+bun run typecheck
+bun run test
 ```
 
-Unit tests cover core Planning Center use-cases under `lib/use-cases/`.
+Unit tests are colocated with use-cases under `lib/use-cases/planning-center/*.test.ts`.
 
-## Best Practices Implemented
+## Planning Center API Docs
 
-- ✅ React Query for efficient data fetching and caching
-- ✅ Custom hooks to wrap API calls
-- ✅ Fully typed with TypeScript
-- ✅ Server-side API routes to secure credentials
-- ✅ shadcn components for consistent UI
-- ✅ Responsive design (mobile-friendly)
-- ✅ All files under 300 LOC for maintainability
+Local scraped API docs are in `docs/planning-center-api/`. See [docs/planning-center-api/README.md](docs/planning-center-api/README.md) for export details.

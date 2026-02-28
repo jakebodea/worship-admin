@@ -1,3 +1,8 @@
-- integrate rehearsals in schedule and score... someone rehearsing every week for a bigger service in the future should make sure that those services are recognized.. need to decide if a rehearsal is weighted as heavily as a service. 
-- downscore same pairs? (need to check if a pair is requested)
-- person view to see specifically that person's schedule
+# TODO
+
+- [ ] Add rehearsal-aware scoring and scheduling context.
+  Define how rehearsal events are weighted relative to services and apply that weighting in ranking/scoring logic.
+- [ ] Downscore repeated pairings when auto-suggesting people.
+  Skip or reduce the downscore when the repeated pairing is explicitly requested.
+- [ ] Add a person-centric schedule view.
+  Show upcoming services/rehearsals and recent history for one person in a dedicated screen.

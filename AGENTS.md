@@ -1,5 +1,9 @@
 # Repository Guidelines
 
+## Product Naming
+- Public/product naming should use `worshipadmin.com`.
+- Avoid introducing old product names in new docs, UI copy, or PR descriptions unless referring to historical context.
+
 ## Project Structure & Module Organization
 - `app/`: Next.js App Router pages and API routes (`app/api/*`). Keep routes thin and delegate business logic.
 - `components/`: UI components (including `components/ui/*` primitives).
@@ -18,6 +22,8 @@
 - `bun run typecheck`: run TypeScript checks (`tsc --noEmit`).
 - `bun run test`: run Vitest test suite once.
 - `bun run test:watch`: run Vitest in watch mode.
+- `bun run auth:generate`: generate Better Auth artifacts.
+- `bun run auth:migrate`: run Better Auth migrations.
 
 ## Coding Style & Naming Conventions
 - TypeScript throughout; prefer explicit types at module boundaries.
