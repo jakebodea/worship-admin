@@ -138,17 +138,21 @@ function TeamSlotsCollapsible({
     (sum, position) => sum + (position.neededCount ?? 1),
     0
   );
+  const hasSelectedPositionInGroup =
+    group.teamId === selectedTeam &&
+    group.positions.some((position) => position.id === selectedPosition);
+  const isOpen = hasSelectedPositionInGroup || !isCollapsed;
 
   return (
     <Collapsible
-      open={!isCollapsed}
+      open={isOpen}
       onOpenChange={() => onToggle(group.teamId)}
       className="overflow-hidden rounded-md border border-border/50 bg-background/90"
     >
       <CollapsibleTrigger asChild>
         <Button
           variant="ghost"
-          className="h-auto w-full justify-between gap-3 rounded-none px-3 py-2 text-left hover:bg-muted/25"
+          className={cn("h-auto w-full justify-between gap-3 rounded-none px-3 py-2 text-left hover:bg-muted/45")}
         >
           <div className="flex min-w-0 items-center gap-2">
             <ChevronDown
@@ -185,9 +189,9 @@ function TeamSlotsCollapsible({
               <div
                 key={position.id}
                 className={cn(
-                  "flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm transition-colors",
+                  "flex w-full items-center justify-between gap-2 border-l-2 border-transparent px-3 py-1.5 text-left text-sm transition-colors",
                   index > 0 && "border-t border-border/40",
-                  active ? "bg-background/90" : "hover:bg-muted/20"
+                  active ? "border-l-foreground/25 bg-muted/35" : "hover:bg-muted/45"
                 )}
               >
                 <Button
@@ -203,9 +207,14 @@ function TeamSlotsCollapsible({
                   className="h-auto min-w-0 flex-1 justify-start px-0 py-1 text-left hover:bg-transparent"
                   aria-pressed={active}
                 >
-                  <span className={cn("block truncate pr-2", active && "font-medium")}>
-                    {position.name}
-                  </span>
+                  <div className="flex min-w-0 items-center gap-2 pr-2">
+                    {active ? (
+                      <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-foreground/60" />
+                    ) : null}
+                    <span className={cn("block truncate", active && "font-medium text-foreground")}>
+                      {position.name}
+                    </span>
+                  </div>
                 </Button>
                 <SlotBadgeCluster
                   position={position}
