@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { AccountMenu } from "@/components/account-menu";
+import { PageHeader } from "@/components/page-header";
 import { LineupTab } from "@/components/schedule/lineup-tab";
 import { ScheduleViewTab } from "@/components/schedule/schedule-view-tab";
 import type { SlotRef } from "@/components/schedule/types";
@@ -80,6 +81,44 @@ function formatPlanDate(date: Date | string | undefined) {
     day: "numeric",
     year: "numeric",
   }).format(dateObj);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildPlanSubtitle(
+  serviceTypeName: string,
+  planTitle: string | undefined,
+  seriesTitle: string | undefined
+): string | null {
+  const rawSubtitle = (seriesTitle ?? planTitle ?? "").trim();
+  if (!rawSubtitle) return null;
+
+  const normalizedServiceTypeName = serviceTypeName.trim();
+  if (!normalizedServiceTypeName) return rawSubtitle;
+
+  if (rawSubtitle.localeCompare(normalizedServiceTypeName, undefined, { sensitivity: "accent" }) === 0) {
+    return null;
+  }
+
+  const serviceTypePrefixPattern = new RegExp(
+    `^${escapeRegExp(normalizedServiceTypeName)}\\s*[-:|]\\s*`,
+    "i"
+  );
+
+  const withoutServiceTypePrefix = rawSubtitle.replace(serviceTypePrefixPattern, "").trim();
+  if (!withoutServiceTypePrefix) return null;
+
+  if (
+    withoutServiceTypePrefix.localeCompare(normalizedServiceTypeName, undefined, {
+      sensitivity: "accent",
+    }) === 0
+  ) {
+    return null;
+  }
+
+  return withoutServiceTypePrefix;
 }
 
 export function DashboardPage() {
@@ -260,6 +299,21 @@ export function DashboardPage() {
   };
 
   const handleSlotSelect = (slot: SlotRef) => {
+    if (selectedPlanId) {
+      setCollapsedTeamsByPlan((prev) => {
+        const currentForPlan = prev[selectedPlanId] ?? {};
+        if (currentForPlan[slot.teamId] === false) return prev;
+
+        return {
+          ...prev,
+          [selectedPlanId]: {
+            ...currentForPlan,
+            [slot.teamId]: false,
+          },
+        };
+      });
+    }
+
     navigateTo({
       serviceTypeId: selectedServiceType?.id ?? null,
       planId: selectedPlan?.id ?? null,
@@ -283,7 +337,10 @@ export function DashboardPage() {
     });
   };
 
-  const planSubtitle = selectedPlan?.seriesTitle || selectedPlan?.title || null;
+  const planSubtitle =
+    selectedServiceType && selectedPlan
+      ? buildPlanSubtitle(selectedServiceType.name, selectedPlan.title, selectedPlan.seriesTitle)
+      : null;
 
   return (
     <div
@@ -298,20 +355,28 @@ export function DashboardPage() {
           hasSelectedPlan ? "py-4 md:py-5 xl:flex xl:h-full xl:flex-col" : "py-6 md:py-8"
         )}
       >
-        <div
-          className={cn(
-            "flex flex-wrap items-start justify-between gap-3",
-            hasSelectedPlan ? "mb-4 xl:shrink-0" : "mb-6"
-          )}
+        <PageHeader
+          className={cn(hasSelectedPlan ? "mb-4 xl:shrink-0" : "mb-6")}
+          topLeft={
+            hasSelectedPlan ? (
+              <Button variant="ghost" onClick={handleBack}>
+                <ArrowLeft className="size-4" />
+                Change Plan
+              </Button>
+            ) : null
+          }
+          topRight={<AccountMenu />}
         >
           <div>
             {hasSelectedPlan && selectedServiceType && selectedPlan ? (
               <>
                 <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
                   {selectedServiceType.name}
+                  {planSubtitle && (
+                    <span className="font-normal text-muted-foreground"> / {planSubtitle}</span>
+                  )}
                 </h1>
                 <p className="text-sm text-muted-foreground">{formatPlanDate(selectedPlan.sortDate)}</p>
-                {planSubtitle && <p className="mt-1 text-sm text-muted-foreground">{planSubtitle}</p>}
               </>
             ) : (
               <>
@@ -324,17 +389,7 @@ export function DashboardPage() {
               </>
             )}
           </div>
-
-          <div className="flex items-center gap-2">
-            {hasSelectedPlan && (
-              <Button variant="ghost" onClick={handleBack}>
-                <ArrowLeft className="size-4" />
-                Change Plan
-              </Button>
-            )}
-            <AccountMenu />
-          </div>
-        </div>
+        </PageHeader>
 
         {!hasSelectedPlan && (
           <div className="rounded-lg border border-dashed p-6">
