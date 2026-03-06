@@ -52,6 +52,7 @@ type DraftState = {
   customArrangementSequenceText: string;
 };
 
+const EMPTY_PLAN_ITEMS: PlanItem[] = [];
 const textareaClassName =
   "border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 min-h-24 w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:ring-[3px]";
 
@@ -96,7 +97,8 @@ function summarizeType(item: PlanItem) {
 
 export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
   const queryClient = useQueryClient();
-  const { data: items = [], isLoading } = usePlanItems(serviceTypeId, planId);
+  const { data: itemsData, isLoading } = usePlanItems(serviceTypeId, planId);
+  const items = itemsData ?? EMPTY_PLAN_ITEMS;
   const [localItems, setLocalItems] = useState<PlanItem[]>([]);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [songPickerOpen, setSongPickerOpen] = useState(false);
@@ -108,7 +110,7 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
   const queryKey = queryKeys.planItems(serviceTypeId, planId);
 
   useEffect(() => {
-    setLocalItems(items);
+    setLocalItems((current) => (current === items ? current : items));
   }, [items]);
 
   const syncLocalItems = (nextItems: PlanItem[]) => {
