@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { getJson } from "@/lib/http/client";
 import { queryKeys } from "@/lib/query-keys";
+import { hydrateSongOptionSet, type SerializedSongOptionSet } from "@/lib/song-catalog-client";
 import type { SongOptionSet } from "@/lib/types";
 
 export function useSongOptions(
@@ -16,7 +17,11 @@ export function useSongOptions(
         service_type_id: serviceTypeId,
       });
 
-      return getJson<SongOptionSet>(`/api/songs/${songId}/options?${params.toString()}`);
+      const optionSet = await getJson<SerializedSongOptionSet>(
+        `/api/songs/${songId}/options?${params.toString()}`
+      );
+
+      return hydrateSongOptionSet(optionSet);
     },
     enabled: !!songId && !!serviceTypeId,
     staleTime: 5 * 60 * 1000,

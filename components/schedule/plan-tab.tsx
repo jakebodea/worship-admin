@@ -12,7 +12,6 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  ChevronDown,
   FileMusic,
   GripVertical,
   LoaderCircle,
@@ -50,6 +49,7 @@ interface PlanTabProps {
 }
 
 type DraftState = {
+  title: string;
   lengthText: string;
   servicePosition: string;
   description: string;
@@ -85,6 +85,7 @@ function buildDraft(item: PlanItem): DraftState {
       : `${minutes}:${seconds.toString().padStart(2, "0")}`;
 
   return {
+    title: item.title,
     lengthText,
     servicePosition: item.servicePosition || "during",
     description: item.description,
@@ -151,6 +152,7 @@ function getItemTone(item: PlanItem) {
     return {
       row: "bg-muted/60",
       header: "bg-muted/80",
+      hover: "hover:ring-border/80 hover:ring-1 hover:ring-inset",
       content: "bg-background",
     };
   }
@@ -158,6 +160,7 @@ function getItemTone(item: PlanItem) {
   return {
     row: "bg-background",
     header: "bg-background",
+    hover: "hover:bg-accent/50",
     content: "bg-background",
   };
 }
@@ -180,7 +183,6 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
   const [pendingSongId, setPendingSongId] = useState<string | null>(null);
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [toolbarPosition, setToolbarPosition] = useState({ right: 24, bottom: 24 });
-  const [banner, setBanner] = useState<{ tone: "error" | "success"; text: string } | null>(null);
   const queryKey = queryKeys.planItems(serviceTypeId, planId);
   const toolbarDragRef = useRef<ToolbarDragState | null>(null);
 
@@ -244,16 +246,12 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
     });
 
   const handleError = (error: unknown) => {
-    setBanner({
-      tone: "error",
-      text: error instanceof Error ? error.message : "Something went wrong.",
-    });
+    toast.error(error instanceof Error ? error.message : "Something went wrong.");
   };
 
   const handleCreateBasicItem = async (kind: "header" | "item") => {
     if (!serviceTypeId || !planId) return;
     setPendingItemId(`create-${kind}`);
-    setBanner(null);
 
     try {
       const item = await postJson<PlanItem>("/api/plan-items", {
@@ -266,7 +264,7 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
       const nextItems = [...localItems, item].toSorted((a, b) => a.sequence - b.sequence);
       syncLocalItems(nextItems);
       setEditingItemId(item.id);
-      setBanner({ tone: "success", text: `${getItemTypeLabel(item)} added.` });
+      toast.success(`${getItemTypeLabel(item)} added.`);
       startTransition(() => {
         invalidatePlanItems();
       });
@@ -281,7 +279,6 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
     if (!serviceTypeId || !planId) return;
 
     setPendingSongId(song.id);
-    setBanner(null);
 
     try {
       const created = await postJson<PlanItem>("/api/plan-items", {
@@ -292,7 +289,7 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
       const nextItems = [...localItems, created].toSorted((a, b) => a.sequence - b.sequence);
       syncLocalItems(nextItems);
       setEditingItemId(created.id);
-      setBanner({ tone: "success", text: "Song added to plan." });
+      toast.success("Song added to plan.");
 
       setSongPickerOpen(false);
       startTransition(() => {
@@ -308,7 +305,6 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
   const handleDelete = async (itemId: string) => {
     if (!serviceTypeId || !planId) return;
     setPendingItemId(itemId);
-    setBanner(null);
 
     try {
       await deleteJson<{ success: boolean }>(`/api/plan-items/${itemId}`, {
@@ -322,7 +318,7 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
       if (editingItemId === itemId) {
         setEditingItemId(null);
       }
-      setBanner({ tone: "success", text: "Item removed." });
+      toast.success("Item removed.");
       startTransition(() => {
         invalidatePlanItems();
       });
@@ -337,7 +333,6 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
     if (!serviceTypeId || !planId) return;
     syncLocalItems(nextItems);
     setPendingItemId("reorder");
-    setBanner(null);
 
     try {
       await postJson<{ success: boolean }>("/api/plan-items/reorder", {
@@ -436,19 +431,6 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
             </span>
           ) : null}
         </div>
-
-        {banner ? (
-          <div
-            className={cn(
-              "rounded-lg border px-3 py-2 text-sm",
-              banner.tone === "error"
-                ? "border-destructive/40 bg-destructive/10 text-destructive"
-                : "border-emerald-500/40 bg-emerald-500/10 text-emerald-700"
-            )}
-          >
-            {banner.text}
-          </div>
-        ) : null}
 
         <ScrollArea className="min-h-0 flex-1 pr-3">
           {isLoading ? (
@@ -559,7 +541,13 @@ function PlanItemCard({
         isDragged && "bg-muted/80"
       )}
     >
-      <div className={cn("flex items-center gap-3 px-4 py-3", tone.header)}>
+      <div
+        className={cn(
+          "flex items-center gap-3 px-4 py-3 transition-colors",
+          tone.header,
+          !isDragged && tone.hover
+        )}
+      >
         <div className="text-muted-foreground cursor-grab">
           <GripVertical className="size-4" />
         </div>
@@ -593,9 +581,8 @@ function PlanItemCard({
             </div>
             <div className="text-muted-foreground mt-1 flex flex-wrap gap-2 text-xs">
               {item.description ? <span className="truncate">{item.description}</span> : null}
-              </div>
             </div>
-          <ChevronDown className="size-4" />
+          </div>
         </button>
         <div className="flex items-center gap-1">
           <Button type="button" variant="ghost" size="icon" onClick={onDelete} disabled={isBusy}>
@@ -628,6 +615,7 @@ function PlanItemEditDialog({
   const [draft, setDraft] = useState<DraftState>(() => {
     if (!item) {
       return {
+        title: "",
         lengthText: "",
         servicePosition: "during",
         description: "",
@@ -714,7 +702,7 @@ function PlanItemEditDialog({
       const updated = await patchJson<PlanItem>(`/api/plan-items/${item.id}`, {
         service_type_id: serviceTypeId,
         plan_id: planId,
-        title: item.title,
+        title: item.song ? item.title : draft.title,
         service_position: draft.servicePosition,
         length: length && length > 0 ? length : null,
         description: draft.description,
@@ -772,6 +760,16 @@ function PlanItemEditDialog({
         </DialogHeader>
 
         <div className="grid gap-4 lg:grid-cols-2">
+          {!item.song ? (
+            <Field label="Title" className="lg:col-span-2">
+              <Input
+                placeholder={item.itemType === "header" ? "Header title" : "Item title"}
+                value={draft.title}
+                onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+              />
+            </Field>
+          ) : null}
+
           {item.song ? (
             <Field label="Arrangement">
               {songOptionsLoading ? (

@@ -26,6 +26,7 @@ export async function searchSongs(
     .toSorted((a, b) => {
       const scoreDiff = (b.matchScore ?? 0) - (a.matchScore ?? 0);
       if (scoreDiff !== 0) return scoreDiff;
+
       return a.title.localeCompare(b.title);
     });
 

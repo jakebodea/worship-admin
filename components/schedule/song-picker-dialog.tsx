@@ -1,16 +1,15 @@
 "use client";
 
 import { useDeferredValue, useState } from "react";
-import { Music4, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { useSongSearch } from "@/hooks/use-song-search";
+import { parseOptionalDate } from "@/lib/song-catalog-client";
 import type { SongCatalogEntry } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Command, CommandEmpty, CommandInput, CommandList } from "@/components/ui/command";
+import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -24,13 +23,16 @@ interface SongPickerDialogProps {
   pendingSongId?: string | null;
 }
 
-function formatLastScheduled(date: Date | null) {
-  if (!date) return null;
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(date);
+const lastScheduledFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
+
+function formatLastScheduled(date: Date | string | null) {
+  const parsedDate = parseOptionalDate(date);
+  if (!parsedDate) return null;
+  return lastScheduledFormatter.format(parsedDate);
 }
 
 export function SongPickerDialog({
@@ -50,9 +52,6 @@ export function SongPickerDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Add Song</DialogTitle>
-          <DialogDescription>
-            Search the Planning Center song catalog and insert a song into this plan.
-          </DialogDescription>
         </DialogHeader>
 
         <Command shouldFilter={false} className="rounded-lg border">
@@ -77,32 +76,28 @@ export function SongPickerDialog({
               <>
                 <CommandEmpty>No songs matched that search.</CommandEmpty>
                 <div className="space-y-2 p-3">
-                  {songs.map((song) => (
-                    <Button
-                      key={song.id}
-                      type="button"
-                      variant="ghost"
-                      className="h-auto w-full justify-start rounded-lg border px-4 py-3 text-left"
-                      disabled={pendingSongId === song.id}
-                      onClick={async () => {
-                        await onSelectSong(song);
-                      }}
-                    >
-                      <div className="flex min-w-0 flex-1 items-start gap-3">
-                        <div className="bg-muted text-muted-foreground mt-0.5 rounded-md p-2">
-                          <Music4 className="size-4" />
-                        </div>
+                  {songs.map((song) => {
+                    const lastScheduledLabel = formatLastScheduled(song.lastScheduledAt);
+
+                    return (
+                      <CommandItem
+                        key={song.id}
+                        value={[song.title, song.author, song.themes].filter(Boolean).join(" ")}
+                        disabled={pendingSongId === song.id}
+                        className="items-start"
+                        onSelect={async () => {
+                          await onSelectSong(song);
+                        }}
+                      >
                         <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="truncate text-sm font-semibold">{song.title}</p>
-                            {song.matchScore ? (
-                              <Badge variant="secondary" className="text-[10px]">
-                                match
-                              </Badge>
-                            ) : null}
-                          </div>
+                          <p className="truncate text-sm font-semibold">{song.title}</p>
                           {song.author ? (
                             <p className="text-muted-foreground truncate text-xs">{song.author}</p>
+                          ) : null}
+                          {lastScheduledLabel ? (
+                            <p className="text-muted-foreground mt-2 text-xs">
+                              Last scheduled {lastScheduledLabel}
+                            </p>
                           ) : null}
                           <div className="mt-2 flex flex-wrap gap-2 text-xs">
                             {song.themes
@@ -115,16 +110,11 @@ export function SongPickerDialog({
                                   {theme}
                                 </Badge>
                               ))}
-                            {formatLastScheduled(song.lastScheduledAt) ? (
-                              <span className="text-muted-foreground">
-                                Last scheduled {formatLastScheduled(song.lastScheduledAt)}
-                              </span>
-                            ) : null}
                           </div>
                         </div>
-                      </div>
-                    </Button>
-                  ))}
+                      </CommandItem>
+                    );
+                  })}
                 </div>
               </>
             )}
