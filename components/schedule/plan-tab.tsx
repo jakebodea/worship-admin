@@ -7,8 +7,8 @@ import {
   useRef,
   useState,
   type DragEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
-  type PointerEvent,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -187,7 +187,7 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
   const toolbarDragRef = useRef<ToolbarDragState | null>(null);
 
   useEffect(() => {
-    const handleToolbarPointerMove = (event: PointerEvent) => {
+    const handleToolbarPointerMove = (event: globalThis.PointerEvent) => {
       if (!toolbarDragRef.current || typeof window === "undefined") return;
       const dragState = toolbarDragRef.current;
       if (event.pointerId !== dragState.pointerId) return;
@@ -203,7 +203,7 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
       });
     };
 
-    const handleToolbarPointerEnd = (event: PointerEvent) => {
+    const handleToolbarPointerEnd = (event: globalThis.PointerEvent) => {
       if (!toolbarDragRef.current) return;
       if (event.pointerId !== toolbarDragRef.current.pointerId) return;
       toolbarDragRef.current = null;
@@ -220,7 +220,7 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
     };
   }, []);
 
-  const handleToolbarDragStart = (event: PointerEvent<HTMLButtonElement>) => {
+  const handleToolbarDragStart = (event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
     toolbarDragRef.current = {
       pointerId: event.pointerId,
