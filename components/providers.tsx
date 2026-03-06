@@ -1,7 +1,34 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { authClient } from "@/lib/auth-client";
+
+function AuthQueryCacheSync({ queryClient }: { queryClient: QueryClient }) {
+  const { data: session, isPending } = authClient.useSession();
+  const previousUserIdRef = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (isPending) {
+      return;
+    }
+
+    const nextUserId = session?.user.id ?? null;
+
+    if (previousUserIdRef.current === undefined) {
+      previousUserIdRef.current = nextUserId;
+      return;
+    }
+
+    if (previousUserIdRef.current !== nextUserId) {
+      queryClient.clear();
+    }
+
+    previousUserIdRef.current = nextUserId;
+  }, [isPending, queryClient, session?.user.id]);
+
+  return null;
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -17,6 +44,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthQueryCacheSync queryClient={queryClient} />
+      {children}
+    </QueryClientProvider>
   );
 }

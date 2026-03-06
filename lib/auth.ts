@@ -152,8 +152,8 @@ export const auth = betterAuth({
           clientId: planningCenterClientId,
           clientSecret: planningCenterClientSecret,
           scopes: ["openid", "services", "people"],
-          // Force Planning Center to prompt for login so users can switch accounts/org context.
-          prompt: "login",
+          // Let Planning Center offer account switching without forcing a full re-login.
+          prompt: "select_account",
           pkce: true,
           accessType: "offline",
           authentication: "basic",

@@ -1,38 +1,27 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, Loader2, LogOut } from "lucide-react";
+import { Check, ChevronDown, Loader2, LogOut, MoreHorizontal, Trash2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { authClient } from "@/lib/auth-client";
-import { getJson, postJson } from "@/lib/http/client";
-
-type PlanningCenterAccount = {
-  id: string;
-  providerId: string;
-  updatedAt: string;
-  identity: {
-    sub: string | null;
-    name: string | null;
-    email: string | null;
-    organizationId: string | null;
-    organizationName: string | null;
-  } | null;
-};
-
-type PlanningCenterAccountsResponse = {
-  session: {
-    userId: string;
-    name: string;
-    email: string;
-    image: string | null;
-  };
-  selectedAccountId: string | null;
-  accounts: PlanningCenterAccount[];
-};
+import { deleteJson, getJson, HttpClientError, postJson } from "@/lib/http/client";
+import type {
+  DeletePlanningCenterAccountResponse,
+  PlanningCenterAccount,
+  PlanningCenterAccountsResponse,
+} from "@/lib/planning-center/accounts";
 
 function initialsFromName(name: string | null | undefined): string {
   if (!name) return "?";
@@ -51,6 +40,8 @@ export function AccountMenu() {
   const [data, setData] = useState<PlanningCenterAccountsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [switchingAccountId, setSwitchingAccountId] = useState<string | null>(null);
+  const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<PlanningCenterAccount | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [error, setError] = useState<string>("");
 
@@ -60,7 +51,7 @@ export function AccountMenu() {
     return data.accounts.find((account) => account.id === data.selectedAccountId) ?? null;
   }, [data]);
 
-  const loadAccounts = async () => {
+  const loadAccounts = useCallback(async () => {
     setLoading(true);
     try {
       const response = await getJson<PlanningCenterAccountsResponse>(
@@ -69,16 +60,23 @@ export function AccountMenu() {
       setData(response);
       setError("");
     } catch (err) {
+      if (err instanceof HttpClientError && err.status === 401) {
+        queryClient.clear();
+        router.replace("/auth");
+        router.refresh();
+        return;
+      }
+
       const message = err instanceof Error ? err.message : "Failed to load account details";
       setError(message);
     } finally {
       setLoading(false);
     }
-  };
+  }, [queryClient, router]);
 
   useEffect(() => {
     void loadAccounts();
-  }, []);
+  }, [loadAccounts]);
 
   const handleSelectAccount = async (accountId: string) => {
     if (switchingAccountId || isSigningOut) return;
@@ -88,8 +86,8 @@ export function AccountMenu() {
         "/api/planning-center/accounts",
         { accountId }
       );
+      queryClient.clear();
       await loadAccounts();
-      await queryClient.invalidateQueries();
       router.refresh();
       setOpen(false);
     } catch (err) {
@@ -104,11 +102,43 @@ export function AccountMenu() {
     if (isSigningOut || switchingAccountId) return;
     setIsSigningOut(true);
     try {
+      queryClient.clear();
       await authClient.signOut();
       router.replace("/auth");
       router.refresh();
     } finally {
       setIsSigningOut(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deleteTarget || deletingAccountId || switchingAccountId || isSigningOut) return;
+
+    setDeletingAccountId(deleteTarget.id);
+    setError("");
+
+    try {
+      const response = await deleteJson<DeletePlanningCenterAccountResponse>(
+        "/api/planning-center/accounts",
+        { accountId: deleteTarget.id }
+      );
+
+      queryClient.clear();
+      setDeleteTarget(null);
+
+      if (response.remainingAccountCount === 0) {
+        router.replace("/auth");
+        router.refresh();
+        return;
+      }
+
+      await loadAccounts();
+      router.refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to delete organization";
+      setError(message);
+    } finally {
+      setDeletingAccountId(null);
     }
   };
 
@@ -154,23 +184,43 @@ export function AccountMenu() {
                   const orgName = account.identity?.organizationName || "Unknown organization";
 
                   return (
-                    <Button
-                      key={account.id}
-                      type="button"
-                      variant="ghost"
-                      className="h-auto w-full justify-between px-2 py-2 text-left"
-                      onClick={() => void handleSelectAccount(account.id)}
-                      disabled={Boolean(switchingAccountId) || isSigningOut}
-                    >
-                      <span className="min-w-0 truncate text-sm">{orgName}</span>
-                      <span className="ml-2 shrink-0">
-                        {switchingAccountId === account.id ? (
+                    <div key={account.id} className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-auto flex-1 justify-between px-2 py-2 text-left"
+                        onClick={() => void handleSelectAccount(account.id)}
+                        disabled={Boolean(switchingAccountId) || isSigningOut || Boolean(deletingAccountId)}
+                      >
+                        <span className="min-w-0 truncate text-sm">{orgName}</span>
+                        <span className="ml-2 shrink-0">
+                          {switchingAccountId === account.id ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : isSelected ? (
+                            <Check className="size-4" />
+                          ) : null}
+                        </span>
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 shrink-0"
+                        aria-label={`Manage ${orgName}`}
+                        onClick={() => {
+                          setOpen(false);
+                          setDeleteTarget(account);
+                        }}
+                        disabled={Boolean(switchingAccountId) || isSigningOut || Boolean(deletingAccountId)}
+                      >
+                        {deletingAccountId === account.id ? (
                           <Loader2 className="size-4 animate-spin" />
-                        ) : isSelected ? (
-                          <Check className="size-4" />
-                        ) : null}
-                      </span>
-                    </Button>
+                        ) : (
+                          <MoreHorizontal className="size-4" />
+                        )}
+                      </Button>
+                    </div>
                   );
                 })}
               </div>
@@ -195,6 +245,54 @@ export function AccountMenu() {
           </Button>
         </div>
       </PopoverContent>
+
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setDeleteTarget(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete organization link?</DialogTitle>
+            <DialogDescription>
+              Remove {deleteTarget?.identity?.organizationName || "this organization"} from this account.
+              You can always link it again later.
+            </DialogDescription>
+          </DialogHeader>
+
+          {error ? <p className="text-xs text-destructive">{error}</p> : null}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
+              disabled={Boolean(deletingAccountId)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void handleDeleteAccount()}
+              disabled={Boolean(deletingAccountId)}
+            >
+              {deletingAccountId ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="size-4" />
+                  Delete link
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Popover>
   );
 }

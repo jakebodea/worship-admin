@@ -64,3 +64,23 @@ export async function postJson<T>(
   }
   return response.json() as Promise<T>;
 }
+
+export async function deleteJson<T>(
+  url: string,
+  body?: unknown,
+  init?: Omit<RequestInit, "method" | "body">
+): Promise<T> {
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers || {}),
+    },
+    ...init,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return response.json() as Promise<T>;
+}
