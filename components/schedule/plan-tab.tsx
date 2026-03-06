@@ -466,7 +466,7 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
               </div>
             </Card>
           ) : (
-            <div className="overflow-hidden rounded-lg border bg-background pb-3">
+            <div className="overflow-hidden rounded-lg border bg-background">
               {localItems.map((item) => (
                 <div
                   key={item.id}
