@@ -4,9 +4,11 @@ import {
   startTransition,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type DragEvent,
   type ReactNode,
+  type PointerEvent,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -59,6 +61,17 @@ const EMPTY_PLAN_ITEMS: PlanItem[] = [];
 const textareaClassName =
   "border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 min-h-24 w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:ring-[3px]";
 const NONE_VALUE = "__none__";
+const TOOLBAR_WIDTH_ESTIMATE = 340;
+const TOOLBAR_HEIGHT_ESTIMATE = 56;
+const TOOLBAR_MIN_MARGIN = 12;
+
+type ToolbarDragState = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startRight: number;
+  startBottom: number;
+};
 
 function buildDraft(item: PlanItem): DraftState {
   const length = item.length ?? 0;
@@ -166,8 +179,55 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
   const [pendingItemId, setPendingItemId] = useState<string | null>(null);
   const [pendingSongId, setPendingSongId] = useState<string | null>(null);
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+  const [toolbarPosition, setToolbarPosition] = useState({ right: 24, bottom: 24 });
   const [banner, setBanner] = useState<{ tone: "error" | "success"; text: string } | null>(null);
   const queryKey = queryKeys.planItems(serviceTypeId, planId);
+  const toolbarDragRef = useRef<ToolbarDragState | null>(null);
+
+  useEffect(() => {
+    const handleToolbarPointerMove = (event: PointerEvent) => {
+      if (!toolbarDragRef.current || typeof window === "undefined") return;
+      const dragState = toolbarDragRef.current;
+      if (event.pointerId !== dragState.pointerId) return;
+
+      const deltaX = event.clientX - dragState.startX;
+      const deltaY = event.clientY - dragState.startY;
+      const maxRight = Math.max(TOOLBAR_MIN_MARGIN, window.innerWidth - TOOLBAR_WIDTH_ESTIMATE);
+      const maxBottom = Math.max(TOOLBAR_MIN_MARGIN, window.innerHeight - TOOLBAR_HEIGHT_ESTIMATE);
+
+      setToolbarPosition({
+        right: Math.max(TOOLBAR_MIN_MARGIN, Math.min(maxRight, dragState.startRight - deltaX)),
+        bottom: Math.max(TOOLBAR_MIN_MARGIN, Math.min(maxBottom, dragState.startBottom - deltaY)),
+      });
+    };
+
+    const handleToolbarPointerEnd = (event: PointerEvent) => {
+      if (!toolbarDragRef.current) return;
+      if (event.pointerId !== toolbarDragRef.current.pointerId) return;
+      toolbarDragRef.current = null;
+    };
+
+    window.addEventListener("pointermove", handleToolbarPointerMove);
+    window.addEventListener("pointerup", handleToolbarPointerEnd);
+    window.addEventListener("pointercancel", handleToolbarPointerEnd);
+
+    return () => {
+      window.removeEventListener("pointermove", handleToolbarPointerMove);
+      window.removeEventListener("pointerup", handleToolbarPointerEnd);
+      window.removeEventListener("pointercancel", handleToolbarPointerEnd);
+    };
+  }, []);
+
+  const handleToolbarDragStart = (event: PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    toolbarDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startRight: toolbarPosition.right,
+      startBottom: toolbarPosition.bottom,
+    };
+  };
 
   useEffect(() => {
     setLocalItems((current) => (current === items ? current : items));
@@ -331,7 +391,22 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
       />
 
       <div className="flex h-full min-h-0 flex-col gap-4">
-        <div className="flex flex-wrap items-center gap-2">
+        <div
+          className="fixed z-40 flex items-center gap-2 rounded-full border bg-background/95 px-3 py-2 shadow-lg backdrop-blur"
+          style={{
+            right: `${toolbarPosition.right}px`,
+            bottom: `${toolbarPosition.bottom}px`,
+          }}
+        >
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="cursor-grab touch-none"
+            onPointerDown={handleToolbarDragStart}
+          >
+            <GripVertical className="size-4" />
+          </Button>
           <Button type="button" onClick={openAddSong}>
             <Music4 className="size-4" />
             Add Song
