@@ -1,6 +1,7 @@
 import { ApiError } from "@/lib/http/api-error";
 import { handlePlanningCenterRoute } from "@/lib/http/planning-center-route";
 import { logger } from "@/lib/logger";
+import { serializePlanItem, serializePlanItems } from "@/lib/plan-item-client";
 import { createPlanItem } from "@/lib/use-cases/planning-center/create-plan-item";
 import { getPlanItems } from "@/lib/use-cases/planning-center/get-plan-items";
 import {
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
     }
 
     const items = await getPlanItems(parsed.data.service_type_id, parsed.data.plan_id);
-    return items;
+    return serializePlanItems(items);
   });
 }
 
@@ -56,6 +57,6 @@ export async function POST(request: Request) {
       customArrangementSequence: parsed.data.custom_arrangement_sequence,
     });
 
-    return item;
+    return serializePlanItem(item);
   });
 }

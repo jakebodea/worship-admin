@@ -34,6 +34,22 @@ function toText(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+function getKeyDisplayName(attributes: RawKey["attributes"]): string {
+  const name = toText(attributes.name).trim();
+  if (name) return name;
+
+  const startingKey =
+    typeof attributes.starting_key === "string" ? attributes.starting_key.trim() : "";
+  const endingKey =
+    typeof attributes.ending_key === "string" ? attributes.ending_key.trim() : "";
+
+  if (startingKey && endingKey && startingKey !== endingKey) {
+    return `${startingKey} -> ${endingKey}`;
+  }
+
+  return startingKey || endingKey;
+}
+
 export function normalizeSongCatalogEntry(resource: PCResource): SongCatalogEntry {
   const song = resource as RawSong;
   return {
@@ -90,7 +106,7 @@ export function normalizeKeyOption(resource: PCResource): KeyOption {
   const key = resource as RawKey;
   return {
     id: key.id,
-    name: toText(key.attributes.name),
+    name: getKeyDisplayName(key.attributes),
     startingKey: typeof key.attributes.starting_key === "string" ? key.attributes.starting_key : null,
     endingKey: typeof key.attributes.ending_key === "string" ? key.attributes.ending_key : null,
   };

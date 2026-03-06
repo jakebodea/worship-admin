@@ -5,10 +5,6 @@ const { getServiceTypesMock } = vi.hoisted(() => ({
   getServiceTypesMock: vi.fn(),
 }));
 
-vi.mock("@/lib/excluded-services", () => ({
-  isServiceExcluded: vi.fn((serviceId: string) => serviceId === "st-excluded"),
-}));
-
 vi.mock("@/lib/planning-center/services/catalog-service", () => ({
   planningCenterCatalogService: {
     getServiceTypes: getServiceTypesMock,
@@ -16,7 +12,7 @@ vi.mock("@/lib/planning-center/services/catalog-service", () => ({
 }));
 
 describe("getServiceTypes", () => {
-  it("filters archived and excluded service types, sorted by sequence", async () => {
+  it("filters archived service types and sorts by sequence", async () => {
     getServiceTypesMock.mockResolvedValue([
       {
         id: "st-excluded",
@@ -41,6 +37,6 @@ describe("getServiceTypes", () => {
     ]);
 
     const result = await getServiceTypes();
-    expect(result.map((s) => s.id)).toEqual(["active-1", "active-2"]);
+    expect(result.map((s) => s.id)).toEqual(["st-excluded", "active-1", "active-2"]);
   });
 });

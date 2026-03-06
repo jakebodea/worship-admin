@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { getJson } from "@/lib/http/client";
+import { hydratePlanItems, type SerializedPlanItem } from "@/lib/plan-item-client";
 import { queryKeys } from "@/lib/query-keys";
 import type { PlanItem } from "@/lib/types";
 
@@ -19,7 +20,8 @@ export function usePlanItems(
         plan_id: planId,
       });
 
-      return getJson<PlanItem[]>(`/api/plan-items?${params.toString()}`);
+      const items = await getJson<SerializedPlanItem[]>(`/api/plan-items?${params.toString()}`);
+      return hydratePlanItems(items);
     },
     enabled: !!serviceTypeId && !!planId,
     staleTime: PLAN_ITEMS_STALE_TIME_MS,

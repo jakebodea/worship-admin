@@ -38,10 +38,6 @@ Required values are documented in `.env.example`:
 - `PLANNING_CENTER_OAUTH_CLIENT_ID`
 - `PLANNING_CENTER_OAUTH_CLIENT_SECRET`
 
-Optional:
-
-- `PLANNING_CENTER_EXCLUDED_SERVICE_IDS`
-
 ### 3. Configure Planning Center OAuth callback URL
 
 In your Planning Center OAuth app settings, add:

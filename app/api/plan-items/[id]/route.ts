@@ -2,9 +2,10 @@ import { z } from "zod";
 import { ApiError } from "@/lib/http/api-error";
 import { handlePlanningCenterRoute } from "@/lib/http/planning-center-route";
 import { logger } from "@/lib/logger";
+import { serializePlanItem } from "@/lib/plan-item-client";
 import { deletePlanItem } from "@/lib/use-cases/planning-center/delete-plan-item";
 import {
-  deletePlanItemBodySchema,
+  planItemsQuerySchema,
   updatePlanItemBodySchema,
 } from "@/lib/use-cases/planning-center/schemas";
 import { updatePlanItem } from "@/lib/use-cases/planning-center/update-plan-item";
@@ -34,7 +35,7 @@ export async function PATCH(
       throw new ApiError(400, "INVALID_REQUEST", "Invalid request", parsedBody.error.issues);
     }
 
-    return updatePlanItem({
+    const item = await updatePlanItem({
       serviceTypeId: parsedBody.data.service_type_id,
       planId: parsedBody.data.plan_id,
       itemId: parsedParams.data.id,
@@ -49,6 +50,8 @@ export async function PATCH(
       selectedLayoutId: parsedBody.data.selected_layout_id ?? undefined,
       customArrangementSequence: parsedBody.data.custom_arrangement_sequence,
     });
+
+    return serializePlanItem(item);
   });
 }
 
@@ -64,16 +67,19 @@ export async function DELETE(
       throw new ApiError(400, "INVALID_REQUEST", "Invalid request", parsedParams.error.issues);
     }
 
-    const body = await request.json();
-    const parsedBody = deletePlanItemBodySchema.safeParse(body);
-    if (!parsedBody.success) {
-      log.warn({ issues: parsedBody.error.issues }, "Invalid plan-item delete body");
-      throw new ApiError(400, "INVALID_REQUEST", "Invalid request", parsedBody.error.issues);
+    const { searchParams } = new URL(request.url);
+    const parsedQuery = planItemsQuerySchema.safeParse({
+      service_type_id: searchParams.get("service_type_id") ?? undefined,
+      plan_id: searchParams.get("plan_id") ?? undefined,
+    });
+    if (!parsedQuery.success) {
+      log.warn({ issues: parsedQuery.error.issues }, "Invalid plan-item delete query params");
+      throw new ApiError(400, "INVALID_REQUEST", "Invalid request", parsedQuery.error.issues);
     }
 
     await deletePlanItem(
-      parsedBody.data.service_type_id,
-      parsedBody.data.plan_id,
+      parsedQuery.data.service_type_id,
+      parsedQuery.data.plan_id,
       parsedParams.data.id
     );
 

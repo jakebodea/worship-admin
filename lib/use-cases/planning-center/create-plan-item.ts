@@ -1,6 +1,9 @@
 import { planningCenterPlanItemsService } from "@/lib/planning-center/services/plan-items-service";
 import type { PlanItem, PlanItemServicePosition, PlanItemType } from "@/lib/types";
-import { getSongOptions } from "@/lib/use-cases/planning-center/get-song-options";
+import {
+  buildPlanItemAttributes,
+  resolvePlanItemSongDefaults,
+} from "@/lib/use-cases/planning-center/plan-item-payload";
 import { normalizePlanItem } from "@/lib/use-cases/planning-center/plan-items-shared";
 
 export interface CreatePlanItemInput {
@@ -19,39 +22,14 @@ export interface CreatePlanItemInput {
   customArrangementSequence?: string[];
 }
 
-function omitUndefined(record: Record<string, unknown>) {
-  return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined));
-}
-
 export async function createPlanItem(input: CreatePlanItemInput): Promise<PlanItem> {
-  let title = input.title?.trim();
-  let arrangementId = input.arrangementId ?? undefined;
-  let keyId = input.keyId ?? undefined;
-  let selectedLayoutId = input.selectedLayoutId ?? undefined;
-
-  if (input.songId && (!arrangementId || !keyId || !title)) {
-    const options = await getSongOptions(input.songId, input.serviceTypeId);
-    title ||= options.song.title;
-    arrangementId ||= options.suggestedArrangementId ?? undefined;
-    keyId ||= options.suggestedKeyId ?? undefined;
-    selectedLayoutId ||= options.suggestedLayoutId ?? undefined;
-  }
-
-  const attributes = omitUndefined({
-    title: title || undefined,
-    item_type: input.itemType === "header" ? "header" : undefined,
-    service_position: input.servicePosition ?? "during",
-    length: input.length === undefined ? undefined : input.length,
-    description: input.description?.trim() || undefined,
-    html_details: input.htmlDetails?.trim() || undefined,
-    song_id: input.songId,
-    arrangement_id: arrangementId,
-    key_id: keyId,
-    selected_layout_id: selectedLayoutId,
-    custom_arrangement_sequence:
-      input.customArrangementSequence && input.customArrangementSequence.length > 0
-        ? input.customArrangementSequence
-        : undefined,
+  const resolvedInput = await resolvePlanItemSongDefaults({
+    ...input,
+    itemType:
+      input.itemType === "header" || input.itemType === "item" ? input.itemType : undefined,
+  });
+  const attributes = buildPlanItemAttributes(resolvedInput, {
+    defaultServicePosition: "during",
   });
 
   const response = await planningCenterPlanItemsService.createPlanItem(

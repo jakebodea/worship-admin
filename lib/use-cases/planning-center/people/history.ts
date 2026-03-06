@@ -1,5 +1,4 @@
 import { findIncluded } from "@/lib/planning-center/utils";
-import { isServiceExcluded } from "@/lib/excluded-services";
 import type {
   PCResource,
   RawPlan,
@@ -72,44 +71,6 @@ function getSchedulePlanTimes(
   return [...new Set(planTimeIds)]
     .map((id) => findIncluded(historyIncluded, "PlanTime", id) as RawPlanTime | undefined)
     .filter((planTime): planTime is RawPlanTime => !!planTime);
-}
-
-function filterExcludedSchedules(
-  schedules: RawSchedule[],
-  historyIncluded: PCResource[]
-): RawSchedule[] {
-  return schedules.filter((schedule) => {
-    const stRel = schedule.relationships?.service_type?.data;
-    const stId = Array.isArray(stRel) ? stRel[0]?.id : stRel?.id;
-    if (stId) {
-      return !isServiceExcluded(stId);
-    }
-
-    const planRel = schedule.relationships?.plan?.data;
-    const planId = Array.isArray(planRel) ? planRel[0]?.id : planRel?.id;
-    if (!planId) return true;
-
-    const plan = findIncluded(historyIncluded, "Plan", planId) as RawPlan | undefined;
-    const planStRel = plan?.relationships?.service_type?.data;
-    const planStId = Array.isArray(planStRel) ? planStRel[0]?.id : planStRel?.id;
-    return !(planStId && isServiceExcluded(planStId));
-  });
-}
-
-function filterExcludedPlanPeople(
-  planPeople: RawPlanPerson[],
-  historyIncluded: PCResource[]
-): RawPlanPerson[] {
-  return planPeople.filter((pp) => {
-    const planRel = pp.relationships?.plan?.data;
-    const planId = Array.isArray(planRel) ? planRel[0]?.id : planRel?.id;
-    if (!planId) return true;
-
-    const plan = findIncluded(historyIncluded, "Plan", planId) as RawPlan | undefined;
-    const stData = plan?.relationships?.service_type?.data;
-    const stId = Array.isArray(stData) ? stData[0]?.id : stData?.id;
-    return !(stId && isServiceExcluded(stId));
-  });
 }
 
 function mapPlanPeopleToServiceHistory(
@@ -376,16 +337,12 @@ export function buildHistoryAndFrequencyForPerson(
   selectedMatchContext: SelectedPlanMatchContext,
   historyLimit: number = 4
 ): HistoryBuildResult {
-  const filteredSchedules = filterExcludedSchedules(schedules, historyIncluded);
   let serviceHistory = mapSchedulesToServiceHistory(
-    filteredSchedules,
+    schedules,
     historyIncluded
   );
 
-  const matchedSchedule = findMatchingScheduleForSelectedPosition(
-    filteredSchedules,
-    selectedMatchContext
-  );
+  const matchedSchedule = findMatchingScheduleForSelectedPosition(schedules, selectedMatchContext);
 
   serviceHistory.sort((a, b) => a.date.getTime() - b.date.getTime());
   const frequency = buildFrequencyFromServiceHistory(serviceHistory, referenceDate);
@@ -411,15 +368,14 @@ export function buildHistoryAndFrequencyForPlanPeople(
   planTimeById: Map<string, RawPlanTime> = new Map(),
   historyLimit: number = 4
 ): HistoryBuildResult {
-  const filteredPlanPeople = filterExcludedPlanPeople(planPeople, historyIncluded);
   let serviceHistory = mapPlanPeopleToServiceHistory(
-    filteredPlanPeople,
+    planPeople,
     historyIncluded,
     planTimeById
   );
 
   const matchedSchedule = findMatchingScheduleForSelectedPosition(
-    filteredPlanPeople,
+    planPeople,
     selectedMatchContext
   );
 

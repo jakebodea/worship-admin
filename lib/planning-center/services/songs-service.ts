@@ -1,6 +1,9 @@
 import type { PCResource } from "@/lib/types";
 import { logger } from "@/lib/logger";
-import { PlanningCenterCoreClient } from "@/lib/planning-center/core-client";
+import {
+  PlanningCenterApiError,
+  PlanningCenterCoreClient,
+} from "@/lib/planning-center/core-client";
 
 const log = logger.for("planning-center/songs");
 const DEFAULT_CATALOG_TTL_MS = 15 * 60 * 1000;
@@ -81,8 +84,7 @@ export class PlanningCenterSongsService {
         included: response.included || [],
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "";
-      if (message.includes("404")) {
+      if (error instanceof PlanningCenterApiError && error.status === 404) {
         return {
           data: null,
           included: [],

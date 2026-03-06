@@ -11,12 +11,8 @@ vi.mock("@/lib/planning-center/services/people-service", () => ({
   },
 }));
 
-vi.mock("@/lib/excluded-services", () => ({
-  isServiceExcluded: vi.fn((serviceId: string) => serviceId === "st-excluded"),
-}));
-
 describe("getScheduleHistory", () => {
-  it("keeps confirmed non-excluded records and computes frequency", async () => {
+  it("includes confirmed records and computes frequency", async () => {
     const now = new Date();
     const iso = (offsetDays: number) => {
       const d = new Date(now);
@@ -95,8 +91,8 @@ describe("getScheduleHistory", () => {
     });
 
     const result = await getScheduleHistory("person-1", 90);
-    expect(result.planPeople.map((p) => p.id)).toEqual(["sch-1"]);
-    expect(result.frequency.last30Days).toBe(1);
-    expect(result.frequency.totalServed).toBe(1);
+    expect(result.planPeople.map((p) => p.id)).toEqual(["sch-3", "sch-1"]);
+    expect(result.frequency.last30Days).toBe(2);
+    expect(result.frequency.totalServed).toBe(2);
   });
 });

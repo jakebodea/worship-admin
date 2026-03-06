@@ -103,4 +103,44 @@ describe("getPlanItems", () => {
       customArrangementSequence: ["Verse 1", "Chorus 1"],
     });
   });
+
+  it("falls back to starting and ending key values when key name is blank", async () => {
+    getPlanItemsMock.mockResolvedValue({
+      data: [
+        {
+          id: "1",
+          type: "Item",
+          attributes: {
+            title: "Response",
+            item_type: "song",
+            sequence: 1,
+            service_position: "during",
+          },
+          relationships: {
+            key: { data: { type: "Key", id: "key-1" } },
+          },
+        },
+      ],
+      included: [
+        {
+          id: "key-1",
+          type: "Key",
+          attributes: {
+            name: "",
+            starting_key: "Bb",
+            ending_key: "C",
+          },
+        },
+      ],
+    });
+
+    const items = await getPlanItems("1", "2");
+
+    expect(items[0]?.key).toMatchObject({
+      id: "key-1",
+      name: "Bb -> C",
+      startingKey: "Bb",
+      endingKey: "C",
+    });
+  });
 });

@@ -131,4 +131,46 @@ describe("getSongOptions", () => {
     expect(options.suggestedKeyId).toBe("key-active");
     expect(options.layoutMode).toBe("unavailable");
   });
+
+  it("builds key labels from starting and ending keys when the name is blank", async () => {
+    getSongMock.mockResolvedValue({
+      id: "song-3",
+      type: "Song",
+      attributes: {
+        title: "Living Hope",
+      },
+    });
+    getSongArrangementsWithKeysMock.mockResolvedValue({
+      data: [
+        {
+          id: "arr-1",
+          type: "Arrangement",
+          attributes: { name: "Default" },
+        },
+      ],
+      included: [
+        {
+          id: "key-1",
+          type: "Key",
+          attributes: { name: "", starting_key: "E", ending_key: "F#" },
+          relationships: {
+            arrangement: { data: { type: "Arrangement", id: "arr-1" } },
+          },
+        },
+      ],
+    });
+    getSongLastScheduledItemMock.mockResolvedValue({
+      data: null,
+      included: [],
+    });
+
+    const options = await getSongOptions("song-3", "service-1");
+
+    expect(options.arrangements[0]?.keys[0]).toMatchObject({
+      id: "key-1",
+      name: "E -> F#",
+      startingKey: "E",
+      endingKey: "F#",
+    });
+  });
 });

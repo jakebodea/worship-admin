@@ -41,7 +41,7 @@ export const createPlanItemBodySchema = z.object({
   service_type_id: requiredId,
   plan_id: requiredId,
   title: optionalText,
-  item_type: z.enum(["song", "header", "item"]).optional(),
+  item_type: z.enum(["header", "item"]).optional(),
   service_position: z.enum(["pre", "during", "post"]).optional(),
   length: z.number().int().nonnegative().nullable().optional(),
   description: optionalText,

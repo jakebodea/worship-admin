@@ -9,7 +9,6 @@ const mocks = vi.hoisted(() => ({
   getPlanTimesForPlan: vi.fn(),
   getPersonSchedules: vi.fn(),
   getServiceTypesCached: vi.fn(),
-  isServiceExcluded: vi.fn(() => false),
 }));
 
 vi.mock("@/lib/planning-center/services/people-service", () => ({
@@ -26,10 +25,6 @@ vi.mock("@/lib/planning-center/services/catalog-service", () => ({
   planningCenterCatalogService: {
     getServiceTypesCached: mocks.getServiceTypesCached,
   },
-}));
-
-vi.mock("@/lib/excluded-services", () => ({
-  isServiceExcluded: mocks.isServiceExcluded,
 }));
 
 function person(id: string, first: string, last: string): PCResource {
@@ -153,7 +148,6 @@ function blockout(id: string, startsAt: string, endsAt: string): PCResource {
 describe("getPeopleForPosition", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.isServiceExcluded.mockReturnValue(false);
     mocks.getPlanTimesForPlan.mockResolvedValue([]);
   });
 
@@ -356,58 +350,4 @@ describe("getPeopleForPosition", () => {
     expect(result[0]?.scheduledPlanPersonId).toBeUndefined();
   });
 
-  it("filters excluded service history from frequency counts", async () => {
-    const serviceTypeId = "st-1";
-    const excludedServiceTypeId = "st-excluded";
-
-    mocks.isServiceExcluded.mockImplementation((...args: unknown[]) => {
-      return args[0] === excludedServiceTypeId;
-    });
-    mocks.getServiceTypesCached.mockResolvedValue([
-      { type: "ServiceType", id: serviceTypeId, attributes: { name: "Sunday", sequence: 1 } },
-      {
-        type: "ServiceType",
-        id: excludedServiceTypeId,
-        attributes: { name: "Exclude Me", sequence: 2 },
-      },
-    ]);
-    mocks.getPeopleForTeamPosition.mockResolvedValue({
-      data: [assignment("a1", "p1")],
-      included: [person("p1", "Eli", "History"), teamPosition("pos-1", "Vocals", "team-1"), team("team-1", "Band")],
-    });
-    mocks.getPersonBlockouts.mockResolvedValue([]);
-    mocks.getPersonPlanPeopleWithPlans.mockResolvedValue({
-      data: [
-        planPersonEntry({
-          id: "pp-included",
-          planId: "plan-included",
-          teamId: "team-1",
-          status: "U",
-          teamPositionName: "Band - Vocals",
-        }),
-        planPersonEntry({
-          id: "pp-excluded",
-          planId: "plan-excluded",
-          teamId: "team-1",
-          status: "U",
-          teamPositionName: "Band - Vocals",
-        }),
-      ],
-      included: [
-        plan("plan-included", serviceTypeId, "2026-02-12"),
-        plan("plan-excluded", excludedServiceTypeId, "2026-02-11"),
-      ],
-    });
-
-    const result = await getPeopleForPosition({
-      serviceTypeId,
-      positionId: "pos-1",
-      date: "2026-02-22",
-    });
-
-    expect(result).toHaveLength(1);
-    expect(result[0]?.frequency?.totalServed).toBe(1);
-    expect(result[0]?.serviceHistory).toHaveLength(1);
-    expect(result[0]?.serviceHistory?.[0]?.sourceScheduleId).toBe("pp-included");
-  });
 });
