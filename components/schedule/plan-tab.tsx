@@ -400,20 +400,20 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
         >
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="icon"
             className="cursor-grab touch-none"
             onPointerDown={handleToolbarDragStart}
           >
             <GripVertical className="size-4" />
           </Button>
-          <Button type="button" onClick={openAddSong}>
+          <Button type="button" variant="ghost" onClick={openAddSong}>
             <Music4 className="size-4" />
             Add Song
           </Button>
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             onClick={() => handleCreateBasicItem("header")}
             disabled={pendingItemId === "create-header"}
           >
@@ -422,7 +422,7 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
           </Button>
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             onClick={() => handleCreateBasicItem("item")}
             disabled={pendingItemId === "create-item"}
           >
