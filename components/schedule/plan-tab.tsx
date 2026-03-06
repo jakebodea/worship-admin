@@ -392,7 +392,7 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
 
       <div className="flex h-full min-h-0 flex-col gap-4">
         <div
-          className="fixed z-40 flex items-center gap-2 rounded-full border bg-background/95 px-3 py-2 shadow-lg backdrop-blur"
+          className="fixed z-40 flex items-center gap-2 rounded-md border bg-background px-4 py-2 shadow-sm"
           style={{
             right: `${toolbarPosition.right}px`,
             bottom: `${toolbarPosition.bottom}px`,
