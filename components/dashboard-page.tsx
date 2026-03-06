@@ -3,7 +3,7 @@
 import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { AccountMenu } from "@/components/account-menu";
 import { PageHeader } from "@/components/page-header";
 import { LineupTab } from "@/components/schedule/lineup-tab";
@@ -199,6 +199,9 @@ export function DashboardPage() {
   const selectedPlanId = selectedPlan?.id ?? null;
   const collapsedTeams = selectedPlanId ? (collapsedTeamsByPlan[selectedPlanId] ?? {}) : {};
   const hasSelectedPlan = Boolean(selectedServiceType && selectedPlan);
+  const hasPlanUrlSelection = Boolean(routeIds.serviceTypeId && routeIds.planId);
+  const isPlanMetadataLoading =
+    hasPlanUrlSelection && (serviceTypesLoading || plansLoading || plansFetching);
   const activeView: DashboardView = hasSelectedPlan ? routeIds.view : "schedule";
 
   const { data: people, isLoading: peopleLoading } = usePeople(
@@ -359,6 +362,7 @@ export function DashboardPage() {
       >
         <PageHeader
           className={cn(hasSelectedPlan ? "mb-4 xl:shrink-0" : "mb-6")}
+          topRowClassName="items-start"
           topLeft={
             hasSelectedPlan ? (
               <Button variant="ghost" onClick={handleBack}>
@@ -369,53 +373,65 @@ export function DashboardPage() {
           }
           topRight={<AccountMenu />}
         >
-          <div>
-            {hasSelectedPlan && selectedServiceType && selectedPlan ? (
-              <>
+          {hasSelectedPlan && selectedServiceType && selectedPlan ? (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
                   {selectedServiceType.name}
                   {planSubtitle && (
                     <span className="font-normal text-muted-foreground"> / {planSubtitle}</span>
                   )}
                 </h1>
-                <p className="text-sm text-muted-foreground">{formatPlanDate(selectedPlan.sortDate)}</p>
-              </>
-            ) : (
-              <>
-                <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
-                  Select a Plan
-                </h1>
-                <p className="text-muted-foreground">
-                  Open the schedule table to choose a plan before editing lineup details.
-                </p>
-              </>
-            )}
-          </div>
+                <Tabs
+                  value={activeView}
+                  onValueChange={handleViewChange}
+                  className="xl:min-h-0 xl:flex-1"
+                >
+                  <TabsList className="w-full justify-start sm:w-fit">
+                    <TabsTrigger value="schedule">Schedule</TabsTrigger>
+                    <TabsTrigger value="lineup">Lineup</TabsTrigger>
+                    <TabsTrigger value="plan">Plan</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+              <p className="text-sm text-muted-foreground">{formatPlanDate(selectedPlan.sortDate)}</p>
+            </div>
+          ) : hasPlanUrlSelection && isPlanMetadataLoading ? null : (
+            <div>
+              <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
+                Select a Plan
+              </h1>
+              <p className="text-muted-foreground">
+                Open the schedule table to choose a plan before editing lineup details.
+              </p>
+            </div>
+          )}
         </PageHeader>
 
         {!hasSelectedPlan && (
-          <div className="rounded-lg border border-dashed p-6">
-            <p className="text-sm text-muted-foreground">
-              No valid plan is selected. Return to the schedule list to pick one.
-            </p>
-            <Button variant="outline" className="mt-4" onClick={handleBack}>
-              Go to Schedule Table
-            </Button>
-          </div>
+          isPlanMetadataLoading ? (
+            <div className="flex min-h-[40vh] items-center justify-center">
+              <div className="flex items-center gap-2">
+                <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Loading plan details...</p>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed p-6">
+              <>
+                <p className="text-sm text-muted-foreground">
+                  No valid plan is selected. Return to the schedule list to pick one.
+                </p>
+                <Button variant="outline" className="mt-4" onClick={handleBack}>
+                  Go to Schedule Table
+                </Button>
+              </>
+            </div>
+          )
         )}
 
         {hasSelectedPlan && (
-          <Tabs
-            value={activeView}
-            onValueChange={handleViewChange}
-            className="xl:min-h-0 xl:flex-1"
-          >
-            <TabsList className="w-full justify-start sm:w-fit">
-              <TabsTrigger value="schedule">Schedule</TabsTrigger>
-              <TabsTrigger value="lineup">Lineup</TabsTrigger>
-              <TabsTrigger value="plan">Plan</TabsTrigger>
-            </TabsList>
-
+          <Tabs value={activeView} onValueChange={handleViewChange} className="xl:min-h-0 xl:flex-1">
             <TabsContent value="schedule" className="mt-0 xl:min-h-0 xl:flex-1">
               <ScheduleViewTab
                 teamPositionsLoading={teamPositionsLoading}

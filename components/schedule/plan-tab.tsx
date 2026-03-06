@@ -10,12 +10,9 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowDown,
-  ArrowUp,
   ChevronDown,
   FileMusic,
   GripVertical,
-  LayoutTemplate,
   LoaderCircle,
   Music4,
   Plus,
@@ -27,6 +24,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePlanItems } from "@/hooks/use-plan-items";
@@ -35,6 +40,7 @@ import { deleteJson, patchJson, postJson } from "@/lib/http/client";
 import { queryKeys } from "@/lib/query-keys";
 import type { ArrangementOption, PlanItem, SongCatalogEntry } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { toast } from "@/components/ui/sonner";
 
 interface PlanTabProps {
   serviceTypeId: string | null;
@@ -42,31 +48,70 @@ interface PlanTabProps {
 }
 
 type DraftState = {
-  title: string;
-  length: string;
+  lengthText: string;
   servicePosition: string;
   description: string;
-  htmlDetails: string;
   arrangementId: string;
   keyId: string;
-  customArrangementSequenceText: string;
 };
 
 const EMPTY_PLAN_ITEMS: PlanItem[] = [];
 const textareaClassName =
   "border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 min-h-24 w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:ring-[3px]";
+const NONE_VALUE = "__none__";
 
 function buildDraft(item: PlanItem): DraftState {
+  const length = item.length ?? 0;
+  const normalizedLength = Math.max(0, Math.floor(length));
+  const hours = Math.floor(normalizedLength / 3600);
+  const minutes = Math.floor((normalizedLength % 3600) / 60);
+  const seconds = normalizedLength % 60;
+  const lengthText =
+    hours > 0
+      ? `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
+      : `${minutes}:${seconds.toString().padStart(2, "0")}`;
+
   return {
-    title: item.title,
-    length: item.length?.toString() ?? "",
+    lengthText,
     servicePosition: item.servicePosition || "during",
     description: item.description,
-    htmlDetails: item.htmlDetails,
     arrangementId: item.arrangement?.id ?? "",
     keyId: item.key?.id ?? "",
-    customArrangementSequenceText: item.customArrangementSequence.join(", "),
   };
+}
+
+function parseLengthText(value: string): { length: number | null; error: string | null } {
+  const normalized = value.trim();
+  if (!normalized) return { length: null, error: null };
+
+  const parts = normalized.split(":").map((part) => part.trim());
+  if (parts.some((part) => part.length === 0)) {
+    return { length: null, error: "Length must be in mm:ss or h:mm:ss format." };
+  }
+
+  const numericParts = parts.map((part) => {
+    if (!/^\d+$/.test(part)) return Number.NaN;
+    return Number(part);
+  });
+  if (numericParts.some((part) => Number.isNaN(part) || part < 0)) {
+    return { length: null, error: "Length must be numeric values separated by ':'." };
+  }
+
+  if (parts.length === 1) {
+    return { length: numericParts[0], error: null };
+  }
+
+  if (parts.length === 2) {
+    const [minutes, seconds] = numericParts;
+    return { length: minutes * 60 + seconds, error: null };
+  }
+
+  if (parts.length === 3) {
+    const [hours, minutes, seconds] = numericParts;
+    return { length: hours * 3600 + minutes * 60 + seconds, error: null };
+  }
+
+  return { length: null, error: "Length must be in mm:ss or h:mm:ss format." };
 }
 
 function formatLength(length: number | null) {
@@ -88,7 +133,23 @@ function moveItem(items: PlanItem[], fromIndex: number, toIndex: number): PlanIt
   }));
 }
 
-function summarizeType(item: PlanItem) {
+function getItemTone(item: PlanItem) {
+  if (item.itemType === "header") {
+    return {
+      row: "bg-muted/60",
+      header: "bg-muted/80",
+      content: "bg-background",
+    };
+  }
+
+  return {
+    row: "bg-background",
+    header: "bg-background",
+    content: "bg-background",
+  };
+}
+
+function getItemTypeLabel(item: PlanItem) {
   if (item.itemType === "song") return "Song";
   if (item.itemType === "header") return "Header";
   if (item.itemType === "item") return "Item";
@@ -100,9 +161,8 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
   const { data: itemsData, isLoading } = usePlanItems(serviceTypeId, planId);
   const items = itemsData ?? EMPTY_PLAN_ITEMS;
   const [localItems, setLocalItems] = useState<PlanItem[]>([]);
-  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [songPickerOpen, setSongPickerOpen] = useState(false);
-  const [replaceSongItemId, setReplaceSongItemId] = useState<string | null>(null);
   const [pendingItemId, setPendingItemId] = useState<string | null>(null);
   const [pendingSongId, setPendingSongId] = useState<string | null>(null);
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
@@ -145,8 +205,8 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
 
       const nextItems = [...localItems, item].toSorted((a, b) => a.sequence - b.sequence);
       syncLocalItems(nextItems);
-      setExpandedItemId(item.id);
-      setBanner({ tone: "success", text: `${summarizeType(item)} added.` });
+      setEditingItemId(item.id);
+      setBanner({ tone: "success", text: `${getItemTypeLabel(item)} added.` });
       startTransition(() => {
         invalidatePlanItems();
       });
@@ -164,29 +224,16 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
     setBanner(null);
 
     try {
-      if (replaceSongItemId) {
-        const updated = await patchJson<PlanItem>(`/api/plan-items/${replaceSongItemId}`, {
-          service_type_id: serviceTypeId,
-          plan_id: planId,
-          song_id: song.id,
-        });
-        const nextItems = localItems.map((item) => (item.id === updated.id ? updated : item));
-        syncLocalItems(nextItems);
-        setExpandedItemId(updated.id);
-        setBanner({ tone: "success", text: "Song updated." });
-      } else {
-        const created = await postJson<PlanItem>("/api/plan-items", {
-          service_type_id: serviceTypeId,
-          plan_id: planId,
-          song_id: song.id,
-        });
-        const nextItems = [...localItems, created].toSorted((a, b) => a.sequence - b.sequence);
-        syncLocalItems(nextItems);
-        setExpandedItemId(created.id);
-        setBanner({ tone: "success", text: "Song added to plan." });
-      }
+      const created = await postJson<PlanItem>("/api/plan-items", {
+        service_type_id: serviceTypeId,
+        plan_id: planId,
+        song_id: song.id,
+      });
+      const nextItems = [...localItems, created].toSorted((a, b) => a.sequence - b.sequence);
+      syncLocalItems(nextItems);
+      setEditingItemId(created.id);
+      setBanner({ tone: "success", text: "Song added to plan." });
 
-      setReplaceSongItemId(null);
       setSongPickerOpen(false);
       startTransition(() => {
         invalidatePlanItems();
@@ -212,8 +259,8 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
         .filter((item) => item.id !== itemId)
         .map((item, index) => ({ ...item, sequence: index + 1 }));
       syncLocalItems(nextItems);
-      if (expandedItemId === itemId) {
-        setExpandedItemId(null);
+      if (editingItemId === itemId) {
+        setEditingItemId(null);
       }
       setBanner({ tone: "success", text: "Item removed." });
       startTransition(() => {
@@ -238,7 +285,7 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
         plan_id: planId,
         sequence: nextItems.map((item) => item.id),
       });
-      setBanner({ tone: "success", text: "Plan order saved." });
+      toast.success("Plan order saved.");
       startTransition(() => {
         invalidatePlanItems();
       });
@@ -248,16 +295,6 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
     } finally {
       setPendingItemId(null);
     }
-  };
-
-  const handleMove = async (itemId: string, direction: -1 | 1) => {
-    const currentIndex = localItems.findIndex((item) => item.id === itemId);
-    if (currentIndex === -1) return;
-
-    const targetIndex = currentIndex + direction;
-    if (targetIndex < 0 || targetIndex >= localItems.length) return;
-
-    await persistReorder(moveItem(localItems, currentIndex, targetIndex));
   };
 
   const handleDragStart = (event: DragEvent<HTMLDivElement>, itemId: string) => {
@@ -278,7 +315,6 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
   };
 
   const openAddSong = () => {
-    setReplaceSongItemId(null);
     setSongPickerOpen(true);
   };
 
@@ -288,9 +324,6 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
         open={songPickerOpen}
         onOpenChange={(open) => {
           setSongPickerOpen(open);
-          if (!open) {
-            setReplaceSongItemId(null);
-          }
         }}
         serviceTypeId={serviceTypeId}
         onSelectSong={handleSongSelect}
@@ -376,8 +409,8 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
               </div>
             </Card>
           ) : (
-            <div className="space-y-3 pb-3">
-              {localItems.map((item, index) => (
+            <div className="overflow-hidden rounded-lg border bg-background pb-3">
+              {localItems.map((item) => (
                 <div
                   key={item.id}
                   draggable={pendingItemId !== "reorder"}
@@ -385,40 +418,42 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
                   onDragEnd={() => setDraggedItemId(null)}
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={(event) => handleDrop(event, item.id)}
+                  className="border-b last:border-b-0"
                 >
                   <PlanItemCard
                     item={item}
-                    serviceTypeId={serviceTypeId}
-                    planId={planId}
-                    isExpanded={expandedItemId === item.id}
                     isBusy={pendingItemId === item.id}
                     isDragged={draggedItemId === item.id}
-                    canMoveUp={index > 0}
-                    canMoveDown={index < localItems.length - 1}
-                    onToggle={() =>
-                      setExpandedItemId((current) => (current === item.id ? null : item.id))
-                    }
-                    onSave={(updatedItem) => {
-                      const nextItems = localItems.map((current) =>
-                        current.id === updatedItem.id ? updatedItem : current
-                      );
-                      syncLocalItems(nextItems);
-                      startTransition(() => {
-                        invalidatePlanItems();
-                      });
-                    }}
+                    onEdit={() => setEditingItemId(item.id)}
                     onDelete={() => handleDelete(item.id)}
-                    onMoveUp={() => handleMove(item.id, -1)}
-                    onMoveDown={() => handleMove(item.id, 1)}
-                    onReplaceSong={() => {
-                      setReplaceSongItemId(item.id);
-                      setSongPickerOpen(true);
-                    }}
                   />
                 </div>
               ))}
             </div>
           )}
+          <PlanItemEditDialog
+            item={
+              editingItemId
+                ? localItems.find((item) => item.id === editingItemId) ?? null
+                : null
+            }
+            open={Boolean(editingItemId)}
+            serviceTypeId={serviceTypeId}
+            planId={planId}
+            onOpenChange={(open) => {
+              if (!open) setEditingItemId(null);
+            }}
+            onSave={(updatedItem) => {
+              const nextItems = localItems.map((current) =>
+                current.id === updatedItem.id ? updatedItem : current
+              );
+              syncLocalItems(nextItems);
+              setEditingItemId(null);
+              startTransition(() => {
+                invalidatePlanItems();
+              });
+            }}
+          />
         </ScrollArea>
       </div>
     </>
@@ -427,48 +462,126 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
 
 interface PlanItemCardProps {
   item: PlanItem;
-  serviceTypeId: string | null;
-  planId: string | null;
-  isExpanded: boolean;
   isBusy: boolean;
   isDragged: boolean;
-  canMoveUp: boolean;
-  canMoveDown: boolean;
-  onToggle: () => void;
-  onSave: (item: PlanItem) => void;
+  onEdit: () => void;
   onDelete: () => Promise<void> | void;
-  onMoveUp: () => Promise<void> | void;
-  onMoveDown: () => Promise<void> | void;
-  onReplaceSong: () => void;
 }
 
 function PlanItemCard({
   item,
-  serviceTypeId,
-  planId,
-  isExpanded,
   isBusy,
   isDragged,
-  canMoveUp,
-  canMoveDown,
-  onToggle,
-  onSave,
+  onEdit,
   onDelete,
-  onMoveUp,
-  onMoveDown,
-  onReplaceSong,
 }: PlanItemCardProps) {
-  const [draft, setDraft] = useState<DraftState>(() => buildDraft(item));
+  const tone = getItemTone(item);
+  return (
+    <div
+      className={cn(
+        "transition-colors",
+        tone.row,
+        isDragged && "bg-muted/80"
+      )}
+    >
+      <div className={cn("flex items-center gap-3 px-4 py-3", tone.header)}>
+        <div className="text-muted-foreground cursor-grab">
+          <GripVertical className="size-4" />
+        </div>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+        >
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="truncate font-semibold">{item.title || "Untitled item"}</p>
+              {item.arrangement ? (
+                <span className="text-muted-foreground/80 flex items-center gap-1 text-sm">
+                  <span aria-hidden="true" className="opacity-60">
+                    |
+                  </span>
+                  <span>{item.arrangement.name}</span>
+                </span>
+              ) : null}
+              {item.key ? (
+                <Badge
+                  variant="outline"
+                  className="h-6 min-w-6 rounded-full px-2 text-[11px] font-semibold shadow-xs"
+                >
+                  {item.key.name}
+                </Badge>
+              ) : null}
+              {formatLength(item.length) ? (
+                <Badge variant="outline">{formatLength(item.length)}</Badge>
+              ) : null}
+            </div>
+            <div className="text-muted-foreground mt-1 flex flex-wrap gap-2 text-xs">
+              {item.description ? <span className="truncate">{item.description}</span> : null}
+              </div>
+            </div>
+          <ChevronDown className="size-4" />
+        </button>
+        <div className="flex items-center gap-1">
+          <Button type="button" variant="ghost" size="icon" onClick={onDelete} disabled={isBusy}>
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface PlanItemEditDialogProps {
+  item: PlanItem | null;
+  serviceTypeId: string | null;
+  planId: string | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSave: (item: PlanItem) => void;
+}
+
+function PlanItemEditDialog({
+  item,
+  serviceTypeId,
+  planId,
+  open,
+  onOpenChange,
+  onSave,
+}: PlanItemEditDialogProps) {
+  const [isMobile, setIsMobile] = useState(false);
+  const [draft, setDraft] = useState<DraftState>(() => {
+    if (!item) {
+      return {
+        lengthText: "",
+        servicePosition: "during",
+        description: "",
+        arrangementId: "",
+        keyId: "",
+      };
+    }
+    return buildDraft(item);
+  });
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const { data: songOptions, isLoading: songOptionsLoading } = useSongOptions(
-    isExpanded && item.song ? item.song.id : null,
+    open && item?.song ? item.song.id : null,
     serviceTypeId
   );
 
   useEffect(() => {
+    if (!item) return;
     setDraft(buildDraft(item));
   }, [item]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia("(max-width: 640px)");
+    const onMatch = () => setIsMobile(mediaQuery.matches);
+    onMatch();
+    mediaQuery.addEventListener("change", onMatch);
+    return () => mediaQuery.removeEventListener("change", onMatch);
+  }, []);
 
   const arrangements = useMemo(() => songOptions?.arrangements ?? [], [songOptions?.arrangements]);
   const selectedArrangement = useMemo(
@@ -478,7 +591,7 @@ function PlanItemCard({
   const keyOptions = selectedArrangement?.keys ?? [];
 
   useEffect(() => {
-    if (!songOptions || arrangements.length === 0) return;
+    if (!item || !songOptions || arrangements.length === 0) return;
 
     setDraft((current) => {
       let nextArrangementId = current.arrangementId || songOptions.suggestedArrangementId || "";
@@ -508,29 +621,31 @@ function PlanItemCard({
         keyId: nextKeyId,
       };
     });
-  }, [arrangements, songOptions]);
+  }, [arrangements, item, songOptions]);
 
   const handleSubmit = async () => {
-    if (!serviceTypeId || !planId) return;
+    if (!item || !serviceTypeId || !planId) return;
 
     setIsSaving(true);
     setSaveError(null);
     try {
+      const parsed = parseLengthText(draft.lengthText);
+      if (parsed.error) {
+        setSaveError(parsed.error);
+        return;
+      }
+
+      const length = parsed.length;
       const updated = await patchJson<PlanItem>(`/api/plan-items/${item.id}`, {
         service_type_id: serviceTypeId,
         plan_id: planId,
-        title: draft.title,
+        title: item.title,
         service_position: draft.servicePosition,
-        length: draft.length.trim() ? Number(draft.length) : null,
+        length: length && length > 0 ? length : null,
         description: draft.description,
-        html_details: draft.htmlDetails,
         song_id: undefined,
         arrangement_id: draft.arrangementId || undefined,
         key_id: draft.keyId || undefined,
-        custom_arrangement_sequence: draft.customArrangementSequenceText
-          .split(",")
-          .map((value) => value.trim())
-          .filter(Boolean),
       });
 
       onSave(updated);
@@ -541,226 +656,160 @@ function PlanItemCard({
     }
   };
 
+  if (!item) return null;
+
   return (
-    <Card
-      className={cn(
-        "gap-0 overflow-hidden border py-0 transition-shadow",
-        isExpanded && "shadow-md",
-        isDragged && "border-primary/40 opacity-70"
-      )}
-    >
-      <div className="flex items-center gap-3 px-4 py-3">
-        <div className="text-muted-foreground cursor-grab">
-          <GripVertical className="size-4" />
-        </div>
-        <Badge variant="secondary" className="tabular-nums">
-          {item.sequence}
-        </Badge>
-        <button
-          type="button"
-          onClick={onToggle}
-          className="flex min-w-0 flex-1 items-center gap-3 text-left"
-        >
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="truncate font-semibold">{item.title || "Untitled item"}</p>
-              <Badge variant="outline">{summarizeType(item)}</Badge>
-              {formatLength(item.length) ? (
-                <Badge variant="outline">{formatLength(item.length)}</Badge>
-              ) : null}
-            </div>
-            <div className="text-muted-foreground mt-1 flex flex-wrap gap-2 text-xs">
-              {item.song ? <span>{item.song.title}</span> : null}
-              {item.arrangement ? <span>{item.arrangement.name}</span> : null}
-              {item.key ? <span>{item.key.name}</span> : null}
-              {item.layout ? (
-                <span className="inline-flex items-center gap-1">
-                  <LayoutTemplate className="size-3.5" />
-                  {item.layout.name}
-                </span>
-              ) : null}
-            </div>
-          </div>
-          <ChevronDown className={cn("size-4 transition-transform", isExpanded && "rotate-180")} />
-        </button>
-        <div className="flex items-center gap-1">
-          <Button type="button" variant="ghost" size="icon" onClick={onMoveUp} disabled={!canMoveUp || isBusy}>
-            <ArrowUp className="size-4" />
-          </Button>
-          <Button type="button" variant="ghost" size="icon" onClick={onMoveDown} disabled={!canMoveDown || isBusy}>
-            <ArrowDown className="size-4" />
-          </Button>
-          <Button type="button" variant="ghost" size="icon" onClick={onDelete} disabled={isBusy}>
-            <Trash2 className="size-4" />
-          </Button>
-        </div>
-      </div>
-
-      {isExpanded ? (
-        <div className="border-t px-4 py-4">
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Field label="Title">
-              <Input
-                value={draft.title}
-                onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
-              />
-            </Field>
-
-            <Field label="Length (seconds)">
-              <Input
-                type="number"
-                min={0}
-                value={draft.length}
-                onChange={(event) => setDraft((current) => ({ ...current, length: event.target.value }))}
-              />
-            </Field>
-
-            <Field label="Service Position">
-              <select
-                className={cn(textareaClassName, "min-h-9 py-0")}
-                value={draft.servicePosition}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, servicePosition: event.target.value }))
-                }
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        style={
+          isMobile
+            ? {
+                left: 0,
+                right: 0,
+                top: "auto",
+                bottom: 0,
+                transform: "translateX(0)",
+              }
+            : undefined
+        }
+        className={cn(
+          "max-h-[92vh] overflow-y-auto rounded-t-xl border-b-0 p-4 sm:left-1/2 sm:max-w-2xl sm:translate-x-[-50%] sm:top-[50%] sm:w-full sm:rounded-lg",
+          isMobile ? "w-[100vw] max-w-[100vw]" : "w-[95vw] max-w-[95vw]"
+        )}
+      >
+        <DialogHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <DialogTitle>
+            {item.song ? (
+              <a
+                href={`https://services.planningcenteronline.com/songs/${item.song.id}${
+                  item.arrangement ? `/arrangements/${item.arrangement.id}` : ""
+                }`}
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-primary underline-offset-4 hover:underline"
               >
-                <option value="pre">Pre-service</option>
-                <option value="during">During service</option>
-                <option value="post">Post-service</option>
-              </select>
-            </Field>
-
-            {item.song ? (
-              <Field label="Song">
-                <div className="flex items-center gap-2">
-                  <Input value={item.song.title} disabled />
-                  <Button type="button" variant="outline" onClick={onReplaceSong}>
-                    Replace
-                  </Button>
-                </div>
-              </Field>
+                {item.song.title}
+              </a>
             ) : (
-              <div />
+              "Plan item"
             )}
+          </DialogTitle>
+        </DialogHeader>
 
-            {item.song ? (
-              <Field label="Arrangement">
-                {songOptionsLoading ? (
-                  <Skeleton className="h-9 w-full" />
-                ) : (
-                  <select
-                    className={cn(textareaClassName, "min-h-9 py-0")}
-                    value={draft.arrangementId}
-                    onChange={(event) => {
-                      const nextArrangement = arrangements.find(
-                        (arrangement) => arrangement.id === event.target.value
-                      );
-                      setDraft((current) => ({
-                        ...current,
-                        arrangementId: event.target.value,
-                        keyId: nextArrangement?.keys[0]?.id ?? "",
-                      }));
-                    }}
-                  >
-                    <option value="">No arrangement</option>
-                    {arrangements.map((arrangement: ArrangementOption) => (
-                      <option key={arrangement.id} value={arrangement.id}>
-                        {arrangement.name}
-                        {arrangement.archived ? " (archived)" : ""}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </Field>
-            ) : null}
-
-            {item.song ? (
-              <Field label="Key">
-                {songOptionsLoading ? (
-                  <Skeleton className="h-9 w-full" />
-                ) : (
-                  <select
-                    className={cn(textareaClassName, "min-h-9 py-0")}
-                    value={draft.keyId}
-                    onChange={(event) => setDraft((current) => ({ ...current, keyId: event.target.value }))}
-                    disabled={!selectedArrangement || keyOptions.length === 0}
-                  >
-                    <option value="">No key</option>
-                    {keyOptions.map((key) => (
-                      <option key={key.id} value={key.id}>
-                        {key.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </Field>
-            ) : null}
-
-            {item.song ? (
-              <Field label="Layout">
-                {songOptions?.layoutMode === "existing-only" && item.layout ? (
-                  <div className="text-muted-foreground rounded-md border px-3 py-2 text-sm">
-                    {item.layout.name} (read-only)
-                  </div>
-                ) : (
-                  <div className="text-muted-foreground rounded-md border border-dashed px-3 py-2 text-sm">
-                    Layout selection is not available from the documented API surface yet.
-                  </div>
-                )}
-              </Field>
-            ) : null}
-
-            {item.song ? (
-              <Field label="Arrangement Sequence">
-                <Input
-                  value={draft.customArrangementSequenceText}
-                  onChange={(event) =>
+        <div className="grid gap-4 lg:grid-cols-2">
+          {item.song ? (
+            <Field label="Arrangement">
+              {songOptionsLoading ? (
+                <Skeleton className="h-9 w-full" />
+              ) : (
+                <Select
+                  value={draft.arrangementId}
+                  onValueChange={(value) => {
+                    const normalizedValue = value === NONE_VALUE ? "" : value;
+                    const nextArrangement = arrangements.find((arrangement) => arrangement.id === value);
                     setDraft((current) => ({
                       ...current,
-                      customArrangementSequenceText: event.target.value,
-                    }))
-                  }
-                  placeholder="Verse 1, Chorus 1, Verse 2"
-                />
-              </Field>
-            ) : null}
-
-            <Field label="Description" className="lg:col-span-2">
-              <textarea
-                className={textareaClassName}
-                value={draft.description}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, description: event.target.value }))
-                }
-              />
+                      arrangementId: normalizedValue,
+                      keyId: nextArrangement?.keys[0]?.id ?? "",
+                    }));
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select arrangement" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE_VALUE}>No arrangement</SelectItem>
+                    {arrangements.map((arrangement: ArrangementOption) => (
+                      <SelectItem key={arrangement.id} value={arrangement.id}>
+                        {arrangement.name}
+                        {arrangement.archived ? " (archived)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </Field>
-
-            <Field label="Details (HTML)" className="lg:col-span-2">
-              <textarea
-                className={textareaClassName}
-                value={draft.htmlDetails}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, htmlDetails: event.target.value }))
-                }
-              />
-            </Field>
-          </div>
-
-          {saveError ? (
-            <p className="text-destructive mt-3 text-sm">{saveError}</p>
           ) : null}
 
-          <div className="mt-4 flex items-center justify-end gap-2">
-            <Button type="button" variant="outline" onClick={onToggle}>
-              Close
-            </Button>
-            <Button type="button" onClick={handleSubmit} disabled={isSaving || isBusy}>
-              {isSaving ? <LoaderCircle className="size-4 animate-spin" /> : null}
-              Save Changes
-            </Button>
-          </div>
+          {item.song ? (
+            <Field label="Key">
+              {songOptionsLoading ? (
+                <Skeleton className="h-9 w-full" />
+              ) : (
+                <Select
+                  value={draft.keyId}
+                  onValueChange={(value) =>
+                    setDraft((current) => ({
+                      ...current,
+                      keyId: value === NONE_VALUE ? "" : value,
+                    }))
+                  }
+                  disabled={!selectedArrangement || keyOptions.length === 0}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select key" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE_VALUE}>No key</SelectItem>
+                    {keyOptions.map((key) => (
+                      <SelectItem key={key.id} value={key.id}>
+                        {key.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </Field>
+          ) : null}
+
+          <Field label="Length">
+            <Input
+              placeholder="4:35 or 1:5:21"
+              value={draft.lengthText}
+              onChange={(event) => setDraft((current) => ({ ...current, lengthText: event.target.value }))}
+            />
+          </Field>
+
+          <Field label="Service Position">
+            <Select
+              value={draft.servicePosition}
+              onValueChange={(value) => setDraft((current) => ({ ...current, servicePosition: value }))}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select service position" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pre">Pre-service</SelectItem>
+                <SelectItem value="during">During service</SelectItem>
+                <SelectItem value="post">Post-service</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+
+          <Field label="Description" className="lg:col-span-2">
+            <textarea
+              className={textareaClassName}
+              value={draft.description}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, description: event.target.value }))
+              }
+            />
+          </Field>
         </div>
-      ) : null}
-    </Card>
+
+        {saveError ? <p className="text-destructive mt-3 text-sm">{saveError}</p> : null}
+
+        <DialogFooter className="gap-2">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
+            Close
+          </Button>
+          <Button type="button" onClick={handleSubmit} disabled={isSaving}>
+            {isSaving ? <LoaderCircle className="size-4 animate-spin" /> : null}
+            Save Changes
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
