@@ -47,10 +47,10 @@ export class PlanningCenterCoreClient {
     return `Basic ${credentials}`;
   }
 
-  async fetch<T>(
+  async request(
     endpoint: string,
     options: RequestInit = {}
-  ): Promise<PCApiResponse<T>> {
+  ): Promise<Response> {
     const url = endpoint.startsWith("http")
       ? endpoint
       : `${PC_BASE_URL}${endpoint}`;
@@ -95,7 +95,7 @@ export class PlanningCenterCoreClient {
           throw new Error(errorMessage);
         }
 
-        return response.json();
+        return response;
       } catch (error) {
         clearTimeout(timeout);
         lastError = error instanceof Error ? error : new Error(String(error));
@@ -121,6 +121,14 @@ export class PlanningCenterCoreClient {
     }
 
     throw lastError || new Error("Planning Center API request failed");
+  }
+
+  async fetch<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<PCApiResponse<T>> {
+    const response = await this.request(endpoint, options);
+    return response.json();
   }
 
   buildUrl(endpoint: string, params: Record<string, string> = {}): string {

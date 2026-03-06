@@ -7,6 +7,7 @@ import { ArrowLeft } from "lucide-react";
 import { AccountMenu } from "@/components/account-menu";
 import { PageHeader } from "@/components/page-header";
 import { LineupTab } from "@/components/schedule/lineup-tab";
+import { PlanTab } from "@/components/schedule/plan-tab";
 import { ScheduleViewTab } from "@/components/schedule/schedule-view-tab";
 import type { SlotRef } from "@/components/schedule/types";
 import { Button } from "@/components/ui/button";
@@ -26,12 +27,13 @@ interface RouteSelectionIds {
   view: DashboardView;
 }
 
-type DashboardView = "schedule" | "lineup";
+type DashboardView = "schedule" | "lineup" | "plan";
 const COLLAPSED_TEAMS_STORAGE_KEY_PREFIX = "schedule-collapsed-teams:";
 const COLLAPSED_TEAMS_STORAGE_MAP_KEY = `${COLLAPSED_TEAMS_STORAGE_KEY_PREFIX}by-plan`;
 type SearchParamReader = Pick<URLSearchParams, "get">;
 
 function parseDashboardView(value: string | null): DashboardView {
+  if (value === "plan") return "plan";
   if (value === "lineup") return "lineup";
   return "schedule";
 }
@@ -64,7 +66,7 @@ function buildScheduleUrl({
   if (planId) searchParams.set("planId", planId);
   if (teamId) searchParams.set("teamId", teamId);
   if (positionId) searchParams.set("positionId", positionId);
-  if (view === "lineup") searchParams.set("view", "lineup");
+  if (view !== "schedule") searchParams.set("view", view);
 
   const query = searchParams.toString();
   return query ? `/schedule/plan?${query}` : "/schedule/plan";
@@ -411,6 +413,7 @@ export function DashboardPage() {
             <TabsList className="w-full justify-start sm:w-fit">
               <TabsTrigger value="schedule">Schedule</TabsTrigger>
               <TabsTrigger value="lineup">Lineup</TabsTrigger>
+              <TabsTrigger value="plan">Plan</TabsTrigger>
             </TabsList>
 
             <TabsContent value="schedule" className="mt-0 xl:min-h-0 xl:flex-1">
@@ -436,6 +439,13 @@ export function DashboardPage() {
                 groups={teamPositionGroups ?? []}
                 isLoading={teamPositionsLoading}
                 onSelectPosition={handleSlotSelect}
+              />
+            </TabsContent>
+
+            <TabsContent value="plan" className="mt-0 xl:min-h-0 xl:flex-1">
+              <PlanTab
+                serviceTypeId={selectedServiceType?.id ?? null}
+                planId={selectedPlan?.id ?? null}
               />
             </TabsContent>
           </Tabs>
