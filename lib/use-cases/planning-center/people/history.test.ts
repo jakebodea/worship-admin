@@ -1,10 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { buildHistoryAndFrequencyForPerson } from "@/lib/use-cases/planning-center/people/history";
 import type { PCResource } from "@/lib/types";
-
-vi.mock("@/lib/excluded-services", () => ({
-  isServiceExcluded: vi.fn(() => false),
-}));
 
 function schedule(params: {
   id: string;

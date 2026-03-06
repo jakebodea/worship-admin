@@ -34,15 +34,37 @@ async function parseError(response: Response): Promise<HttpClientError> {
   return new HttpClientError(`Request failed with status ${response.status}`, response.status);
 }
 
-export async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    method: "GET",
-    ...init,
-  });
+async function parseSuccess<T>(response: Response): Promise<T> {
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    return undefined as T;
+  }
+
+  const text = await response.text();
+  if (!text.trim()) {
+    return undefined as T;
+  }
+
+  return JSON.parse(text) as T;
+}
+
+async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
+  const response = await fetch(url, init);
   if (!response.ok) {
     throw await parseError(response);
   }
-  return response.json() as Promise<T>;
+  return parseSuccess<T>(response);
+}
+
+export async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
+  return requestJson<T>(url, {
+    method: "GET",
+    ...init,
+  });
 }
 
 export async function postJson<T>(
@@ -50,7 +72,7 @@ export async function postJson<T>(
   body?: unknown,
   init?: Omit<RequestInit, "method" | "body">
 ): Promise<T> {
-  const response = await fetch(url, {
+  return requestJson<T>(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -59,8 +81,36 @@ export async function postJson<T>(
     ...init,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (!response.ok) {
-    throw await parseError(response);
-  }
-  return response.json() as Promise<T>;
+}
+
+export async function patchJson<T>(
+  url: string,
+  body?: unknown,
+  init?: Omit<RequestInit, "method" | "body">
+): Promise<T> {
+  return requestJson<T>(url, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers || {}),
+    },
+    ...init,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
+export async function deleteJson<T>(
+  url: string,
+  body?: unknown,
+  init?: Omit<RequestInit, "method" | "body">
+): Promise<T> {
+  return requestJson<T>(url, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers || {}),
+    },
+    ...init,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
 }

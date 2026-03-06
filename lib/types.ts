@@ -276,6 +276,154 @@ export interface RawPlan {
   };
 }
 
+export type PlanItemType = "song" | "header" | "item" | "media" | string;
+export type PlanItemServicePosition = "pre" | "during" | "post" | string;
+
+export interface PlanItemSong {
+  id: string;
+  title: string;
+  author: string;
+  themes: string;
+  lastScheduledAt: Date | null;
+}
+
+export interface PlanItemArrangement {
+  id: string;
+  name: string;
+  sequence: string[];
+  length: number | null;
+  archivedAt: Date | null;
+}
+
+export interface PlanItemKey {
+  id: string;
+  name: string;
+  startingKey: string | null;
+  endingKey: string | null;
+}
+
+export interface LayoutOption {
+  id: string;
+  name: string;
+}
+
+export interface PlanItem {
+  id: string;
+  title: string;
+  itemType: PlanItemType;
+  sequence: number;
+  servicePosition: PlanItemServicePosition;
+  length: number | null;
+  description: string;
+  htmlDetails: string;
+  customArrangementSequence: string[];
+  song: PlanItemSong | null;
+  arrangement: PlanItemArrangement | null;
+  key: PlanItemKey | null;
+  layout: LayoutOption | null;
+}
+
+export interface RawItem {
+  type: "Item";
+  id: string;
+  attributes: {
+    title?: string;
+    item_type?: string;
+    sequence?: number;
+    service_position?: string;
+    length?: number;
+    description?: string;
+    html_details?: string;
+    custom_arrangement_sequence?: unknown;
+  };
+  relationships?: {
+    song?: {
+      data?: PCResourceIdentifier | null;
+    };
+    arrangement?: {
+      data?: PCResourceIdentifier | null;
+    };
+    key?: {
+      data?: PCResourceIdentifier | null;
+    };
+    selected_layout?: {
+      data?: PCResourceIdentifier | null;
+    };
+  };
+}
+
+export interface RawSong {
+  type: "Song";
+  id: string;
+  attributes: {
+    title?: string;
+    author?: string;
+    themes?: string;
+    hidden?: boolean;
+    last_scheduled_at?: string | null;
+    created_at?: string;
+    updated_at?: string;
+  };
+}
+
+export interface RawArrangement {
+  type: "Arrangement";
+  id: string;
+  attributes: {
+    name?: string;
+    sequence?: unknown;
+    length?: number;
+    archived_at?: string | null;
+  };
+}
+
+export interface RawKey {
+  type: "Key";
+  id: string;
+  attributes: {
+    name?: string;
+    starting_key?: string | null;
+    ending_key?: string | null;
+  };
+}
+
+export interface SongCatalogEntry {
+  id: string;
+  title: string;
+  author: string;
+  themes: string;
+  hidden: boolean;
+  lastScheduledAt: Date | null;
+  matchScore?: number;
+}
+
+export interface ArrangementOption {
+  id: string;
+  name: string;
+  sequence: string[];
+  length: number | null;
+  archived: boolean;
+  keys: KeyOption[];
+}
+
+export interface KeyOption {
+  id: string;
+  name: string;
+  startingKey: string | null;
+  endingKey: string | null;
+}
+
+export interface SongOptionSet {
+  song: SongCatalogEntry;
+  arrangements: ArrangementOption[];
+  layouts: LayoutOption[];
+  currentLayout: LayoutOption | null;
+  suggestedArrangementId: string | null;
+  suggestedKeyId: string | null;
+  suggestedLayoutId: string | null;
+  layoutMode: "unavailable" | "existing-only" | "editable";
+}
+
 export interface RawNeededPosition {
   type: "NeededPosition";
   id: string;

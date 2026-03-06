@@ -2,7 +2,6 @@ import {
   planningCenterCatalogService,
   type PlanningCenterCatalogService,
 } from "@/lib/planning-center/services/catalog-service";
-import { isServiceExcluded } from "@/lib/excluded-services";
 import type { RawServiceType, ServiceType } from "@/lib/types";
 
 export async function getServiceTypes(
@@ -23,8 +22,7 @@ export async function getServiceTypes(
         sequence: st.attributes.sequence as number,
       };
     })
-    .filter((st) => !isServiceExcluded(st.id));
+    .sort((a, b) => a.sequence - b.sequence);
 
-  serviceTypes.sort((a, b) => a.sequence - b.sequence);
   return serviceTypes;
 }

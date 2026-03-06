@@ -1,0 +1,63 @@
+import { describe, expect, it, vi } from "vitest";
+import { searchSongs } from "@/lib/use-cases/planning-center/search-songs";
+
+const { getSongsCatalogCachedMock } = vi.hoisted(() => ({
+  getSongsCatalogCachedMock: vi.fn(),
+}));
+
+vi.mock("@/lib/planning-center/services/songs-service", () => ({
+  planningCenterSongsService: {
+    getSongsCatalogCached: getSongsCatalogCachedMock,
+  },
+}));
+
+describe("searchSongs", () => {
+  it("keeps fuzzy relevance first and orders ties by title", async () => {
+    getSongsCatalogCachedMock.mockResolvedValue([
+      {
+        id: "song-1",
+        type: "Song",
+        attributes: {
+          title: "House of the Lord",
+          author: "Phil Wickham",
+          hidden: false,
+          last_scheduled_at: "2026-02-01T00:00:00Z",
+        },
+      },
+      {
+        id: "song-2",
+        type: "Song",
+        attributes: {
+          title: "Lord I Need You",
+          author: "Matt Maher",
+          hidden: false,
+          last_scheduled_at: "2026-03-01T00:00:00Z",
+        },
+      },
+      {
+        id: "song-4",
+        type: "Song",
+        attributes: {
+          title: "Lord I Lift Your Name on High",
+          author: "Another Writer",
+          hidden: false,
+          last_scheduled_at: "2026-03-01T00:00:00Z",
+        },
+      },
+      {
+        id: "song-3",
+        type: "Song",
+        attributes: {
+          title: "Archived Song",
+          hidden: true,
+        },
+      },
+    ]);
+
+    const songs = await searchSongs("account-1", "service-1", "lord");
+
+    expect(songs.map((song) => song.id)).toEqual(["song-4", "song-2", "song-1"]);
+    expect(songs.some((song) => song.id === "song-3")).toBe(false);
+    expect(getSongsCatalogCachedMock).toHaveBeenCalledWith("account-1:service-1");
+  });
+});

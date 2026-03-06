@@ -8,6 +8,34 @@ const DEFAULT_TIMEOUT_MS = 15000;
 const MAX_RETRIES = 2;
 const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 
+export class PlanningCenterApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  readonly details?: unknown;
+  readonly responseBody?: string;
+
+  constructor({
+    message,
+    status,
+    code,
+    details,
+    responseBody,
+  }: {
+    message: string;
+    status: number;
+    code?: string;
+    details?: unknown;
+    responseBody?: string;
+  }) {
+    super(message);
+    this.name = "PlanningCenterApiError";
+    this.status = status;
+    this.code = code;
+    this.details = details;
+    this.responseBody = responseBody;
+  }
+}
+
 export class PlanningCenterCoreClient {
   constructor(
     private readonly auth?: {
@@ -47,10 +75,10 @@ export class PlanningCenterCoreClient {
     return `Basic ${credentials}`;
   }
 
-  async fetch<T>(
+  async request(
     endpoint: string,
     options: RequestInit = {}
-  ): Promise<PCApiResponse<T>> {
+  ): Promise<Response> {
     const url = endpoint.startsWith("http")
       ? endpoint
       : `${PC_BASE_URL}${endpoint}`;
@@ -85,29 +113,14 @@ export class PlanningCenterCoreClient {
             continue;
           }
 
-          let errorMessage = `Planning Center API error: ${response.status}`;
-          try {
-            const errorJson = JSON.parse(errorText);
-            errorMessage += ` - ${JSON.stringify(errorJson)}`;
-          } catch {
-            errorMessage += ` - ${errorText}`;
-          }
-          throw new Error(errorMessage);
+          throw buildApiError(response.status, errorText);
         }
 
-        return response.json();
+        return response;
       } catch (error) {
         clearTimeout(timeout);
         lastError = error instanceof Error ? error : new Error(String(error));
-        if (
-          lastError.message.startsWith("Planning Center API error:") &&
-          !lastError.message.startsWith("Planning Center API error: 408") &&
-          !lastError.message.startsWith("Planning Center API error: 429") &&
-          !lastError.message.startsWith("Planning Center API error: 500") &&
-          !lastError.message.startsWith("Planning Center API error: 502") &&
-          !lastError.message.startsWith("Planning Center API error: 503") &&
-          !lastError.message.startsWith("Planning Center API error: 504")
-        ) {
+        if (!isRetryableError(lastError)) {
           break;
         }
         const canRetry = attempt < MAX_RETRIES;
@@ -121,6 +134,14 @@ export class PlanningCenterCoreClient {
     }
 
     throw lastError || new Error("Planning Center API request failed");
+  }
+
+  async fetch<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<PCApiResponse<T>> {
+    const response = await this.request(endpoint, options);
+    return response.json();
   }
 
   buildUrl(endpoint: string, params: Record<string, string> = {}): string {
@@ -194,6 +215,49 @@ export class PlanningCenterCoreClient {
 
     return { data: allData, included: allIncluded };
   }
+}
+
+function buildApiError(status: number, responseBody: string): PlanningCenterApiError {
+  let code: string | undefined;
+  let details: unknown;
+  let message = `Planning Center API error: ${status}`;
+
+  try {
+    const errorJson = JSON.parse(responseBody) as Record<string, unknown>;
+    code = typeof errorJson.code === "string" ? errorJson.code : undefined;
+    details = errorJson;
+
+    const title =
+      typeof errorJson.error === "string"
+        ? errorJson.error
+        : typeof errorJson.message === "string"
+          ? errorJson.message
+          : undefined;
+
+    if (title) {
+      message += ` - ${title}`;
+    }
+  } catch {
+    if (responseBody) {
+      message += ` - ${responseBody}`;
+    }
+  }
+
+  return new PlanningCenterApiError({
+    message,
+    status,
+    code,
+    details,
+    responseBody,
+  });
+}
+
+function isRetryableError(error: Error): boolean {
+  if (error instanceof PlanningCenterApiError) {
+    return RETRYABLE_STATUS_CODES.has(error.status);
+  }
+
+  return error.name === "AbortError";
 }
 
 function sleep(ms: number): Promise<void> {
