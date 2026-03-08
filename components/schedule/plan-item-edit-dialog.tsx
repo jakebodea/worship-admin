@@ -15,12 +15,12 @@ import {
 } from "@/components/schedule/plan-tab-helpers";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -42,7 +42,6 @@ export function PlanItemEditDialog({
   onOpenChange,
   onSave,
 }: PlanItemEditDialogProps) {
-  const [isMobile, setIsMobile] = useState(false);
   const [draft, setDraft] = useState<DraftState>(() =>
     item
       ? buildDraft(item)
@@ -72,15 +71,6 @@ export function PlanItemEditDialog({
     if (!open) return;
     setDraft((current) => synchronizeDraftWithSongOptions(current, songOptions));
   }, [open, songOptions]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mediaQuery = window.matchMedia("(max-width: 640px)");
-    const onMatch = () => setIsMobile(mediaQuery.matches);
-    onMatch();
-    mediaQuery.addEventListener("change", onMatch);
-    return () => mediaQuery.removeEventListener("change", onMatch);
-  }, []);
 
   if (!item) return null;
 
@@ -114,26 +104,13 @@ export function PlanItemEditDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        style={
-          isMobile
-            ? {
-                left: 0,
-                right: 0,
-                top: "auto",
-                bottom: 0,
-                transform: "translateX(0)",
-              }
-            : undefined
-        }
-        className={cn(
-          "max-h-[92vh] overflow-y-auto rounded-t-xl border-b-0 p-4 sm:left-1/2 sm:top-[50%] sm:w-full sm:max-w-2xl sm:translate-x-[-50%] sm:rounded-lg",
-          isMobile ? "w-[100vw] max-w-[100vw]" : "w-[95vw] max-w-[95vw]"
-        )}
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
+      <ResponsiveDialogContent
+        desktopClassName="w-[95vw] max-w-2xl"
+        mobileClassName="max-h-[90svh]"
       >
-        <DialogHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <DialogTitle>
+        <ResponsiveDialogHeader className="flex flex-col gap-2 px-4 pt-3 text-left sm:flex-row sm:items-center sm:justify-between sm:px-0 sm:pt-0">
+          <ResponsiveDialogTitle>
             {item.song ? (
               <a
                 href={`https://services.planningcenteronline.com/songs/${item.song.id}${
@@ -148,10 +125,10 @@ export function PlanItemEditDialog({
             ) : (
               "Plan item"
             )}
-          </DialogTitle>
-        </DialogHeader>
+          </ResponsiveDialogTitle>
+        </ResponsiveDialogHeader>
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 overflow-y-auto px-4 pb-2 sm:px-0 lg:grid-cols-2">
           {!item.song ? (
             <Field label="Title" className="lg:col-span-2">
               <Input
@@ -267,7 +244,7 @@ export function PlanItemEditDialog({
 
         {saveError ? <p className="text-destructive mt-3 text-sm">{saveError}</p> : null}
 
-        <DialogFooter className="gap-2">
+        <ResponsiveDialogFooter className="gap-2 px-4 pb-0 sm:px-0">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
             Close
           </Button>
@@ -275,9 +252,9 @@ export function PlanItemEditDialog({
             {isSaving ? <LoaderCircle className="size-4 animate-spin" /> : null}
             Save Changes
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }
 

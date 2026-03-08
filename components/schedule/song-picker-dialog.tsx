@@ -8,11 +8,11 @@ import type { SongCatalogEntry } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface SongPickerDialogProps {
@@ -48,13 +48,16 @@ export function SongPickerDialog({
   const showResults = deferredQuery.trim().length > 0;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Add Song</DialogTitle>
-        </DialogHeader>
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
+      <ResponsiveDialogContent
+        desktopClassName="max-w-2xl"
+        mobileClassName="max-h-[90svh]"
+      >
+        <ResponsiveDialogHeader className="px-4 pt-3 text-left sm:px-0 sm:pt-0">
+          <ResponsiveDialogTitle>Add Song</ResponsiveDialogTitle>
+        </ResponsiveDialogHeader>
 
-        <Command shouldFilter={false} className="rounded-lg border">
+        <Command shouldFilter={false} className="rounded-none border-x-0 border-b-0 sm:rounded-lg sm:border">
           <CommandInput
             placeholder="Search songs, writers, or themes..."
             value={query}
@@ -120,7 +123,7 @@ export function SongPickerDialog({
             )}
           </CommandList>
         </Command>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

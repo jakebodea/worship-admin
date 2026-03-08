@@ -58,7 +58,7 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
         }}
       />
 
-      <div className="flex h-full min-h-0 flex-col gap-4">
+      <div className="flex h-full min-h-0 flex-col gap-4 pb-28 sm:pb-0">
         <PlanTabToolbar
           pendingItemId={pendingItemId}
           onAddSong={() => setSongPickerOpen(true)}

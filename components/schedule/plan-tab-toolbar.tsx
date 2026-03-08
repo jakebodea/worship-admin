@@ -85,50 +85,91 @@ export function PlanTabToolbar({
   };
 
   return (
-    <div
-      className="fixed z-40 flex items-center gap-2 rounded-md border bg-background px-4 py-2 shadow-sm"
-      style={{
-        right: `${toolbarPosition.right}px`,
-        bottom: `${toolbarPosition.bottom}px`,
-      }}
-    >
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="cursor-grab touch-none"
-        onPointerDown={handleToolbarDragStart}
+    <>
+      <div
+        className="fixed z-40 hidden items-center gap-2 rounded-md border bg-background px-4 py-2 shadow-sm sm:flex"
+        style={{
+          right: `${toolbarPosition.right}px`,
+          bottom: `${toolbarPosition.bottom}px`,
+        }}
       >
-        <GripVertical className="size-4" />
-      </Button>
-      <Button type="button" variant="ghost" onClick={onAddSong}>
-        <Music4 className="size-4" />
-        Add Song
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        onClick={onAddHeader}
-        disabled={pendingItemId === "create-header"}
-      >
-        <Type className="size-4" />
-        Add Header
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        onClick={onAddItem}
-        disabled={pendingItemId === "create-item"}
-      >
-        <Plus className="size-4" />
-        Add Item
-      </Button>
-      {pendingItemId === "reorder" ? (
-        <span className="text-muted-foreground inline-flex items-center gap-2 text-sm">
-          <LoaderCircle className="size-4 animate-spin" />
-          Saving order...
-        </span>
-      ) : null}
-    </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="cursor-grab touch-none"
+          onPointerDown={handleToolbarDragStart}
+        >
+          <GripVertical className="size-4" />
+        </Button>
+        <Button type="button" variant="ghost" onClick={onAddSong}>
+          <Music4 className="size-4" />
+          Add Song
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onAddHeader}
+          disabled={pendingItemId === "create-header"}
+        >
+          <Type className="size-4" />
+          Add Header
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onAddItem}
+          disabled={pendingItemId === "create-item"}
+        >
+          <Plus className="size-4" />
+          Add Item
+        </Button>
+        {pendingItemId === "reorder" ? (
+          <span className="text-muted-foreground inline-flex items-center gap-2 text-sm">
+            <LoaderCircle className="size-4 animate-spin" />
+            Saving order...
+          </span>
+        ) : null}
+      </div>
+
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 sm:hidden">
+        <div className="pointer-events-auto mx-auto w-full max-w-screen-xl px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="rounded-2xl border bg-background/95 p-2 shadow-lg backdrop-blur">
+            <div className="grid grid-cols-3 gap-2">
+              <Button type="button" variant="ghost" className="h-auto flex-col gap-1 py-3" onClick={onAddSong}>
+                <Music4 className="size-4" />
+                <span className="text-xs">Add Song</span>
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-auto flex-col gap-1 py-3"
+                onClick={onAddHeader}
+                disabled={pendingItemId === "create-header"}
+              >
+                <Type className="size-4" />
+                <span className="text-xs">Add Header</span>
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-auto flex-col gap-1 py-3"
+                onClick={onAddItem}
+                disabled={pendingItemId === "create-item"}
+              >
+                <Plus className="size-4" />
+                <span className="text-xs">Add Item</span>
+              </Button>
+            </div>
+            {pendingItemId === "reorder" ? (
+              <div className="text-muted-foreground flex items-center justify-center gap-2 border-t px-3 pt-2 text-sm">
+                <LoaderCircle className="size-4 animate-spin" />
+                Saving order...
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
