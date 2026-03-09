@@ -22,7 +22,7 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer"
-import { useMediaQuery } from "@/hooks/use-media-query"
+import { useIsMobile } from "@/hooks/use-is-mobile"
 import { cn } from "@/lib/utils"
 
 const ResponsiveDialogContext = React.createContext<{ isMobile: boolean }>({
@@ -45,7 +45,7 @@ type ResponsiveDialogContentProps = {
 }
 
 function ResponsiveDialog({ children, ...props }: ResponsiveDialogRootProps) {
-  const isMobile = useMediaQuery("(max-width: 639px)")
+  const isMobile = useIsMobile()
   const Root = isMobile ? Drawer : Dialog
 
   return (
