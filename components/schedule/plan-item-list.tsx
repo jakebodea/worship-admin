@@ -3,6 +3,7 @@
 import {
   closestCenter,
   DndContext,
+  DragOverlay,
   MouseSensor,
   TouchSensor,
   useSensor,
@@ -22,12 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  formatLength,
-  getItemTone,
-  getItemTypeLabel,
-  getServicePositionLabel,
-} from "@/components/schedule/plan-tab-helpers";
+import { formatLength, getItemTone } from "@/components/schedule/plan-tab-helpers";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { reorderPlanItems } from "@/lib/plan-items-query-state";
@@ -58,6 +54,7 @@ export function PlanItemList({
 }: PlanItemListProps) {
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const reorderDisabled = pendingItemId === "reorder";
+  const activeItem = items.find((item) => item.id === activeItemId) ?? null;
   const sensors = useSensors(
     useSensor(MouseSensor, {
       activationConstraint: { distance: 6 },
@@ -128,20 +125,35 @@ export function PlanItemList({
           onDragEnd={(event) => void handleDragEnd(event)}
         >
           <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
-            <div className="space-y-2 pb-28 pr-0 sm:space-y-0 sm:pb-6 sm:pr-3">
-              {items.map((item) => (
-                <SortablePlanItem
-                  key={item.id}
-                  item={item}
-                  isBusy={pendingItemId === item.id}
-                  isDragging={activeItemId === item.id}
-                  reorderDisabled={reorderDisabled}
-                  onEdit={() => onEditItem(item.id)}
-                  onDelete={() => onDeleteItem(item.id)}
-                />
-              ))}
+            <div className="pb-28 sm:pb-6 sm:pr-3">
+              <div className="overflow-hidden rounded-lg border bg-background">
+                {items.map((item) => (
+                  <SortablePlanItem
+                    key={item.id}
+                    item={item}
+                    isBusy={pendingItemId === item.id}
+                    isDragging={activeItemId === item.id}
+                    reorderDisabled={reorderDisabled}
+                    onEdit={() => onEditItem(item.id)}
+                    onDelete={() => onDeleteItem(item.id)}
+                  />
+                ))}
+              </div>
             </div>
           </SortableContext>
+          <DragOverlay zIndex={60}>
+            {activeItem ? (
+              <div className="overflow-hidden rounded-lg border bg-background rotate-[0.2deg] shadow-2xl">
+                <PlanItemCard
+                  item={activeItem}
+                  isBusy={pendingItemId === activeItem.id}
+                  isDragged
+                  onEdit={() => onEditItem(activeItem.id)}
+                  onDelete={() => onDeleteItem(activeItem.id)}
+                />
+              </div>
+            ) : null}
+          </DragOverlay>
         </DndContext>
       )}
     </ScrollArea>
@@ -195,8 +207,8 @@ function SortablePlanItem({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "transition-[transform,box-shadow,opacity] duration-200 ease-out",
-        isSortableDragging && "z-20 opacity-95 shadow-2xl"
+        "relative border-b last:border-b-0 transition-[transform,box-shadow,opacity] duration-200 ease-out",
+        isSortableDragging && "z-20 opacity-0"
       )}
     >
       <PlanItemCard
@@ -216,8 +228,8 @@ interface PlanItemCardProps {
   item: PlanItem;
   isBusy: boolean;
   isDragged: boolean;
-  dragAttributes: ReturnType<typeof useSortable>["attributes"];
-  dragListeners: ReturnType<typeof useSortable>["listeners"];
+  dragAttributes?: ReturnType<typeof useSortable>["attributes"];
+  dragListeners?: ReturnType<typeof useSortable>["listeners"];
   onEdit: () => void;
   onDelete: () => Promise<void> | void;
 }
@@ -232,33 +244,36 @@ function PlanItemCard({
   onDelete,
 }: PlanItemCardProps) {
   const tone = getItemTone(item);
-  const itemTypeLabel = getItemTypeLabel(item);
-  const servicePositionLabel = getServicePositionLabel(item.servicePosition);
   const lengthLabel = formatLength(item.length);
+  const handleCardKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    onEdit();
+  };
 
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-lg border transition-[background-color,border-color,box-shadow] sm:rounded-none sm:border-x sm:border-t-0 sm:last:border-b",
+        "transition-[background-color,box-shadow] duration-200",
         tone.row,
-        isDragged && "border-primary/30 bg-muted/80 shadow-lg"
+        isDragged && "bg-muted/80 shadow-lg"
       )}
     >
       <div
         {...dragAttributes}
         {...dragListeners}
+        role="button"
+        tabIndex={0}
+        onClick={onEdit}
+        onKeyDown={handleCardKeyDown}
         className={cn(
-          "cursor-grab touch-manipulation transition-colors active:cursor-grabbing",
+          "cursor-grab touch-manipulation select-none transition-colors active:cursor-grabbing",
           tone.header,
           !isDragged && tone.hover
         )}
       >
         <div className="hidden items-center gap-3 px-4 py-3 sm:flex">
-          <button
-            type="button"
-            onClick={onEdit}
-            className="flex min-w-0 flex-1 items-center gap-3 text-left"
-          >
+          <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="truncate font-semibold">{item.title || "Untitled item"}</p>
@@ -284,60 +299,69 @@ function PlanItemCard({
                 {item.description ? <span className="truncate">{item.description}</span> : null}
               </div>
             </div>
-          </button>
+          </div>
           <div className="flex items-center gap-1">
             <Button
               type="button"
               variant="ghost"
               size="icon"
+              className="group"
               onPointerDown={(event) => event.stopPropagation()}
-              onClick={onDelete}
+              onClick={(event) => {
+                event.stopPropagation();
+                void onDelete();
+              }}
               disabled={isBusy}
               aria-label={`Delete ${item.title || "plan item"}`}
             >
-              <Trash2 className="size-4" />
+              <Trash2 className="size-4 transition-colors group-hover:text-destructive" />
             </Button>
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 px-4 py-4 sm:hidden">
-          <div className="flex items-start gap-3">
-            <button type="button" onClick={onEdit} className="min-w-0 flex-1 text-left">
-              <div className="flex items-start justify-between gap-3">
-                <p className="min-w-0 text-base font-semibold leading-tight break-words">
-                  {item.title || "Untitled item"}
-                </p>
-                <Badge variant="secondary" className="shrink-0">
-                  {itemTypeLabel}
-                </Badge>
-              </div>
+        <div className="flex items-start gap-3 px-4 py-3 sm:hidden">
+          <div className="min-w-0 flex-1 text-left">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="min-w-0 break-words font-semibold">{item.title || "Untitled item"}</p>
               {item.arrangement ? (
-                <p className="text-muted-foreground mt-2 text-sm">{item.arrangement.name}</p>
+                <span className="text-muted-foreground/80 flex items-center gap-1 text-sm">
+                  <span aria-hidden="true" className="opacity-60">
+                    |
+                  </span>
+                  <span>{item.arrangement.name}</span>
+                </span>
               ) : null}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Badge variant="outline">{servicePositionLabel}</Badge>
-                {item.key ? <Badge variant="outline">{item.key.name}</Badge> : null}
-                {lengthLabel ? <Badge variant="outline">{lengthLabel}</Badge> : null}
+              {item.key ? (
+                <Badge
+                  variant="outline"
+                  className="h-6 min-w-6 rounded-full px-2 text-[11px] font-semibold shadow-xs"
+                >
+                  {item.key.name}
+                </Badge>
+              ) : null}
+              {lengthLabel ? <Badge variant="outline">{lengthLabel}</Badge> : null}
+            </div>
+            {item.description ? (
+              <div className="text-muted-foreground mt-1 flex flex-wrap gap-2 text-xs">
+                <span className="break-words">{item.description}</span>
               </div>
-              {item.description ? (
-                <p className="text-muted-foreground mt-3 text-sm leading-relaxed break-words">
-                  {item.description}
-                </p>
-              ) : null}
-            </button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="shrink-0"
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={onDelete}
-              disabled={isBusy}
-              aria-label={`Delete ${item.title || "plan item"}`}
-            >
-              <Trash2 className="size-4" />
-            </Button>
+            ) : null}
           </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="group shrink-0"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              void onDelete();
+            }}
+            disabled={isBusy}
+            aria-label={`Delete ${item.title || "plan item"}`}
+          >
+            <Trash2 className="size-4 transition-colors group-hover:text-destructive" />
+          </Button>
         </div>
       </div>
     </div>
