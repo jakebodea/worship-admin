@@ -22,7 +22,7 @@ import {
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { PlanItem } from "@/lib/types";
@@ -144,9 +144,11 @@ export function PlanItemEditDialog({
               {songOptionsLoading ? (
                 <Skeleton className="h-9 w-full" />
               ) : (
-                <Select
+                <NativeSelect
+                  wrapperClassName="w-full"
                   value={draft.arrangementId || NONE_VALUE}
-                  onValueChange={(value) => {
+                  onChange={(event) => {
+                    const value = event.target.value;
                     const normalizedValue = value === NONE_VALUE ? "" : value;
                     const nextArrangement =
                       arrangements.find((arrangement) => arrangement.id === normalizedValue) ?? null;
@@ -159,19 +161,14 @@ export function PlanItemEditDialog({
                     }));
                   }}
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select arrangement" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE_VALUE}>No arrangement</SelectItem>
-                    {arrangements.map((arrangement) => (
-                      <SelectItem key={arrangement.id} value={arrangement.id}>
-                        {arrangement.name}
-                        {arrangement.archived ? " (archived)" : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <NativeSelectOption value={NONE_VALUE}>No arrangement</NativeSelectOption>
+                  {arrangements.map((arrangement) => (
+                    <NativeSelectOption key={arrangement.id} value={arrangement.id}>
+                      {arrangement.name}
+                      {arrangement.archived ? " (archived)" : ""}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
               )}
             </Field>
           ) : null}
@@ -181,28 +178,24 @@ export function PlanItemEditDialog({
               {songOptionsLoading ? (
                 <Skeleton className="h-9 w-full" />
               ) : (
-                <Select
+                <NativeSelect
+                  wrapperClassName="w-full"
                   value={draft.keyId || NONE_VALUE}
-                  onValueChange={(value) =>
+                  onChange={(event) =>
                     setDraft((current) => ({
                       ...current,
-                      keyId: value === NONE_VALUE ? "" : value,
+                      keyId: event.target.value === NONE_VALUE ? "" : event.target.value,
                     }))
                   }
                   disabled={!selectedArrangement || keyOptions.length === 0}
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select key" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE_VALUE}>No key</SelectItem>
-                    {keyOptions.map((key) => (
-                      <SelectItem key={key.id} value={key.id}>
-                        {key.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <NativeSelectOption value={NONE_VALUE}>No key</NativeSelectOption>
+                  {keyOptions.map((key) => (
+                    <NativeSelectOption key={key.id} value={key.id}>
+                      {key.name}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
               )}
             </Field>
           ) : null}
@@ -216,19 +209,17 @@ export function PlanItemEditDialog({
           </Field>
 
           <Field label="Service Position">
-            <Select
+            <NativeSelect
+              wrapperClassName="w-full"
               value={draft.servicePosition}
-              onValueChange={(value) => setDraft((current) => ({ ...current, servicePosition: value }))}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, servicePosition: event.target.value }))
+              }
             >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select service position" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pre">Pre-service</SelectItem>
-                <SelectItem value="during">During service</SelectItem>
-                <SelectItem value="post">Post-service</SelectItem>
-              </SelectContent>
-            </Select>
+              <NativeSelectOption value="pre">Pre-service</NativeSelectOption>
+              <NativeSelectOption value="during">During service</NativeSelectOption>
+              <NativeSelectOption value="post">Post-service</NativeSelectOption>
+            </NativeSelect>
           </Field>
 
           <Field label="Description" className="lg:col-span-2">

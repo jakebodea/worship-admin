@@ -2,12 +2,9 @@
 
 import { useMemo } from "react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTeamPositions } from "@/hooks/use-team-positions";
 
@@ -76,37 +73,38 @@ export function PositionSelector({
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="flex-1">
           <label className="text-sm font-medium mb-2 block">Team</label>
-          <Select value={selectedTeam || ""} onValueChange={handleTeamChange}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select a team" />
-            </SelectTrigger>
-            <SelectContent>
-              {teamPositionGroups.map((group) => (
-                <SelectItem key={group.teamId} value={group.teamId}>
-                  {group.teamName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <NativeSelect
+            wrapperClassName="w-full"
+            value={selectedTeam || ""}
+            onChange={(event) => handleTeamChange(event.target.value)}
+          >
+            <NativeSelectOption value="" disabled>
+              Select a team
+            </NativeSelectOption>
+            {teamPositionGroups.map((group) => (
+              <NativeSelectOption key={group.teamId} value={group.teamId}>
+                {group.teamName}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
         </div>
         <div className="flex-1">
           <label className="text-sm font-medium mb-2 block">Position</label>
-          <Select
+          <NativeSelect
+            wrapperClassName="w-full"
             value={selectedPosition || ""}
-            onValueChange={onPositionChange}
+            onChange={(event) => onPositionChange(event.target.value)}
             disabled={!selectedTeam || availablePositions.length === 0}
           >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select a position" />
-            </SelectTrigger>
-            <SelectContent>
-              {availablePositions.map((position) => (
-                <SelectItem key={position.id} value={position.id}>
-                  {position.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <NativeSelectOption value="" disabled>
+              Select a position
+            </NativeSelectOption>
+            {availablePositions.map((position) => (
+              <NativeSelectOption key={position.id} value={position.id}>
+                {position.name}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
         </div>
       </div>
     </div>

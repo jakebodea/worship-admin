@@ -4,15 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { ServiceTypeMultiSelect } from "@/components/service-type-multi-select";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -293,17 +287,17 @@ export function ServicePlanTableSelector({
           onChange={setSelectedServiceTypeIds}
         />
 
-        <Select value={dateRangeFilter} onValueChange={(value) => setDateRangeFilter(value as DateRangeFilter)}>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Filter date range" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All loaded dates</SelectItem>
-            <SelectItem value="14">Next 14 days</SelectItem>
-            <SelectItem value="30">Next 30 days</SelectItem>
-            <SelectItem value="60">Next 60 days</SelectItem>
-          </SelectContent>
-        </Select>
+        <NativeSelect
+          wrapperClassName="w-full"
+          value={dateRangeFilter}
+          onChange={(event) => setDateRangeFilter(event.target.value as DateRangeFilter)}
+          aria-label="Filter date range"
+        >
+          <NativeSelectOption value="all">All loaded dates</NativeSelectOption>
+          <NativeSelectOption value="14">Next 14 days</NativeSelectOption>
+          <NativeSelectOption value="30">Next 30 days</NativeSelectOption>
+          <NativeSelectOption value="60">Next 60 days</NativeSelectOption>
+        </NativeSelect>
       </div>
 
       <div className="overflow-hidden rounded-lg border">
