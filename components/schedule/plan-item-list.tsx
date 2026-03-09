@@ -23,14 +23,7 @@ import { formatLength, getItemTone } from "@/components/schedule/plan-tab-helper
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DeleteConfirmationDialog } from "@/components/ui/delete-confirmation-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { reorderPlanItems } from "@/lib/plan-items-query-state";
@@ -105,43 +98,22 @@ export function PlanItemList({
 
   return (
     <>
-      <Dialog
+      <DeleteConfirmationDialog
         open={Boolean(itemIdPendingDelete && itemPendingDelete)}
         onOpenChange={(open) => {
           if (!open) {
             setItemIdPendingDelete(null);
           }
         }}
-      >
-        <DialogContent className="sm:max-w-md" showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>Delete item?</DialogTitle>
-            <DialogDescription>
-              {itemPendingDelete
-                ? `Remove "${itemPendingDelete.title || "Untitled item"}" from this plan? This action cannot be undone.`
-                : "Remove this item from the plan? This action cannot be undone."}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setItemIdPendingDelete(null)}
-              disabled={pendingItemId === itemIdPendingDelete}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => void handleConfirmDelete()}
-              disabled={pendingItemId === itemIdPendingDelete}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onConfirm={handleConfirmDelete}
+        isPending={pendingItemId === itemIdPendingDelete}
+        itemLabel={itemPendingDelete?.title || "Untitled item"}
+        description={
+          itemPendingDelete
+            ? `Remove "${itemPendingDelete.title || "Untitled item"}" from this plan? This action cannot be undone.`
+            : "Remove this item from the plan? This action cannot be undone."
+        }
+      />
 
       <ScrollArea className="min-h-0 flex-1">
         {isLoading ? (
