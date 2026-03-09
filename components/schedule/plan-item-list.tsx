@@ -19,15 +19,23 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { FileMusic, Music4, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Skeleton } from "@/components/ui/skeleton";
 import { formatLength, getItemTone } from "@/components/schedule/plan-tab-helpers";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { reorderPlanItems } from "@/lib/plan-items-query-state";
 import type { PlanItem } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 interface PlanItemListProps {
   items: PlanItem[];
@@ -53,8 +61,10 @@ export function PlanItemList({
   onReorderItems,
 }: PlanItemListProps) {
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  const [itemIdPendingDelete, setItemIdPendingDelete] = useState<string | null>(null);
   const reorderDisabled = pendingItemId === "reorder";
   const activeItem = items.find((item) => item.id === activeItemId) ?? null;
+  const itemPendingDelete = items.find((item) => item.id === itemIdPendingDelete) ?? null;
   const sensors = useSensors(
     useSensor(MouseSensor, {
       activationConstraint: { distance: 6 },
@@ -82,81 +92,135 @@ export function PlanItemList({
     await onReorderItems(nextItems);
   };
 
+  const handleConfirmDelete = async () => {
+    if (!itemIdPendingDelete) return;
+
+    try {
+      await onDeleteItem(itemIdPendingDelete);
+      setItemIdPendingDelete(null);
+    } catch {
+      // Errors are handled by the mutation toast; keep the dialog open.
+    }
+  };
+
   return (
-    <ScrollArea className="min-h-0 flex-1">
-      {isLoading ? (
-        <div className="space-y-3 pb-28 pr-0 sm:pb-6 sm:pr-3">
-          {Array.from({ length: 5 }).map((_, index) => (
-            <Skeleton key={index} className="h-32 w-full rounded-xl" />
-          ))}
-        </div>
-      ) : items.length === 0 ? (
-        <Card className="mx-0 border-dashed px-6 py-10 text-center sm:mr-3">
-          <div className="mx-auto flex max-w-md flex-col items-center gap-3">
-            <div className="bg-muted text-muted-foreground rounded-full p-3">
-              <FileMusic className="size-6" />
-            </div>
-            <div>
-              <p className="text-base font-semibold">This plan does not have any structure yet.</p>
-              <p className="text-muted-foreground mt-1 text-sm">
-                Start by adding a song, a header, or a custom item.
-              </p>
-            </div>
-            <div className="flex flex-wrap justify-center gap-2">
-              <Button type="button" onClick={onAddSong}>
-                <Music4 className="size-4" />
-                Add Song
-              </Button>
-              <Button type="button" variant="outline" onClick={onAddHeader}>
-                Add Header
-              </Button>
-              <Button type="button" variant="outline" onClick={onAddItem}>
-                Add Item
-              </Button>
-            </div>
+    <>
+      <Dialog
+        open={Boolean(itemIdPendingDelete && itemPendingDelete)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setItemIdPendingDelete(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Delete item?</DialogTitle>
+            <DialogDescription>
+              {itemPendingDelete
+                ? `Remove "${itemPendingDelete.title || "Untitled item"}" from this plan? This action cannot be undone.`
+                : "Remove this item from the plan? This action cannot be undone."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setItemIdPendingDelete(null)}
+              disabled={pendingItemId === itemIdPendingDelete}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleConfirmDelete()}
+              disabled={pendingItemId === itemIdPendingDelete}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ScrollArea className="min-h-0 flex-1">
+        {isLoading ? (
+          <div className="space-y-3 pb-28 pr-0 sm:pb-6 sm:pr-3">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <Skeleton key={index} className="h-32 w-full rounded-xl" />
+            ))}
           </div>
-        </Card>
-      ) : (
-        <DndContext
-          collisionDetection={closestCenter}
-          sensors={sensors}
-          onDragStart={handleDragStart}
-          onDragCancel={() => setActiveItemId(null)}
-          onDragEnd={(event) => void handleDragEnd(event)}
-        >
-          <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
-            <div className="pb-28 sm:pb-6 sm:pr-3">
-              <div className="overflow-hidden rounded-lg border bg-background">
-                {items.map((item) => (
-                  <SortablePlanItem
-                    key={item.id}
-                    item={item}
-                    isBusy={pendingItemId === item.id}
-                    isDragging={activeItemId === item.id}
-                    reorderDisabled={reorderDisabled}
-                    onEdit={() => onEditItem(item.id)}
-                    onDelete={() => onDeleteItem(item.id)}
-                  />
-                ))}
+        ) : items.length === 0 ? (
+          <Card className="mx-0 border-dashed px-6 py-10 text-center sm:mr-3">
+            <div className="mx-auto flex max-w-md flex-col items-center gap-3">
+              <div className="bg-muted text-muted-foreground rounded-full p-3">
+                <FileMusic className="size-6" />
+              </div>
+              <div>
+                <p className="text-base font-semibold">This plan does not have any structure yet.</p>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  Start by adding a song, a header, or a custom item.
+                </p>
+              </div>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button type="button" onClick={onAddSong}>
+                  <Music4 className="size-4" />
+                  Add Song
+                </Button>
+                <Button type="button" variant="outline" onClick={onAddHeader}>
+                  Add Header
+                </Button>
+                <Button type="button" variant="outline" onClick={onAddItem}>
+                  Add Item
+                </Button>
               </div>
             </div>
-          </SortableContext>
-          <DragOverlay zIndex={60}>
-            {activeItem ? (
-              <div className="overflow-hidden rounded-lg border bg-background rotate-[0.2deg] shadow-2xl">
-                <PlanItemCard
-                  item={activeItem}
-                  isBusy={pendingItemId === activeItem.id}
-                  isDragged
-                  onEdit={() => onEditItem(activeItem.id)}
-                  onDelete={() => onDeleteItem(activeItem.id)}
-                />
+          </Card>
+        ) : (
+          <DndContext
+            collisionDetection={closestCenter}
+            sensors={sensors}
+            onDragStart={handleDragStart}
+            onDragCancel={() => setActiveItemId(null)}
+            onDragEnd={(event) => void handleDragEnd(event)}
+          >
+            <SortableContext
+              items={items.map((item) => item.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="pb-28 sm:pb-6 sm:pr-3">
+                <div className="overflow-hidden rounded-lg border bg-background">
+                  {items.map((item) => (
+                    <SortablePlanItem
+                      key={item.id}
+                      item={item}
+                      isBusy={pendingItemId === item.id}
+                      isDragging={activeItemId === item.id}
+                      reorderDisabled={reorderDisabled}
+                      onEdit={() => onEditItem(item.id)}
+                      onDelete={() => setItemIdPendingDelete(item.id)}
+                    />
+                  ))}
+                </div>
               </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
-      )}
-    </ScrollArea>
+            </SortableContext>
+            <DragOverlay zIndex={60}>
+              {activeItem ? (
+                <div className="overflow-hidden rounded-lg border bg-background rotate-[0.2deg] shadow-2xl">
+                  <PlanItemCard
+                    item={activeItem}
+                    isBusy={pendingItemId === activeItem.id}
+                    isDragged
+                    onEdit={() => onEditItem(activeItem.id)}
+                    onDelete={() => setItemIdPendingDelete(activeItem.id)}
+                  />
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        )}
+      </ScrollArea>
+    </>
   );
 }
 
