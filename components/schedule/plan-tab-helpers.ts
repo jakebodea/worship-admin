@@ -108,6 +108,13 @@ export function getItemTypeLabel(item: PlanItem) {
   return item.itemType || "Item";
 }
 
+export function getServicePositionLabel(servicePosition: string | null | undefined) {
+  if (servicePosition === "pre") return "Pre-service";
+  if (servicePosition === "during") return "During service";
+  if (servicePosition === "post") return "Post-service";
+  return servicePosition || "Unassigned";
+}
+
 export function synchronizeDraftWithSongOptions(
   draft: DraftState,
   songOptions: SongOptionSet | null | undefined
