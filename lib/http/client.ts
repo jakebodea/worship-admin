@@ -1,4 +1,4 @@
-type JsonValue = unknown;
+import { mergeHeaders } from "@/lib/http/merge-headers";
 
 export class HttpClientError extends Error {
   readonly status: number;
@@ -14,7 +14,7 @@ export class HttpClientError extends Error {
 }
 
 async function parseError(response: Response): Promise<HttpClientError> {
-  let payload: JsonValue | null = null;
+  let payload: unknown = null;
   try {
     payload = await response.json();
   } catch {
@@ -72,13 +72,11 @@ export async function postJson<T>(
   body?: unknown,
   init?: Omit<RequestInit, "method" | "body">
 ): Promise<T> {
+  const { headers: initHeaders, ...rest } = init ?? {};
   return requestJson<T>(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers || {}),
-    },
-    ...init,
+    headers: mergeHeaders({ "Content-Type": "application/json" }, initHeaders),
+    ...rest,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 }
@@ -88,13 +86,11 @@ export async function patchJson<T>(
   body?: unknown,
   init?: Omit<RequestInit, "method" | "body">
 ): Promise<T> {
+  const { headers: initHeaders, ...rest } = init ?? {};
   return requestJson<T>(url, {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers || {}),
-    },
-    ...init,
+    headers: mergeHeaders({ "Content-Type": "application/json" }, initHeaders),
+    ...rest,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 }
@@ -104,13 +100,11 @@ export async function deleteJson<T>(
   body?: unknown,
   init?: Omit<RequestInit, "method" | "body">
 ): Promise<T> {
+  const { headers: initHeaders, ...rest } = init ?? {};
   return requestJson<T>(url, {
     method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers || {}),
-    },
-    ...init,
+    headers: mergeHeaders({ "Content-Type": "application/json" }, initHeaders),
+    ...rest,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 }

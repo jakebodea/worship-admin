@@ -163,7 +163,11 @@ describe("buildHistoryAndFrequencyForPerson", () => {
     );
 
     expect(result.serviceHistory).toHaveLength(2);
-    expect(result.serviceHistory.map((i) => i.timeType).sort()).toEqual(["rehearsal", "service"]);
+    expect(
+      result.serviceHistory
+        .map((i) => i.timeType)
+        .sort((a, b) => String(a).localeCompare(String(b)))
+    ).toEqual(["rehearsal", "service"]);
     expect(result.frequency.last30Days).toBe(1);
     expect(result.frequency.rehearsalLast30Days).toBe(1);
   });

@@ -72,8 +72,11 @@ export function PositionSelector({
       </div>
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="flex-1">
-          <label className="text-sm font-medium mb-2 block">Team</label>
+          <label htmlFor="position-selector-team" className="text-sm font-medium mb-2 block">
+            Team
+          </label>
           <NativeSelect
+            id="position-selector-team"
             wrapperClassName="w-full"
             value={selectedTeam || ""}
             onChange={(event) => handleTeamChange(event.target.value)}
@@ -89,8 +92,11 @@ export function PositionSelector({
           </NativeSelect>
         </div>
         <div className="flex-1">
-          <label className="text-sm font-medium mb-2 block">Position</label>
+          <label htmlFor="position-selector-position" className="text-sm font-medium mb-2 block">
+            Position
+          </label>
           <NativeSelect
+            id="position-selector-position"
             wrapperClassName="w-full"
             value={selectedPosition || ""}
             onChange={(event) => onPositionChange(event.target.value)}

@@ -18,7 +18,9 @@
 - `bun run dev`: start local Next.js dev server.
 - `bun run build`: production build.
 - `bun run start`: run built app.
-- `bun run lint`: run ESLint.
+- `bun run lint`: run Oxlint (type-aware + TypeScript diagnostics via `.oxlintrc.json`; plugins include React, Next.js, a11y, import, Vitest, Node, promise, and React performance). Uses `--report-unused-disable-directives-severity=warn`.
+- `bun run lint:ci`: same as `lint` with `--format github` for Action annotations (used by CI).
+- `bun run lint:fix`: run Oxlint with `--fix` (auto-fixes what the linter supports).
 - `bun run typecheck`: run TypeScript checks (`tsc --noEmit`).
 - `bun run test`: run Vitest test suite once.
 - `bun run test:watch`: run Vitest in watch mode.
@@ -30,7 +32,7 @@
 - Use `camelCase` for variables/functions, `PascalCase` for components/types.
 - Keep API routes as transport layers: validate with `zod`, return via `handleRoute(...)`.
 - Put business rules in use-cases, external API calls in services.
-- Follow existing formatting; use ESLint (`eslint.config.mjs`) as source of truth.
+- Follow existing formatting; use Oxlint (`.oxlintrc.json`) as source of truth.
 
 ## Testing Guidelines
 - Framework: Vitest (`*.test.ts` colocated in `lib/use-cases/planning-center/`).

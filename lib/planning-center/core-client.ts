@@ -1,4 +1,5 @@
 import type { PCApiResponse, PCResource } from "@/lib/types";
+import { mergeHeaders } from "@/lib/http/merge-headers";
 import { logger } from "@/lib/logger";
 import { getPlanningCenterRequestAccessToken } from "@/lib/planning-center/request-auth-context";
 
@@ -92,11 +93,13 @@ export class PlanningCenterCoreClient {
         const response = await fetch(url, {
           ...options,
           signal: controller.signal,
-          headers: {
-            Authorization: this.getAuthHeader(),
-            Accept: "application/json",
-            ...options.headers,
-          },
+          headers: mergeHeaders(
+            {
+              Authorization: this.getAuthHeader(),
+              Accept: "application/json",
+            },
+            options.headers
+          ),
         });
         clearTimeout(timeout);
 

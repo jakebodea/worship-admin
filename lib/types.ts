@@ -230,7 +230,8 @@ export interface RawPlanTime {
   attributes: {
     starts_at?: string;
     ends_at?: string;
-    time_type?: "service" | "rehearsal" | "other" | string;
+    /** Planning Center may send other values; handled as opaque string when parsing. */
+    time_type?: string;
   };
 }
 
@@ -279,8 +280,8 @@ export interface RawPlan {
   };
 }
 
-export type PlanItemType = "song" | "header" | "item" | "media" | string;
-export type PlanItemServicePosition = "pre" | "during" | "post" | string;
+export type PlanItemType = "song" | "header" | "item" | "media";
+export type PlanItemServicePosition = "pre" | "during" | "post";
 
 export interface PlanItemSong {
   id: string;

@@ -264,7 +264,7 @@ export function DashboardPage() {
   }, [collapsedTeamsByPlan]);
 
   const handleScheduleSuccess = () => {
-    queryClient.invalidateQueries({
+    void queryClient.invalidateQueries({
       queryKey: queryKeys.peopleForSlot(
         selectedServiceType?.id ?? null,
         selectedTeam,
@@ -273,7 +273,7 @@ export function DashboardPage() {
       ),
     });
 
-    queryClient.invalidateQueries({
+    void queryClient.invalidateQueries({
       queryKey: queryKeys.teamPositions(
         selectedServiceType?.id ?? null,
         selectedPlan?.id ?? null,
