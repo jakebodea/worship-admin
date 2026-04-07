@@ -47,7 +47,7 @@ export function usePeople(
       }
 
       if (dateObj && !isNaN(dateObj.getTime())) {
-        params.append("date", dateObj.toISOString().split("T")[0]);
+        params.append("date", dateObj.toISOString());
       }
 
       return getJson<PersonWithAvailability[]>(`/api/people?${params.toString()}`);

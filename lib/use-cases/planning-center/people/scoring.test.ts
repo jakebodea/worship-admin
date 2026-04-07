@@ -75,7 +75,7 @@ describe("scoreAndNormalizePeople", () => {
     );
 
     const people = [rehearsalHeavy, serviceHeavy];
-    scoreAndNormalizePeople(people, referenceDate);
+    scoreAndNormalizePeople(people, referenceDate, "UTC");
 
     expect((rehearsalHeavy.recommendationScore ?? 0)).toBeGreaterThan(
       serviceHeavy.recommendationScore ?? 0
@@ -90,7 +90,7 @@ describe("scoreAndNormalizePeople", () => {
     const cleanFrequency = person("clean", baseFrequency({}));
 
     const people = [missingFrequency, cleanFrequency];
-    scoreAndNormalizePeople(people, referenceDate);
+    scoreAndNormalizePeople(people, referenceDate, "UTC");
 
     expect(missingFrequency.recommendationScore).toBe(cleanFrequency.recommendationScore);
     expect(missingFrequency.recommendationReasoning?.join(" ")).toContain("No service history available");

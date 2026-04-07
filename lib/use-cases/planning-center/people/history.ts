@@ -1,4 +1,8 @@
 import { findIncluded } from "@/lib/planning-center/utils";
+import {
+  formatCalendarDayInTimeZone,
+  orgCalendarDaysRefMinusItem,
+} from "@/lib/planning-center/org-calendar";
 import type {
   PCResource,
   RawPlan,
@@ -224,7 +228,8 @@ function isRehearsalEngagement(item: ServiceHistoryItem) {
 
 export function buildFrequencyFromServiceHistory(
   serviceHistory: ServiceHistoryItem[],
-  referenceDate: Date
+  referenceDate: Date,
+  orgTimeZone: string
 ): ScheduleFrequency {
   const frequency = getDefaultFrequency();
   const pastServiceDates = new Set<string>();
@@ -241,10 +246,10 @@ export function buildFrequencyFromServiceHistory(
     { hasService: boolean; hasRehearsal: boolean; mostRecentService?: ServiceHistoryItem; mostRecentRehearsal?: ServiceHistoryItem }
   >();
 
+  const refDayKey = formatCalendarDayInTimeZone(referenceDate, orgTimeZone);
+
   for (const historyItem of serviceHistory) {
-    const normalized = new Date(historyItem.date);
-    normalized.setHours(0, 0, 0, 0);
-    const dayKey = normalized.toISOString().split("T")[0];
+    const dayKey = formatCalendarDayInTimeZone(historyItem.date, orgTimeZone);
 
     const serviceEngagement = isServiceEngagement(historyItem);
     const rehearsalEngagement = isRehearsalEngagement(historyItem);
@@ -266,10 +271,7 @@ export function buildFrequencyFromServiceHistory(
   }
 
   for (const [dayKey, flags] of dayFlags) {
-    const dayDate = new Date(`${dayKey}T00:00:00.000Z`);
-    const daysDiff = Math.floor(
-      (referenceDate.getTime() - dayDate.getTime()) / (1000 * 60 * 60 * 24)
-    );
+    const daysDiff = orgCalendarDaysRefMinusItem(dayKey, refDayKey);
 
     if (daysDiff >= 0) {
       if (flags.hasService) {
@@ -335,7 +337,8 @@ export function buildHistoryAndFrequencyForPerson(
   historyIncluded: PCResource[],
   referenceDate: Date,
   selectedMatchContext: SelectedPlanMatchContext,
-  historyLimit: number = 4
+  historyLimit: number = 4,
+  orgTimeZone: string
 ): HistoryBuildResult {
   let serviceHistory = mapSchedulesToServiceHistory(
     schedules,
@@ -345,11 +348,11 @@ export function buildHistoryAndFrequencyForPerson(
   const matchedSchedule = findMatchingScheduleForSelectedPosition(schedules, selectedMatchContext);
 
   serviceHistory.sort((a, b) => a.date.getTime() - b.date.getTime());
-  const frequency = buildFrequencyFromServiceHistory(serviceHistory, referenceDate);
+  const frequency = buildFrequencyFromServiceHistory(serviceHistory, referenceDate, orgTimeZone);
+  const refDayKey = formatCalendarDayInTimeZone(referenceDate, orgTimeZone);
   serviceHistory = serviceHistory.filter((item) => {
-    const daysDiff = Math.floor(
-      (referenceDate.getTime() - item.date.getTime()) / (1000 * 60 * 60 * 24)
-    );
+    const itemDayKey = formatCalendarDayInTimeZone(item.date, orgTimeZone);
+    const daysDiff = orgCalendarDaysRefMinusItem(itemDayKey, refDayKey);
     return daysDiff >= -14 && daysDiff <= 14;
   });
   if (Number.isFinite(historyLimit)) {
@@ -366,7 +369,8 @@ export function buildHistoryAndFrequencyForPlanPeople(
   referenceDate: Date,
   selectedMatchContext: SelectedPlanMatchContext,
   planTimeById: Map<string, RawPlanTime> = new Map(),
-  historyLimit: number = 4
+  historyLimit: number = 4,
+  orgTimeZone: string
 ): HistoryBuildResult {
   let serviceHistory = mapPlanPeopleToServiceHistory(
     planPeople,
@@ -380,11 +384,11 @@ export function buildHistoryAndFrequencyForPlanPeople(
   );
 
   serviceHistory.sort((a, b) => a.date.getTime() - b.date.getTime());
-  const frequency = buildFrequencyFromServiceHistory(serviceHistory, referenceDate);
+  const frequency = buildFrequencyFromServiceHistory(serviceHistory, referenceDate, orgTimeZone);
+  const refDayKey = formatCalendarDayInTimeZone(referenceDate, orgTimeZone);
   serviceHistory = serviceHistory.filter((item) => {
-    const daysDiff = Math.floor(
-      (referenceDate.getTime() - item.date.getTime()) / (1000 * 60 * 60 * 24)
-    );
+    const itemDayKey = formatCalendarDayInTimeZone(item.date, orgTimeZone);
+    const daysDiff = orgCalendarDaysRefMinusItem(itemDayKey, refDayKey);
     return daysDiff >= -14 && daysDiff <= 14;
   });
 

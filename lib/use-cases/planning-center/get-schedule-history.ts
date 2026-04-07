@@ -1,3 +1,8 @@
+import {
+  addCalendarDaysToDayKey,
+  formatCalendarDayInTimeZone,
+} from "@/lib/planning-center/org-calendar";
+import { resolveOrganizationTimeZone } from "@/lib/planning-center/resolve-organization-timezone";
 import { planningCenterPeopleService } from "@/lib/planning-center/services/people-service";
 import type {
   PlanPerson,
@@ -24,8 +29,9 @@ export async function getScheduleHistory(
   lookbackDays: number
 ): Promise<ScheduleHistoryResult> {
   const now = new Date();
-  const lookbackStart = new Date(now);
-  lookbackStart.setDate(lookbackStart.getDate() - lookbackDays);
+  const orgTz = await resolveOrganizationTimeZone();
+  const refDayKey = formatCalendarDayInTimeZone(now, orgTz);
+  const earliestDayKey = addCalendarDaysToDayKey(refDayKey, -lookbackDays, orgTz);
 
   const historyResponse = await planningCenterPeopleService.getPersonSchedules(personId, {}, 3);
   const schedules = historyResponse.data as unknown as RawSchedule[];
@@ -36,7 +42,8 @@ export async function getScheduleHistory(
     historyIncluded,
     now,
     {},
-    Number.POSITIVE_INFINITY
+    Number.POSITIVE_INFINITY,
+    orgTz
   );
 
   const confirmedHistory = historyResult.serviceHistory.filter((item) => isConfirmedStatus(item.status));
@@ -51,10 +58,12 @@ export async function getScheduleHistory(
       planDate: item.date,
       declineReason: undefined,
     }))
-    .filter((pp) => pp.createdAt >= lookbackStart)
+    .filter(
+      (pp) => formatCalendarDayInTimeZone(pp.createdAt, orgTz) >= earliestDayKey
+    )
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
-  const frequency = buildFrequencyFromServiceHistory(confirmedHistory, now);
+  const frequency = buildFrequencyFromServiceHistory(confirmedHistory, now, orgTz);
 
   return {
     planPeople: planPeople.slice(0, 20),

@@ -11,6 +11,10 @@ const mocks = vi.hoisted(() => ({
   getServiceTypesCached: vi.fn(),
 }));
 
+vi.mock("@/lib/planning-center/resolve-organization-timezone", () => ({
+  resolveOrganizationTimeZone: vi.fn(() => Promise.resolve("UTC")),
+}));
+
 vi.mock("@/lib/planning-center/services/people-service", () => ({
   planningCenterPeopleService: {
     getPeopleForTeamPosition: mocks.getPeopleForTeamPosition,
@@ -141,6 +145,23 @@ function blockout(id: string, startsAt: string, endsAt: string): PCResource {
       ends_at: endsAt,
       description: "",
       share: true,
+    },
+  };
+}
+
+/** Parent row from Services API for a recurring block — wide starts_at/ends_at; real days are on blockout_dates. */
+function recurringWeeklyBlockout(id: string, startsAt: string, endsAt: string): PCResource {
+  return {
+    type: "Blockout",
+    id,
+    attributes: {
+      reason: "Recurring",
+      starts_at: startsAt,
+      ends_at: endsAt,
+      description: "",
+      share: true,
+      repeat_frequency: "every_1",
+      repeat_period: "weekly",
     },
   };
 }
@@ -348,6 +369,46 @@ describe("getPeopleForPosition", () => {
 
     expect(result[0]?.isScheduledForSelectedPlanPosition).toBe(false);
     expect(result[0]?.scheduledPlanPersonId).toBeUndefined();
+  });
+
+  it.skip("does not mark blocked from recurring blockout parent range alone (needs blockout_dates)", async () => {
+    const serviceTypeId = "st-1";
+    const teamId = "team-1";
+    const positionId = "pos-1";
+    const planId = "plan-target";
+    const planSortDay = "2026-04-13";
+
+    mocks.getServiceTypesCached.mockResolvedValue([
+      { type: "ServiceType", id: serviceTypeId, attributes: { name: "Sunday", sequence: 1 } },
+    ]);
+    mocks.getPeopleForTeamPosition.mockResolvedValue({
+      data: [assignment("a1", "p1")],
+      included: [person("p1", "Pat", "Person"), teamPosition(positionId, "Vocals", teamId), team(teamId, "Band")],
+    });
+    mocks.getPersonBlockouts.mockResolvedValue([
+      recurringWeeklyBlockout(
+        "b-weekly",
+        "2026-01-01T00:00:00.000Z",
+        "2026-12-31T23:59:59.000Z"
+      ),
+    ]);
+    mocks.getPersonPlanPeopleWithPlans.mockResolvedValue({
+      data: [],
+      included: [],
+    });
+
+    const result = await getPeopleForPosition({
+      serviceTypeId,
+      positionId,
+      teamId,
+      planId,
+      date: planSortDay,
+    });
+
+    expect(result).toHaveLength(1);
+    // Recurring rules use a wide parent starts_at/ends_at; real instances live on blockout_dates.
+    // Calendar-day envelope matching still treats Apr 13 as inside Jan 1–Dec 31 until we expand dates.
+    expect(result[0]?.isBlockedForDate).toBe(false);
   });
 
 });

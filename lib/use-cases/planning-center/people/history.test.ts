@@ -109,7 +109,9 @@ describe("buildHistoryAndFrequencyForPerson", () => {
       schedules,
       included,
       referenceDate,
-      {}
+      {},
+      4,
+      "UTC"
     );
 
     expect(result.serviceHistory.some((item) => item.timeType === "service")).toBe(true);
@@ -151,7 +153,14 @@ describe("buildHistoryAndFrequencyForPerson", () => {
       },
     ] as PCResource[];
 
-    const result = buildHistoryAndFrequencyForPerson(schedules, included, referenceDate, {}, Number.POSITIVE_INFINITY);
+    const result = buildHistoryAndFrequencyForPerson(
+      schedules,
+      included,
+      referenceDate,
+      {},
+      Number.POSITIVE_INFINITY,
+      "UTC"
+    );
 
     expect(result.serviceHistory).toHaveLength(2);
     expect(result.serviceHistory.map((i) => i.timeType).sort()).toEqual(["rehearsal", "service"]);

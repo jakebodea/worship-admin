@@ -1,8 +1,10 @@
+import { orgCalendarDaysBetween } from "@/lib/planning-center/org-calendar";
 import type { PersonWithAvailability } from "@/lib/types";
 
 function calculateRecommendationScore(
   person: PersonWithAvailability,
-  referenceDate: Date
+  referenceDate: Date,
+  orgTimeZone: string
 ): { score: number; reasoning: string[] } {
   const frequency = person.frequency;
   const reasoning: string[] = [];
@@ -24,10 +26,7 @@ function calculateRecommendationScore(
 
   const baseScore = 100 - frequency.last30Days * 10;
   const daysSinceLastServed = frequency.lastServedDate
-    ? Math.floor(
-        (referenceDate.getTime() - frequency.lastServedDate.getTime()) /
-          (1000 * 60 * 60 * 24)
-      )
+    ? orgCalendarDaysBetween(frequency.lastServedDate, referenceDate, orgTimeZone)
     : 999;
   const recencyBonus = Math.min(Math.max(daysSinceLastServed, 0), 30);
   const upcomingPenalty = (frequency.upcomingServices || 0) * 20;
@@ -35,9 +34,10 @@ function calculateRecommendationScore(
 
   let proximityPenalty = 0;
   if (frequency.nextUpcomingDate) {
-    const daysUntilNext = Math.floor(
-      (frequency.nextUpcomingDate.getTime() - referenceDate.getTime()) /
-        (1000 * 60 * 60 * 24)
+    const daysUntilNext = orgCalendarDaysBetween(
+      referenceDate,
+      frequency.nextUpcomingDate,
+      orgTimeZone
     );
     if (daysUntilNext <= 7) proximityPenalty = 30;
     else if (daysUntilNext <= 14) proximityPenalty = 15;
@@ -45,9 +45,10 @@ function calculateRecommendationScore(
 
   let rehearsalProximityPenalty = 0;
   if (frequency.nextRehearsalDate) {
-    const daysUntilRehearsal = Math.floor(
-      (frequency.nextRehearsalDate.getTime() - referenceDate.getTime()) /
-        (1000 * 60 * 60 * 24)
+    const daysUntilRehearsal = orgCalendarDaysBetween(
+      referenceDate,
+      frequency.nextRehearsalDate,
+      orgTimeZone
     );
     if (daysUntilRehearsal <= 7) rehearsalProximityPenalty = 12;
     else if (daysUntilRehearsal <= 14) rehearsalProximityPenalty = 6;
@@ -75,9 +76,10 @@ function calculateRecommendationScore(
 
   if (frequency.upcomingServices > 0 && frequency.nextUpcomingDate) {
     const nextDateStr = formatDate(frequency.nextUpcomingDate);
-    const daysUntilNext = Math.floor(
-      (frequency.nextUpcomingDate.getTime() - referenceDate.getTime()) /
-        (1000 * 60 * 60 * 24)
+    const daysUntilNext = orgCalendarDaysBetween(
+      referenceDate,
+      frequency.nextUpcomingDate,
+      orgTimeZone
     );
     if (frequency.upcomingServices === 1) {
       reasoning.push(
@@ -98,9 +100,10 @@ function calculateRecommendationScore(
 
   if (frequency.upcomingRehearsals > 0 && frequency.nextRehearsalDate) {
     const nextRehearsalStr = formatDate(frequency.nextRehearsalDate);
-    const daysUntilRehearsal = Math.floor(
-      (frequency.nextRehearsalDate.getTime() - referenceDate.getTime()) /
-        (1000 * 60 * 60 * 24)
+    const daysUntilRehearsal = orgCalendarDaysBetween(
+      referenceDate,
+      frequency.nextRehearsalDate,
+      orgTimeZone
     );
     reasoning.push(
       frequency.upcomingRehearsals === 1
@@ -125,9 +128,17 @@ function calculateRecommendationScore(
   return { score: rawScore, reasoning };
 }
 
-export function scoreAndNormalizePeople(people: PersonWithAvailability[], referenceDate: Date) {
+export function scoreAndNormalizePeople(
+  people: PersonWithAvailability[],
+  referenceDate: Date,
+  orgTimeZone: string
+) {
   people.forEach((person) => {
-    const { score, reasoning } = calculateRecommendationScore(person, referenceDate);
+    const { score, reasoning } = calculateRecommendationScore(
+      person,
+      referenceDate,
+      orgTimeZone
+    );
     person.recommendationScore = score;
     person.recommendationReasoning = reasoning;
   });

@@ -5,6 +5,10 @@ const { getPersonSchedulesMock } = vi.hoisted(() => ({
   getPersonSchedulesMock: vi.fn(),
 }));
 
+vi.mock("@/lib/planning-center/resolve-organization-timezone", () => ({
+  resolveOrganizationTimeZone: vi.fn(() => Promise.resolve("UTC")),
+}));
+
 vi.mock("@/lib/planning-center/services/people-service", () => ({
   planningCenterPeopleService: {
     getPersonSchedules: getPersonSchedulesMock,
@@ -12,6 +16,7 @@ vi.mock("@/lib/planning-center/services/people-service", () => ({
 }));
 
 describe("getScheduleHistory", () => {
+
   it("includes confirmed records and computes frequency", async () => {
     const now = new Date();
     const iso = (offsetDays: number) => {

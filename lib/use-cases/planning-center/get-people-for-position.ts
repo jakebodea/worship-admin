@@ -1,3 +1,4 @@
+import { resolveOrganizationTimeZone } from "@/lib/planning-center/resolve-organization-timezone";
 import { planningCenterPeopleService } from "@/lib/planning-center/services/people-service";
 import {
   type PersonWithAvailability,
@@ -37,8 +38,10 @@ export async function getPeopleForPosition({
   planId,
   date,
 }: Params): Promise<PersonWithAvailability[]> {
-  const checkDate = date ? new Date(date) : null;
-  const referenceDate = checkDate || new Date();
+  const orgTimeZone = await resolveOrganizationTimeZone();
+  const planSortAt =
+    date && !Number.isNaN(new Date(date).getTime()) ? new Date(date) : null;
+  const referenceDate = planSortAt ?? new Date();
 
   const { data: assignmentsData, included: assignmentsIncluded } =
     await planningCenterPeopleService.getPeopleForTeamPosition(serviceTypeId, positionId);
@@ -69,7 +72,7 @@ export async function getPeopleForPosition({
     6,
     async (rawPerson): Promise<PersonWithAvailability> => {
       const person = createBasePerson(rawPerson);
-      const blockoutsPromise = buildBlockoutsPromise(rawPerson.id, checkDate);
+      const blockoutsPromise = buildBlockoutsPromise(rawPerson.id, planSortAt);
 
       try {
         const planPeopleResponse = await planningCenterPeopleService.getPersonPlanPeopleWithPlans(
@@ -123,7 +126,8 @@ export async function getPeopleForPosition({
           referenceDate,
           selectedMatchContext,
           planTimeById,
-          Number.POSITIVE_INFINITY
+          Number.POSITIVE_INFINITY,
+          orgTimeZone
         );
 
         person.frequency = historyResult.frequency;
@@ -135,13 +139,13 @@ export async function getPeopleForPosition({
       }
 
       const blockouts = await blockoutsPromise;
-      applyAvailability(person, blockouts, checkDate);
+      applyAvailability(person, blockouts, planSortAt);
 
       return person;
     }
   );
 
-  scoreAndNormalizePeople(peopleWithData, referenceDate);
+  scoreAndNormalizePeople(peopleWithData, referenceDate, orgTimeZone);
   sortPeopleForSelection(peopleWithData);
   return peopleWithData;
 }

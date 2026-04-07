@@ -16,10 +16,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useMyScheduledPlans } from "@/hooks/use-my-scheduled-plans";
+import { useOrganizationTimeZone } from "@/hooks/use-organization-timezone";
 import { useServiceTypes } from "@/hooks/use-service-types";
 import { createTeamPositionsQueryOptions } from "@/hooks/use-team-positions";
 import { getJson } from "@/lib/http/client";
 import { queryKeys } from "@/lib/query-keys";
+import {
+  addCalendarDaysToDayKey,
+  formatCalendarDayInTimeZone,
+} from "@/lib/planning-center/org-calendar";
 import type { Plan } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -59,19 +64,17 @@ function parsePlanDate(value: Date | string | undefined): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-function isInDateWindow(date: Date, range: DateRangeFilter): boolean {
+function isInDateWindow(date: Date, range: DateRangeFilter, orgTz: string): boolean {
   if (range === "all") return true;
 
   const days = Number(range);
   if (!Number.isFinite(days)) return true;
 
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
+  const nowKey = formatCalendarDayInTimeZone(new Date(), orgTz);
+  const maxKey = addCalendarDaysToDayKey(nowKey, days, orgTz);
+  const dateKey = formatCalendarDayInTimeZone(date, orgTz);
 
-  const max = new Date(now);
-  max.setDate(max.getDate() + days);
-
-  return date >= now && date <= max;
+  return dateKey >= nowKey && dateKey <= maxKey;
 }
 
 function readStoredServiceTypeIds(): string[] | null {
@@ -98,6 +101,7 @@ export function ServicePlanTableSelector({
 }: ServicePlanTableSelectorProps) {
   const queryClient = useQueryClient();
   const prefetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const orgTimeZone = useOrganizationTimeZone();
   const { data: serviceTypes, isLoading: serviceTypesLoading } = useServiceTypes();
 
   const planQueries = useQueries({
@@ -208,7 +212,7 @@ export function ServicePlanTableSelector({
         return false;
       }
 
-      if (!isInDateWindow(row.sortDate, dateRangeFilter)) {
+      if (!isInDateWindow(row.sortDate, dateRangeFilter, orgTimeZone)) {
         return false;
       }
 
@@ -227,7 +231,7 @@ export function ServicePlanTableSelector({
 
       return haystack.includes(normalizedSearch);
     });
-  }, [dateRangeFilter, rows, searchValue, selectedServiceTypeIdSet]);
+  }, [dateRangeFilter, orgTimeZone, rows, searchValue, selectedServiceTypeIdSet]);
 
   const plansLoading = planQueries.some((query) => query.isLoading);
   const isLoading = serviceTypesLoading || plansLoading;

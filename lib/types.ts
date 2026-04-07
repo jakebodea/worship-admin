@@ -122,6 +122,8 @@ export interface Blockout {
   endsAt: Date;
   description: string;
   share: boolean;
+  /** Services API `time_zone` — used for calendar-day blockout checks */
+  timeZone?: string | null;
 }
 
 export interface RawBlockout {
@@ -133,6 +135,7 @@ export interface RawBlockout {
     ends_at: string;
     description: string;
     share: boolean;
+    time_zone?: string | null;
   };
 }
 
@@ -491,6 +494,7 @@ export type FrequencyLevel = "low" | "medium" | "high";
 export interface PersonWithAvailability extends Person {
   availability?: AvailabilityStatus;
   frequency?: ScheduleFrequency;
+  /** Not sent from `/api/people` (use `isBlockedForDate` or `/api/blockouts/:id`). */
   blockouts?: Blockout[];
   serviceHistory?: ServiceHistoryItem[];
   isBlockedForDate?: boolean;

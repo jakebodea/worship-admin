@@ -1,8 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { getPlansForServiceType } from "@/lib/use-cases/planning-center/get-plans";
 
 const { getPlansInDateRangeMock } = vi.hoisted(() => ({
   getPlansInDateRangeMock: vi.fn(),
+}));
+
+vi.mock("@/lib/planning-center/resolve-organization-timezone", () => ({
+  resolveOrganizationTimeZone: vi.fn(() => Promise.resolve("UTC")),
 }));
 
 vi.mock("@/lib/planning-center/services/plans-service", () => ({
@@ -12,13 +16,12 @@ vi.mock("@/lib/planning-center/services/plans-service", () => ({
 }));
 
 describe("getPlansForServiceType", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("returns bounded, sorted plans from today through next 2 months", async () => {
-    const today = new Date();
-    const format = (offsetDays: number) => {
-      const d = new Date(today);
-      d.setDate(d.getDate() + offsetDays);
-      return d.toISOString();
-    };
+    vi.useFakeTimers({ now: new Date("2026-06-15T15:00:00.000Z") });
 
     getPlansInDateRangeMock.mockResolvedValue([
       {
@@ -26,8 +29,8 @@ describe("getPlansForServiceType", () => {
         type: "Plan",
         attributes: {
           title: "Today",
-          created_at: format(-10),
-          sort_date: format(0),
+          created_at: "2026-06-05T12:00:00.000Z",
+          sort_date: "2026-06-15T12:00:00.000Z",
         },
       },
       {
@@ -35,8 +38,8 @@ describe("getPlansForServiceType", () => {
         type: "Plan",
         attributes: {
           title: "Future",
-          created_at: format(-10),
-          sort_date: format(2),
+          created_at: "2026-06-05T12:00:00.000Z",
+          sort_date: "2026-06-17T12:00:00.000Z",
         },
       },
     ]);
@@ -46,10 +49,10 @@ describe("getPlansForServiceType", () => {
     expect(plans.map((p) => p.id)).toEqual(["today", "future-1"]);
     expect(getPlansInDateRangeMock).toHaveBeenCalledWith(
       "686882",
-      expect.any(Date),
-      expect.any(Date)
+      "2026-06-15",
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)
     );
-    const [, startDate, endDate] = getPlansInDateRangeMock.mock.calls[0];
-    expect(endDate.getTime()).toBeGreaterThan(startDate.getTime());
+    const [, afterKey, beforeKey] = getPlansInDateRangeMock.mock.calls[0]!;
+    expect(beforeKey >= afterKey).toBe(true);
   });
 });
