@@ -97,7 +97,7 @@ describe("getScheduleHistory", () => {
 
     const result = await getScheduleHistory("person-1", 90);
     expect(result.planPeople.map((p) => p.id)).toEqual(["sch-3", "sch-1"]);
-    expect(result.frequency.last30Days).toBe(2);
+    expect(result.frequency.recentServedDays).toBe(2);
     expect(result.frequency.totalServed).toBe(2);
   });
 });

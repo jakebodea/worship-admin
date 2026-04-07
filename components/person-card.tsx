@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { HttpClientError, postJson } from "@/lib/http/client";
-import type { PersonWithAvailability, ServiceHistoryItem } from "@/lib/types";
+import type { PersonWithAvailability, ScheduleFrequency, ServiceHistoryItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { AlertCircle, CalendarPlus, Loader2 } from "lucide-react";
 
@@ -57,6 +57,15 @@ const STATUS_STYLES: Record<
     cardClass: "",
   },
 };
+
+/** Distinct served / upcoming day counts (plan-relative; matches `ScheduleFrequency` + plan fetch window in use-cases). */
+function formatScheduleLoadLine(frequency: ScheduleFrequency | undefined): string | null {
+  if (!frequency) return null;
+  const served = frequency.recentServedDays;
+  const upcoming =
+    (frequency.upcomingServices ?? 0) + (frequency.upcomingRehearsals ?? 0);
+  return `${served} served | ${upcoming} upcoming`;
+}
 
 function toDate(value: Date | string | undefined) {
   if (value instanceof Date) return value;
@@ -192,10 +201,16 @@ function buildHistoryGroups(items: ServiceHistoryItem[]): HistoryGroup[] {
     existing.additionalServices.push(group.primary, ...group.additionalServices);
 
     const seenRehearsalIds = new Set(existing.rehearsals.map((item) => item.id));
+    const seenRehearsalDayKeys = new Set(
+      existing.rehearsals.map((r) => toDayKey(r.date)).filter((k): k is string => k != null)
+    );
     for (const rehearsal of group.rehearsals) {
       if (seenRehearsalIds.has(rehearsal.id)) continue;
+      const rehearsalDay = toDayKey(rehearsal.date);
+      if (rehearsalDay && seenRehearsalDayKeys.has(rehearsalDay)) continue;
       existing.rehearsals.push(rehearsal);
       seenRehearsalIds.add(rehearsal.id);
+      if (rehearsalDay) seenRehearsalDayKeys.add(rehearsalDay);
     }
   }
 
@@ -239,16 +254,18 @@ export function PersonCard({
   const isBlocked = !!person.isBlockedForDate;
   const serviceHistory = person.serviceHistory || [];
   const historyGroups = buildHistoryGroups(serviceHistory);
+  const frequency = person.frequency;
+  const scheduleLoadLine = formatScheduleLoadLine(frequency);
 
   const statusVariant: StatusVariant = isBlocked
     ? "blocked"
     : isDeclined
       ? "declined"
-    : isConfirmed
-      ? "confirmed"
-      : isScheduled
-        ? "scheduled"
-        : "available";
+      : isConfirmed
+        ? "confirmed"
+        : isScheduled
+          ? "scheduled"
+          : "available";
   const statusStyles = STATUS_STYLES[statusVariant];
 
   const recommendationPercentage =
@@ -431,15 +448,15 @@ export function PersonCard({
 
       <CardContent className="flex flex-1 flex-col space-y-3">
         <section className="space-y-1.5">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-start justify-between gap-2">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Recent Schedule History
+              Recent schedule
             </h4>
-            {historyGroups.length > 0 && (
-              <span className="text-[11px] text-muted-foreground">
-                {serviceHistory.length} recent
+            {scheduleLoadLine ? (
+              <span className="max-w-[14rem] text-right text-[11px] leading-snug text-muted-foreground">
+                {scheduleLoadLine}
               </span>
-            )}
+            ) : null}
           </div>
 
           {historyGroups.length === 0 ? (
@@ -490,9 +507,7 @@ export function PersonCard({
                             key={rehearsal.id}
                             className="rounded-sm bg-muted/40 px-2 py-1.5 text-[11px] text-muted-foreground"
                           >
-                            <div className="font-medium">
-                              {formatDisplayDate(rehearsal.date)}
-                            </div>
+                            <div className="font-medium">Rehearsal · {formatDisplayDate(rehearsal.date)}</div>
                           </div>
                         ))}
                       </div>

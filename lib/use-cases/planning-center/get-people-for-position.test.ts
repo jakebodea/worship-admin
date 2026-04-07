@@ -7,8 +7,10 @@ const mocks = vi.hoisted(() => ({
   getPersonBlockouts: vi.fn(),
   getPersonPlanPeopleWithPlans: vi.fn(),
   getPlanTimesForPlan: vi.fn(),
+  getPlanTeamMembers: vi.fn(),
   getPersonSchedules: vi.fn(),
   getServiceTypesCached: vi.fn(),
+  getPlansInDateRange: vi.fn(),
 }));
 
 vi.mock("@/lib/planning-center/resolve-organization-timezone", () => ({
@@ -21,7 +23,14 @@ vi.mock("@/lib/planning-center/services/people-service", () => ({
     getPersonBlockouts: mocks.getPersonBlockouts,
     getPersonPlanPeopleWithPlans: mocks.getPersonPlanPeopleWithPlans,
     getPlanTimesForPlan: mocks.getPlanTimesForPlan,
+    getPlanTeamMembers: mocks.getPlanTeamMembers,
     getPersonSchedules: mocks.getPersonSchedules,
+  },
+}));
+
+vi.mock("@/lib/planning-center/services/plans-service", () => ({
+  planningCenterPlansService: {
+    getPlansInDateRange: mocks.getPlansInDateRange,
   },
 }));
 
@@ -99,6 +108,31 @@ function plan(id: string, serviceTypeId: string, sortDate: string): PCResource {
   };
 }
 
+/** PlanPerson as returned from plan `team_members` (includes `person` relationship). */
+function planPersonFromTeamMembers(params: {
+  id: string;
+  personId: string;
+  planId: string;
+  teamId: string;
+  status: string;
+  teamPositionName: string;
+}): PCResource {
+  return {
+    type: "PlanPerson",
+    id: params.id,
+    attributes: {
+      status: params.status,
+      created_at: "2026-02-01T00:00:00Z",
+      team_position_name: params.teamPositionName,
+    },
+    relationships: {
+      plan: { data: { type: "Plan", id: params.planId } },
+      team: { data: { type: "Team", id: params.teamId } },
+      person: { data: { type: "Person", id: params.personId } },
+    },
+  };
+}
+
 function planPersonEntry(params: {
   id: string;
   planId: string;
@@ -170,6 +204,8 @@ describe("getPeopleForPosition", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getPlanTimesForPlan.mockResolvedValue([]);
+    mocks.getPlansInDateRange.mockResolvedValue([]);
+    mocks.getPlanTeamMembers.mockResolvedValue({ data: [], included: [] });
   });
 
   it("marks selected plan scheduled/confirmed flags and sorts confirmed/scheduled before available/blocked", async () => {
@@ -369,6 +405,73 @@ describe("getPeopleForPosition", () => {
 
     expect(result[0]?.isScheduledForSelectedPlanPosition).toBe(false);
     expect(result[0]?.scheduledPlanPersonId).toBeUndefined();
+  });
+
+  it("supplements history from paginated plan team_members when person plan_people is incomplete (PC gap)", async () => {
+    const serviceTypeId = "st-1";
+    const teamId = "team-1";
+    const positionId = "pos-bass";
+    const planEasterId = "plan-easter-am";
+    const personId = "p-michael";
+    const easterSortDay = "2026-04-05";
+
+    mocks.getServiceTypesCached.mockResolvedValue([
+      { type: "ServiceType", id: serviceTypeId, attributes: { name: "Sunday AM", sequence: 1 } },
+    ]);
+    mocks.getPlansInDateRange.mockImplementation(async (stId, _start, _end) => {
+      if (stId !== serviceTypeId) return [];
+      return [plan(planEasterId, serviceTypeId, easterSortDay)];
+    });
+    mocks.getPlanTeamMembers.mockImplementation(async (stId, planId) => {
+      if (stId !== serviceTypeId || planId !== planEasterId) {
+        return { data: [], included: [] };
+      }
+      return {
+        data: [
+          planPersonFromTeamMembers({
+            id: "pp-from-team-members",
+            personId,
+            planId: planEasterId,
+            teamId,
+            status: "C",
+            teamPositionName: "Band - Bass Guitar",
+          }),
+        ],
+        included: [team(teamId, "Band")],
+      };
+    });
+
+    mocks.getPeopleForTeamPosition.mockResolvedValue({
+      data: [assignment("a-michael", personId)],
+      included: [
+        person(personId, "Michael", "Bortis"),
+        teamPosition(positionId, "Bass Guitar", teamId),
+        team(teamId, "Band"),
+      ],
+    });
+    mocks.getPersonBlockouts.mockResolvedValue([]);
+    mocks.getPersonPlanPeopleWithPlans.mockResolvedValue({ data: [], included: [] });
+
+    const result = await getPeopleForPosition({
+      serviceTypeId,
+      positionId,
+      teamId,
+      planId: planEasterId,
+      date: easterSortDay,
+    });
+
+    expect(mocks.getPlanTeamMembers).toHaveBeenCalledWith(serviceTypeId, planEasterId);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toBeDefined();
+    const personRow = result[0]!;
+    expect(personRow.frequency).toBeDefined();
+    expect(personRow.serviceHistory).toBeDefined();
+    const historyRow = personRow.serviceHistory!.find(
+      (h) => h.teamPositionName === "Bass Guitar" && h.planTitle === `Plan ${planEasterId}`
+    );
+    expect(historyRow).toBeDefined();
+    expect(personRow.frequency!.totalServed).toBeGreaterThanOrEqual(1);
+    expect(personRow.frequency!.recentServedDays).toBeGreaterThanOrEqual(1);
   });
 
   it.skip("does not mark blocked from recurring blockout parent range alone (needs blockout_dates)", async () => {

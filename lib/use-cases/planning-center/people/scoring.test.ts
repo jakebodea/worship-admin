@@ -4,12 +4,12 @@ import { scoreAndNormalizePeople } from "@/lib/use-cases/planning-center/people/
 
 function baseFrequency(partial: Partial<ScheduleFrequency>): ScheduleFrequency {
   return {
-    last30Days: 0,
+    recentServedDays: 0,
     last60Days: 0,
     last90Days: 0,
     totalServed: 0,
     upcomingServices: 0,
-    rehearsalLast30Days: 0,
+    recentRehearsalOnlyDays: 0,
     rehearsalLast60Days: 0,
     rehearsalLast90Days: 0,
     totalRehearsals: 0,
@@ -59,7 +59,7 @@ describe("scoreAndNormalizePeople", () => {
         lastServedDate: new Date("2026-01-01T00:00:00Z"),
         upcomingRehearsals: 1,
         nextRehearsalDate: nextDate,
-        rehearsalLast30Days: 1,
+        recentRehearsalOnlyDays: 1,
         totalRehearsals: 1,
       })
     );

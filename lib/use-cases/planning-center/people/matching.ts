@@ -3,6 +3,13 @@ import type { SelectedPlanMatchContext } from "@/lib/use-cases/planning-center/p
 
 type SchedulableRecord = RawSchedule | RawPlanPerson;
 
+/** Planning Center Services: status `D` / "declined". Excluded from schedule history and load algorithms; matching still uses raw rows so the UI can show "Declined" for the selected plan. */
+export function isDeclinedAssignmentStatus(status: string | undefined): boolean {
+  const s = (status || "").trim();
+  const n = s.toLowerCase();
+  return s === "D" || n === "declined";
+}
+
 export function findMatchingScheduleForSelectedPosition<T extends SchedulableRecord>(
   schedules: T[],
   context: SelectedPlanMatchContext
@@ -47,8 +54,7 @@ export function applySelectedPlanStatus(
   const normalizedStatus = status.toLowerCase();
   person.isConfirmedForSelectedPlanPosition =
     status === "C" || normalizedStatus === "confirmed";
-  person.isDeclinedForSelectedPlanPosition =
-    status === "D" || normalizedStatus === "declined";
+  person.isDeclinedForSelectedPlanPosition = isDeclinedAssignmentStatus(status);
 
   const planPersonRel = (matchedSchedule.relationships as { plan_person?: { data?: { id: string } | { id: string }[] | null } } | undefined)
     ?.plan_person?.data;

@@ -50,3 +50,11 @@
 - React Query keys are centralized in `lib/query-keys.ts`; use them for hooks/invalidation.
 - Use `lib/http/client.ts` (`getJson`, `postJson`) for client-side API calls instead of ad hoc `fetch` code.
 - Backward compatibility is not a priority during the current dev phase; prefer cleaner APIs/URLs/UX over temporary compatibility shims unless explicitly requested.
+
+## Learned User Preferences
+- When replacing behavior, remove legacy or unused code paths instead of keeping parallel implementations.
+
+## Learned Workspace Facts
+- People availability and blockouts: compare the plan `sort_date` instant to blockouts using each blockout’s Planning Center `time_zone` (calendar-day logic); pass full ISO `date` from the client to `/api/people`. Naive UTC-midnight or date-only string overlap checks can mislabel people near timezone boundaries.
+- Congregation-local business dates (plan windows, schedule history frequency, calendar-day deltas) use the org IANA zone from `NEXT_PUBLIC_PLANNING_CENTER_TIME_ZONE` / `PLANNING_CENTER_TIME_ZONE` with shared helpers in `lib/planning-center/org-calendar.ts`.
+- Person card frequency labels should align with recommendation scoring: distinct calendar service/rehearsal days in org TZ, not raw plan-time row counts or grouped-card counts.
