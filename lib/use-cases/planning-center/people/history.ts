@@ -372,7 +372,10 @@ export function buildHistoryAndFrequencyForPerson(
   serviceHistory = serviceHistory.filter((item) => {
     const itemDayKey = formatCalendarDayInTimeZone(item.date, orgTimeZone);
     const daysDiff = orgCalendarDaysRefMinusItem(itemDayKey, refDayKey);
-    return daysDiff >= -14 && daysDiff <= 14;
+    return (
+      daysDiff >= -PLAN_HISTORY_HALF_RANGE_DAYS &&
+      daysDiff <= PLAN_HISTORY_HALF_RANGE_DAYS
+    );
   });
   if (Number.isFinite(historyLimit)) {
     serviceHistory =
@@ -409,7 +412,10 @@ export function buildHistoryAndFrequencyForPlanPeople(
   serviceHistory = serviceHistory.filter((item) => {
     const itemDayKey = formatCalendarDayInTimeZone(item.date, orgTimeZone);
     const daysDiff = orgCalendarDaysRefMinusItem(itemDayKey, refDayKey);
-    return daysDiff >= -14 && daysDiff <= 14;
+    return (
+      daysDiff >= -PLAN_HISTORY_HALF_RANGE_DAYS &&
+      daysDiff <= PLAN_HISTORY_HALF_RANGE_DAYS
+    );
   });
 
   if (Number.isFinite(historyLimit)) {

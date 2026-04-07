@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { HttpClientError, postJson } from "@/lib/http/client";
+import { PLAN_HISTORY_HALF_RANGE_DAYS } from "@/lib/planning-center/schedule-load-constants";
 import type { PersonWithAvailability, ScheduleFrequency, ServiceHistoryItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { AlertCircle, CalendarPlus, Loader2 } from "lucide-react";
@@ -58,10 +59,11 @@ const STATUS_STYLES: Record<
   },
 };
 
-/** Distinct served / upcoming day counts (plan-relative; matches `ScheduleFrequency` + plan fetch window in use-cases). */
+/** Distinct engagement days in the plan-history band (parity: past = service days + rehearsal-only days; future = same split). */
 function formatScheduleLoadLine(frequency: ScheduleFrequency | undefined): string | null {
   if (!frequency) return null;
-  const served = frequency.recentServedDays;
+  const served =
+    frequency.recentServedDays + (frequency.recentRehearsalOnlyDays ?? 0);
   const upcoming =
     (frequency.upcomingServices ?? 0) + (frequency.upcomingRehearsals ?? 0);
   return `${served} served | ${upcoming} upcoming`;
@@ -253,7 +255,9 @@ export function PersonCard({
   const isScheduled = !!person.isScheduledForSelectedPlanPosition || scheduleSuccess;
   const isBlocked = !!person.isBlockedForDate;
   const serviceHistory = person.serviceHistory || [];
-  const historyGroups = buildHistoryGroups(serviceHistory);
+  const historyGroups = [...buildHistoryGroups(serviceHistory)].sort(
+    (a, b) => toDate(a.primary.date).getTime() - toDate(b.primary.date).getTime()
+  );
   const frequency = person.frequency;
   const scheduleLoadLine = formatScheduleLoadLine(frequency);
 
@@ -453,9 +457,21 @@ export function PersonCard({
               Recent schedule
             </h4>
             {scheduleLoadLine ? (
-              <span className="max-w-[14rem] text-right text-[11px] leading-snug text-muted-foreground">
-                {scheduleLoadLine}
-              </span>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="max-w-[14rem] text-right text-[11px] leading-snug text-muted-foreground underline decoration-dotted decoration-muted-foreground/50 underline-offset-2"
+                  >
+                    {scheduleLoadLine}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72" align="end">
+                  <p className="text-sm text-muted-foreground">
+                    {`Total distinct days on the schedule (service or rehearsal), within ±${PLAN_HISTORY_HALF_RANGE_DAYS} days of this plan.`}
+                  </p>
+                </PopoverContent>
+              </Popover>
             ) : null}
           </div>
 

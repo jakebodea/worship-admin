@@ -466,7 +466,10 @@ export interface TeamPositionGroup {
 // Utility type for frequency tracking
 export interface ScheduleFrequency {
   // Past services (before the reference/plan date)
-  /** Distinct served days on/before plan within `PLAN_HISTORY_HALF_RANGE_DAYS` (matches plan/team fetch window). */
+  /**
+   * Distinct past calendar days with a service (on/before plan) within `PLAN_HISTORY_HALF_RANGE_DAYS`.
+   * For “days on the schedule” in the same band as upcoming, add `recentRehearsalOnlyDays` (disjoint).
+   */
   recentServedDays: number;
   last60Days: number;
   last90Days: number;
@@ -474,7 +477,7 @@ export interface ScheduleFrequency {
   totalServed: number; // Total past services
 
   // Past rehearsals (before the reference/plan date)
-  /** Rehearsal-only days on/before plan in the same short band as `recentServedDays`. */
+  /** Past days with rehearsal but no service, same band as `recentServedDays`; sum with that field for unique engagement days. */
   recentRehearsalOnlyDays: number;
   rehearsalLast60Days: number;
   rehearsalLast90Days: number;

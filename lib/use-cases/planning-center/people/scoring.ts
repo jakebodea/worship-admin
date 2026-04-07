@@ -116,9 +116,11 @@ function calculateRecommendationScore(
     else if (daysUntilRehearsal <= 14) reasoning.push(`Minor rehearsal penalty: rehearsal ${daysUntilRehearsal} days after`);
   }
 
-  if (frequency.recentServedDays >= 3) {
+  const recentEngagementDays =
+    frequency.recentServedDays + (frequency.recentRehearsalOnlyDays ?? 0);
+  if (recentEngagementDays >= 3) {
     reasoning.push(
-      `Ranked lower: served ${frequency.recentServedDays} days in the ${PLAN_HISTORY_HALF_RANGE_DAYS} days before this plan`
+      `Ranked lower: on the schedule ${recentEngagementDays} distinct days in the ${PLAN_HISTORY_HALF_RANGE_DAYS} days before this plan`
     );
   }
 
