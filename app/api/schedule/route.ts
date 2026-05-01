@@ -10,6 +10,7 @@ import {
   getActivityRequestContext,
   recordActivityEvent,
 } from "@/lib/db/activity-events";
+import { invalidateCandidateHistoryForPerson } from "@/lib/use-cases/planning-center/get-people-for-position";
 import type { RawTeamPosition, RawTeam } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -107,6 +108,7 @@ export async function POST(request: Request) {
         teamId,
         selectedPositionName
       );
+      invalidateCandidateHistoryForPerson(personId);
 
       const createdTeamPositionName = (data.attributes.team_position_name as string | undefined) || "";
       if (selectedPositionName && createdTeamPositionName) {

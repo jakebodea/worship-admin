@@ -1,7 +1,14 @@
 import type { PCResource } from "@/lib/types";
 import { PlanningCenterCoreClient } from "@/lib/planning-center/core-client";
+import { PlanningCenterReadCache, stableParams } from "@/lib/planning-center/services/read-cache";
+
+const ASSIGNMENTS_CACHE_TTL_MS = 5 * 60 * 1000;
+const PERSON_READ_CACHE_TTL_MS = 60 * 1000;
+const PLAN_TEAM_MEMBERS_CACHE_TTL_MS = 30 * 1000;
 
 export class PlanningCenterPeopleService {
+  private readonly cache = new PlanningCenterReadCache();
+
   constructor(private readonly core: PlanningCenterCoreClient) {}
 
   async getPeopleFromTeam(teamId: string): Promise<PCResource[]> {
@@ -70,37 +77,15 @@ export class PlanningCenterPeopleService {
     personId: string,
     params: Record<string, string> = {}
   ): Promise<PCResource[]> {
-    return this.core.fetchAll<PCResource>(
-      `/services/v2/people/${personId}/blockouts`,
-      params
+    return this.cache.get(
+      this.buildCacheKey("person-blockouts", personId, stableParams(params)),
+      PERSON_READ_CACHE_TTL_MS,
+      () =>
+        this.core.fetchAll<PCResource>(
+          `/services/v2/people/${personId}/blockouts`,
+          params
+        )
     );
-  }
-
-  async getPersonPlanPeople(
-    personId: string,
-    params: Record<string, string> = {}
-  ): Promise<PCResource[]> {
-    return this.core.fetchAll<PCResource>(
-      `/services/v2/people/${personId}/plan_people`,
-      params
-    );
-  }
-
-  async getPersonPlanPeopleWithPlans(
-    personId: string,
-    params: Record<string, string> = {},
-    maxPages: number = 2
-  ): Promise<{ data: PCResource[]; included: PCResource[] }> {
-    const response = await this.core.fetchAllWithIncluded<PCResource>(
-      `/services/v2/people/${personId}/plan_people`,
-      { ...params, include: "plan,team" },
-      maxPages
-    );
-
-    return {
-      data: response.data,
-      included: response.included || [],
-    };
   }
 
   async getPersonSchedules(
@@ -108,26 +93,21 @@ export class PlanningCenterPeopleService {
     params: Record<string, string> = {},
     maxPages: number = 2
   ): Promise<{ data: PCResource[]; included: PCResource[] }> {
-    const response = await this.core.fetchAllWithIncluded<PCResource>(
-      `/services/v2/people/${personId}/schedules`,
-      { include: "plan_times", ...params },
-      maxPages
-    );
+    return this.cache.get(
+      this.buildCacheKey("person-schedules", personId, stableParams(params), String(maxPages)),
+      PERSON_READ_CACHE_TTL_MS,
+      async () => {
+        const response = await this.core.fetchAllWithIncluded<PCResource>(
+          `/services/v2/people/${personId}/schedules`,
+          { include: "plan_times", ...params },
+          maxPages
+        );
 
-    return {
-      data: response.data,
-      included: response.included || [],
-    };
-  }
-
-  async getPlanTimesForPlan(
-    serviceTypeId: string,
-    planId: string,
-    params: Record<string, string> = {}
-  ): Promise<PCResource[]> {
-    return this.core.fetchAll<PCResource>(
-      `/services/v2/service_types/${serviceTypeId}/plans/${planId}/plan_times`,
-      params
+        return {
+          data: response.data,
+          included: response.included || [],
+        };
+      }
     );
   }
 
@@ -135,30 +115,44 @@ export class PlanningCenterPeopleService {
     serviceTypeId: string,
     positionId: string
   ): Promise<{ data: PCResource[]; included: PCResource[] }> {
-    const response = await this.core.fetch<PCResource[]>(
-      `/services/v2/service_types/${serviceTypeId}/team_positions/${positionId}/person_team_position_assignments?include=person,team_position`
-    );
+    return this.cache.get(
+      this.buildCacheKey("team-position-assignments", serviceTypeId, positionId),
+      ASSIGNMENTS_CACHE_TTL_MS,
+      async () => {
+        const response = await this.core.fetchAllWithIncluded<PCResource>(
+          `/services/v2/service_types/${serviceTypeId}/team_positions/${positionId}/person_team_position_assignments`,
+          { include: "person,team_position" },
+          10
+        );
 
-    return {
-      data: Array.isArray(response.data) ? response.data : [response.data],
-      included: response.included || [],
-    };
+        return {
+          data: response.data,
+          included: response.included || [],
+        };
+      }
+    );
   }
 
   async getPlanTeamMembers(
     serviceTypeId: string,
     planId: string
   ): Promise<{ data: PCResource[]; included: PCResource[] }> {
-    const response = await this.core.fetchAllWithIncluded<PCResource>(
-      `/services/v2/service_types/${serviceTypeId}/plans/${planId}/team_members`,
-      { include: "person,team,plan", per_page: "100" },
-      25
-    );
+    return this.cache.get(
+      this.buildCacheKey("plan-team-members", serviceTypeId, planId),
+      PLAN_TEAM_MEMBERS_CACHE_TTL_MS,
+      async () => {
+        const response = await this.core.fetchAllWithIncluded<PCResource>(
+          `/services/v2/service_types/${serviceTypeId}/plans/${planId}/team_members`,
+          { include: "person,team,plan", per_page: "100" },
+          25
+        );
 
-    return {
-      data: response.data,
-      included: response.included || [],
-    };
+        return {
+          data: response.data,
+          included: response.included || [],
+        };
+      }
+    );
   }
 
   async getPersonTeamPositionAssignments(
@@ -204,7 +198,47 @@ export class PlanningCenterPeopleService {
         }),
       }
     );
+    this.invalidateScheduleCaches({ personId, serviceTypeId, planId });
     return response.data;
+  }
+
+  private buildCacheKey(namespace: string, ...parts: string[]): string {
+    return [
+      this.core.getCacheScope(),
+      namespace,
+      ...parts.map((part) => encodeURIComponent(part)),
+    ].join(":");
+  }
+
+  getCacheScope(): string {
+    return this.core.getCacheScope();
+  }
+
+  private invalidateScheduleCaches({
+    personId,
+    serviceTypeId,
+    planId,
+  }: {
+    personId: string;
+    serviceTypeId: string;
+    planId: string;
+  }) {
+    const scope = this.core.getCacheScope();
+    const personSchedulesPrefix = [
+      scope,
+      "person-schedules",
+      encodeURIComponent(personId),
+      "",
+    ].join(":");
+    const planTeamMembersKey = this.buildCacheKey(
+      "plan-team-members",
+      serviceTypeId,
+      planId
+    );
+
+    this.cache.deleteWhere((key) => {
+      return key.startsWith(personSchedulesPrefix) || key === planTeamMembersKey;
+    });
   }
 }
 

@@ -378,7 +378,7 @@ export function PersonCard({
           ? "bg-red-500/10 border-red-500/30"
           : null;
   const scheduledElsewhereOverlayClass = isScheduledElsewhereOnService
-    ? "border-emerald-500/30"
+    ? "border-yellow-500/30 bg-yellow-500/10"
     : null;
   const scheduledForBadgeText =
     selectedPlanAssignments.length === 0
@@ -462,7 +462,7 @@ export function PersonCard({
               {scheduledForBadgeText ? (
                 <Badge
                   variant="outline"
-                  className="max-w-full border-emerald-500/40 bg-emerald-500/10 text-[11px] text-emerald-700"
+                  className="max-w-full border-yellow-500/40 bg-yellow-500/10 text-[11px] text-yellow-800"
                 >
                   <span className="truncate">Scheduled for: {scheduledForBadgeText}</span>
                 </Badge>

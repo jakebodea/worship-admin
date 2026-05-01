@@ -24,6 +24,25 @@ function parseTeamPositionName(
   };
 }
 
+function readScheduleTeamPositionParts(
+  schedule: SchedulableRecord
+): { teamName?: string; positionName: string } | null {
+  const parsed = parseTeamPositionName(
+    schedule.attributes.team_position_name as string | undefined
+  );
+  if (!parsed) return null;
+
+  const explicitTeamName =
+    typeof (schedule as RawSchedule).attributes.team_name === "string"
+      ? ((schedule as RawSchedule).attributes.team_name || "").trim()
+      : "";
+
+  return {
+    ...parsed,
+    teamName: parsed.teamName || explicitTeamName || undefined,
+  };
+}
+
 /** Planning Center Services: status `D` / "declined". Excluded from schedule history and load algorithms; matching still uses raw rows so the UI can show "Declined" for the selected plan. */
 export function isDeclinedAssignmentStatus(status: string | undefined): boolean {
   const s = (status || "").trim();
@@ -49,9 +68,7 @@ export function findMatchingScheduleForSelectedPosition<T extends SchedulableRec
       if (scheduleTeamId && scheduleTeamId !== teamId) return false;
     }
 
-    const parsed = parseTeamPositionName(
-      schedule.attributes.team_position_name as string | undefined
-    );
+    const parsed = readScheduleTeamPositionParts(schedule);
     if (!parsed) return false;
     if (selectedTeamName && parsed.teamName && parsed.teamName !== selectedTeamName) return false;
     return parsed.positionName === selectedPositionName;
@@ -74,9 +91,7 @@ export function getSelectedPlanAssignmentLabels<T extends SchedulableRecord>(
 
     if (isDeclinedAssignmentStatus(schedule.attributes.status as string | undefined)) continue;
 
-    const parsed = parseTeamPositionName(
-      schedule.attributes.team_position_name as string | undefined
-    );
+    const parsed = readScheduleTeamPositionParts(schedule);
     if (!parsed?.positionName) continue;
 
     labels.add(parsed.teamName ? `${parsed.teamName} - ${parsed.positionName}` : parsed.positionName);

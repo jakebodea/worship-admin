@@ -1,26 +1,31 @@
-import {
-  addCalendarDaysToDayKey,
-  formatCalendarDayInTimeZone,
-} from "@/lib/planning-center/org-calendar";
-import { PLAN_HISTORY_HALF_RANGE_DAYS } from "@/lib/planning-center/schedule-load-constants";
+import { formatCalendarDayInTimeZone } from "@/lib/planning-center/org-calendar";
 import { resolveOrganizationTimeZone } from "@/lib/planning-center/resolve-organization-timezone";
-import { planningCenterCatalogService } from "@/lib/planning-center/services/catalog-service";
+import { PlanningCenterReadCache } from "@/lib/planning-center/services/read-cache";
 import { planningCenterPeopleService } from "@/lib/planning-center/services/people-service";
-import { planningCenterPlansService } from "@/lib/planning-center/services/plans-service";
 import {
   type PersonWithAvailability,
-  type PCResource,
-  type RawPlanPerson,
-  type RawPlan,
-  type RawPlanTime,
+  type RawSchedule,
+  type ScheduleFrequency,
+  type ServiceHistoryItem,
 } from "@/lib/types";
 import {
   applySelectedPlanStatus,
+  findMatchingScheduleForSelectedPosition,
   getSelectedPlanAssignmentLabels,
 } from "@/lib/use-cases/planning-center/people/matching";
 import {
-  buildHistoryAndFrequencyForPlanPeople,
+  buildHistoryAndFrequencyForPerson,
 } from "@/lib/use-cases/planning-center/people/history";
+import {
+  emptyPlanSchedulingContext,
+  getPlanSchedulingContext,
+} from "@/lib/use-cases/planning-center/plan-scheduling-context";
+import {
+  applySelectedPlanRosterStatus,
+  getSelectedPlanRosterOverlay,
+  mergeAssignedAndSelectedPlanSlotPeople,
+  mergeAssignmentLabels,
+} from "@/lib/use-cases/planning-center/people/roster-overlay";
 import { scoreAndNormalizePeople, sortPeopleForSelection } from "@/lib/use-cases/planning-center/people/scoring";
 import {
   applyAvailability,
@@ -31,12 +36,17 @@ import {
   getDefaultFrequency,
 } from "@/lib/use-cases/planning-center/people/transforms";
 import { mapWithConcurrency } from "@/lib/use-cases/planning-center/shared";
-import { findIncluded } from "@/lib/planning-center/utils";
 
-/** PC team_member pages can be large; cap parallel fetches to reduce 429 risk vs fully unbounded `Promise.all`. */
-const TEAM_MEMBERS_PREFETCH_CONCURRENCY = 16;
-/** Per-person hydration (plan_people, blockouts, merge) — I/O-bound to Planning Center. */
-const PEOPLE_HYDRATION_CONCURRENCY = 10;
+/** Per-person hydration (schedules + blockouts) is Planning Center I/O-bound; keep bursts below the API window. */
+const PEOPLE_HYDRATION_CONCURRENCY = 4;
+const CANDIDATE_HISTORY_CACHE_TTL_MS = 60 * 1000;
+const candidateHistoryCache = new PlanningCenterReadCache();
+
+interface CandidateHistorySnapshot {
+  schedules: RawSchedule[];
+  frequency: ScheduleFrequency;
+  serviceHistory: ServiceHistoryItem[];
+}
 
 interface Params {
   serviceTypeId: string;
@@ -57,196 +67,76 @@ export async function getPeopleForPosition({
     date && !Number.isNaN(new Date(date).getTime()) ? new Date(date) : null;
   const referenceDate = planSortAt ?? new Date();
 
-  const [orgTimeZone, assignmentsResponse, serviceTypes] = await Promise.all([
+  const [orgTimeZone, assignmentsResponse, planSchedulingContext] = await Promise.all([
     resolveOrganizationTimeZone(),
     planningCenterPeopleService.getPeopleForTeamPosition(serviceTypeId, positionId),
-    planningCenterCatalogService.getServiceTypesCached(),
+    planId
+      ? getPlanSchedulingContext({ serviceTypeId, planId }).catch(() =>
+          emptyPlanSchedulingContext(serviceTypeId, planId)
+        )
+      : Promise.resolve(emptyPlanSchedulingContext(serviceTypeId, "")),
   ]);
 
   const { data: assignmentsData, included: assignmentsIncluded } = assignmentsResponse;
 
   const assignedPeople = getAssignedPeopleFromAssignments(assignmentsData, assignmentsIncluded);
-  const activePeople = assignedPeople.filter((person) => !person.attributes.archived_at);
   const selectedMatchContext = buildSelectedPlanMatchContext(
     assignmentsIncluded,
     positionId,
     teamId,
     planId
   );
-  const planTimesCache = new Map<string, Promise<PCResource[]>>();
-
-  const getPlanTimesForPlanCached = (planServiceTypeId: string, planIdValue: string) => {
-    const key = `${planServiceTypeId}:${planIdValue}`;
-    const existing = planTimesCache.get(key);
-    if (existing) return existing;
-    const promise = planningCenterPeopleService
-      .getPlanTimesForPlan(planServiceTypeId, planIdValue)
-      .catch(() => []);
-    planTimesCache.set(key, promise);
-    return promise;
-  };
-
-  const refDayKey = formatCalendarDayInTimeZone(referenceDate, orgTimeZone);
-  const historyWindowStart = addCalendarDaysToDayKey(
-    refDayKey,
-    -PLAN_HISTORY_HALF_RANGE_DAYS,
-    orgTimeZone
-  );
-  const historyWindowEnd = addCalendarDaysToDayKey(
-    refDayKey,
-    PLAN_HISTORY_HALF_RANGE_DAYS,
-    orgTimeZone
-  );
-  const plansInHistoryWindowByServiceType = new Map<string, PCResource[]>();
-  await Promise.all(
-    serviceTypes.map(async (st) => {
-      const stId = String(st.id);
-      const plans = await planningCenterPlansService.getPlansInDateRange(
-        stId,
-        historyWindowStart,
-        historyWindowEnd
-      );
-      plansInHistoryWindowByServiceType.set(stId, plans);
-    })
-  );
-
-  const teamMembersByPlanCache = new Map<
-    string,
-    Promise<{ data: PCResource[]; included: PCResource[] }>
-  >();
-  function loadTeamMembersForPlan(stId: string, planId: string) {
-    const key = `${stId}:${planId}`;
-    let promise = teamMembersByPlanCache.get(key);
-    if (!promise) {
-      promise = planningCenterPeopleService.getPlanTeamMembers(stId, planId);
-      teamMembersByPlanCache.set(key, promise);
-    }
-    return promise;
-  }
-
-  const planKeysForTeamPrefetch = [...plansInHistoryWindowByServiceType.entries()].flatMap(
-    ([stId, plans]) => plans.map((plan) => [stId, String(plan.id)] as const)
-  );
-  await mapWithConcurrency(planKeysForTeamPrefetch, TEAM_MEMBERS_PREFETCH_CONCURRENCY, ([stId, pId]) =>
-    loadTeamMembersForPlan(stId, pId)
-  );
-
-  function mergeIncludedResources(target: PCResource[], extras: PCResource[]) {
-    const seen = new Set(target.map((r) => `${r.type}:${r.id}`));
-    for (const r of extras) {
-      const k = `${r.type}:${r.id}`;
-      if (seen.has(k)) continue;
-      seen.add(k);
-      target.push(r);
-    }
-  }
-
-  function personIdFromPlanPerson(pp: RawPlanPerson): string | undefined {
-    const rel = pp.relationships?.person?.data;
-    if (Array.isArray(rel)) return rel[0]?.id;
-    if (rel && typeof rel === "object" && "id" in rel) return (rel as { id: string }).id;
-    return undefined;
-  }
-
+  const activePeople = mergeAssignedAndSelectedPlanSlotPeople({
+    assignedPeople,
+    planSchedulingContext,
+    selectedMatchContext,
+  }).filter((person) => !person.attributes.archived_at);
   const peopleWithData = await mapWithConcurrency(
     activePeople,
     PEOPLE_HYDRATION_CONCURRENCY,
     async (rawPerson): Promise<PersonWithAvailability> => {
       const person = createBasePerson(rawPerson);
       const blockoutsPromise = buildBlockoutsPromise(rawPerson.id, planSortAt);
+      const rosterOverlay = getSelectedPlanRosterOverlay(
+        planSchedulingContext,
+        rawPerson.id,
+        selectedMatchContext
+      );
 
       try {
-        const planPeopleResponse = await planningCenterPeopleService.getPersonPlanPeopleWithPlans(
+        const historySnapshot = await getCandidateHistorySnapshot(
           rawPerson.id,
-          {},
-          2
-        );
-        let mergedPlanPeople = planPeopleResponse.data as unknown as RawPlanPerson[];
-        let historyIncluded = [...(planPeopleResponse.included || [])];
-        const seenPlanPersonIds = new Set(mergedPlanPeople.map((pp) => String(pp.id)));
-
-        for (const [stId, plans] of plansInHistoryWindowByServiceType) {
-          for (const plan of plans) {
-            const planId = String(plan.id);
-            const { data: members, included: memberIncluded } = await loadTeamMembersForPlan(
-              stId,
-              planId
-            );
-            mergeIncludedResources(historyIncluded, [plan]);
-            mergeIncludedResources(historyIncluded, memberIncluded);
-
-            for (const m of members) {
-              const mp = m as unknown as RawPlanPerson;
-              if (personIdFromPlanPerson(mp) !== rawPerson.id) continue;
-              const mid = String(m.id);
-              if (seenPlanPersonIds.has(mid)) continue;
-              seenPlanPersonIds.add(mid);
-              mergedPlanPeople.push(mp);
-            }
-          }
-        }
-
-        const planPeople = mergedPlanPeople;
-
-        const uniquePlanKeys = new Map<string, { serviceTypeId: string; planId: string }>();
-        for (const pp of planPeople) {
-          const timesLen = Array.isArray(pp.relationships?.times?.data)
-            ? pp.relationships?.times?.data.length
-            : 0;
-          const serviceTimesLen = Array.isArray(pp.relationships?.service_times?.data)
-            ? pp.relationships?.service_times?.data.length
-            : 0;
-          const couldHaveRehearsalOrOtherTimes = timesLen > serviceTimesLen;
-          if (!couldHaveRehearsalOrOtherTimes) {
-            continue;
-          }
-
-          const planRel = pp.relationships?.plan?.data;
-          const ppPlanId = Array.isArray(planRel) ? planRel[0]?.id : planRel?.id;
-          if (!ppPlanId) continue;
-          const plan = findIncluded(historyIncluded, "Plan", ppPlanId) as RawPlan | undefined;
-          const stRel = plan?.relationships?.service_type?.data;
-          const ppServiceTypeId = Array.isArray(stRel) ? stRel[0]?.id : stRel?.id;
-          if (!ppServiceTypeId) continue;
-          uniquePlanKeys.set(`${ppServiceTypeId}:${ppPlanId}`, {
-            serviceTypeId: ppServiceTypeId,
-            planId: ppPlanId,
-          });
-        }
-
-        const planTimesLists = await Promise.all(
-          [...uniquePlanKeys.values()].map(({ serviceTypeId: stId, planId: pId }) =>
-            getPlanTimesForPlanCached(stId, pId)
-          )
-        );
-        const planTimeById = new Map<string, RawPlanTime>();
-        for (const list of planTimesLists) {
-          for (const resource of list) {
-            if (resource.type !== "PlanTime") continue;
-            planTimeById.set(resource.id, resource as unknown as RawPlanTime);
-          }
-        }
-
-        const historyResult = buildHistoryAndFrequencyForPlanPeople(
-          planPeople,
-          historyIncluded,
           referenceDate,
-          selectedMatchContext,
-          planTimeById,
-          Number.POSITIVE_INFINITY,
           orgTimeZone
         );
 
-        person.frequency = historyResult.frequency;
-        person.serviceHistory = historyResult.serviceHistory;
-        applySelectedPlanStatus(
-          person,
-          historyResult.matchedSchedule,
-          getSelectedPlanAssignmentLabels(planPeople, selectedMatchContext)
+        person.frequency = historySnapshot.frequency;
+        person.serviceHistory = historySnapshot.serviceHistory;
+        const scheduleLabels = getSelectedPlanAssignmentLabels(
+          historySnapshot.schedules,
+          selectedMatchContext
         );
+        const combinedLabels = mergeAssignmentLabels(
+          rosterOverlay.assignmentLabels,
+          scheduleLabels
+        );
+
+        if (rosterOverlay.selectedSlotEntry) {
+          applySelectedPlanRosterStatus(person, rosterOverlay, combinedLabels);
+        } else {
+          applySelectedPlanStatus(
+            person,
+            findMatchingScheduleForSelectedPosition(
+              historySnapshot.schedules,
+              selectedMatchContext
+            ),
+            combinedLabels
+          );
+        }
       } catch {
         person.frequency = getDefaultFrequency();
         person.serviceHistory = [];
+        applySelectedPlanRosterStatus(person, rosterOverlay);
       }
 
       const blockouts = await blockoutsPromise;
@@ -259,4 +149,54 @@ export async function getPeopleForPosition({
   scoreAndNormalizePeople(peopleWithData, referenceDate, orgTimeZone);
   sortPeopleForSelection(peopleWithData);
   return peopleWithData;
+}
+
+async function getCandidateHistorySnapshot(
+  personId: string,
+  referenceDate: Date,
+  orgTimeZone: string
+): Promise<CandidateHistorySnapshot> {
+  const refDayKey = formatCalendarDayInTimeZone(referenceDate, orgTimeZone);
+  const cacheKey = [
+    planningCenterPeopleService.getCacheScope(),
+    "candidate-history",
+    encodeURIComponent(personId),
+    encodeURIComponent(orgTimeZone),
+    refDayKey,
+  ].join(":");
+
+  return candidateHistoryCache.get(cacheKey, CANDIDATE_HISTORY_CACHE_TTL_MS, async () => {
+    const scheduleResponse = await planningCenterPeopleService.getPersonSchedules(
+      personId,
+      { order: "-starts_at" },
+      2
+    );
+    const schedules = scheduleResponse.data as unknown as RawSchedule[];
+    const historyResult = buildHistoryAndFrequencyForPerson(
+      schedules,
+      scheduleResponse.included || [],
+      referenceDate,
+      {},
+      Number.POSITIVE_INFINITY,
+      orgTimeZone
+    );
+
+    return {
+      schedules,
+      frequency: historyResult.frequency,
+      serviceHistory: historyResult.serviceHistory,
+    };
+  });
+}
+
+export function invalidateCandidateHistoryForPerson(personId: string) {
+  const scope = planningCenterPeopleService.getCacheScope();
+  const prefix = [
+    scope,
+    "candidate-history",
+    encodeURIComponent(personId),
+    "",
+  ].join(":");
+
+  candidateHistoryCache.deleteWhere((key) => key.startsWith(prefix));
 }
