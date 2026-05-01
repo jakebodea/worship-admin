@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { HttpClientError, postJson } from "@/lib/http/client";
-import type { PersonWithAvailability, ServiceHistoryItem } from "@/lib/types";
+import { PLAN_HISTORY_HALF_RANGE_DAYS } from "@/lib/planning-center/schedule-load-constants";
+import type { PersonWithAvailability, ScheduleFrequency, ServiceHistoryItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { AlertCircle, CalendarPlus, Loader2 } from "lucide-react";
 
@@ -57,6 +58,16 @@ const STATUS_STYLES: Record<
     cardClass: "",
   },
 };
+
+/** Distinct engagement days in the plan-history band (parity: past = service days + rehearsal-only days; future = same split). */
+function formatScheduleLoadLine(frequency: ScheduleFrequency | undefined): string | null {
+  if (!frequency) return null;
+  const served =
+    frequency.recentServedDays + (frequency.recentRehearsalOnlyDays ?? 0);
+  const upcoming =
+    (frequency.upcomingServices ?? 0) + (frequency.upcomingRehearsals ?? 0);
+  return `${served} served | ${upcoming} upcoming`;
+}
 
 function toDate(value: Date | string | undefined) {
   if (value instanceof Date) return value;
@@ -192,10 +203,16 @@ function buildHistoryGroups(items: ServiceHistoryItem[]): HistoryGroup[] {
     existing.additionalServices.push(group.primary, ...group.additionalServices);
 
     const seenRehearsalIds = new Set(existing.rehearsals.map((item) => item.id));
+    const seenRehearsalDayKeys = new Set(
+      existing.rehearsals.map((r) => toDayKey(r.date)).filter((k): k is string => k != null)
+    );
     for (const rehearsal of group.rehearsals) {
       if (seenRehearsalIds.has(rehearsal.id)) continue;
+      const rehearsalDay = toDayKey(rehearsal.date);
+      if (rehearsalDay && seenRehearsalDayKeys.has(rehearsalDay)) continue;
       existing.rehearsals.push(rehearsal);
       seenRehearsalIds.add(rehearsal.id);
+      if (rehearsalDay) seenRehearsalDayKeys.add(rehearsalDay);
     }
   }
 
@@ -237,18 +254,25 @@ export function PersonCard({
   const isDeclined = !!person.isDeclinedForSelectedPlanPosition;
   const isScheduled = !!person.isScheduledForSelectedPlanPosition || scheduleSuccess;
   const isBlocked = !!person.isBlockedForDate;
+  const selectedPlanAssignments = person.selectedPlanAssignmentLabels ?? [];
+  const isScheduledElsewhereOnService =
+    !isScheduled && !isDeclined && selectedPlanAssignments.length > 0;
   const serviceHistory = person.serviceHistory || [];
-  const historyGroups = buildHistoryGroups(serviceHistory);
+  const historyGroups = [...buildHistoryGroups(serviceHistory)].sort(
+    (a, b) => toDate(a.primary.date).getTime() - toDate(b.primary.date).getTime()
+  );
+  const frequency = person.frequency;
+  const scheduleLoadLine = formatScheduleLoadLine(frequency);
 
   const statusVariant: StatusVariant = isBlocked
     ? "blocked"
     : isDeclined
       ? "declined"
-    : isConfirmed
-      ? "confirmed"
-      : isScheduled
-        ? "scheduled"
-        : "available";
+      : isConfirmed
+        ? "confirmed"
+        : isScheduled
+          ? "scheduled"
+          : "available";
   const statusStyles = STATUS_STYLES[statusVariant];
 
   const recommendationPercentage =
@@ -353,6 +377,15 @@ export function PersonCard({
         : statusVariant === "blocked" || statusVariant === "declined"
           ? "bg-red-500/10 border-red-500/30"
           : null;
+  const scheduledElsewhereOverlayClass = isScheduledElsewhereOnService
+    ? "border-emerald-500/30"
+    : null;
+  const scheduledForBadgeText =
+    selectedPlanAssignments.length === 0
+      ? null
+      : selectedPlanAssignments.length === 1
+        ? selectedPlanAssignments[0]
+        : `${selectedPlanAssignments[0]} +${selectedPlanAssignments.length - 1} more`;
 
   return (
     <Card
@@ -366,6 +399,14 @@ export function PersonCard({
           className={cn(
             "pointer-events-none absolute inset-0 z-10 rounded-lg border-2",
             statusOverlayClass
+          )}
+        />
+      ) : null}
+      {!statusOverlayClass && scheduledElsewhereOverlayClass ? (
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-0 z-10 rounded-lg border-2",
+            scheduledElsewhereOverlayClass
           )}
         />
       ) : null}
@@ -418,6 +459,14 @@ export function PersonCard({
                   </PopoverContent>
                 </Popover>
               )}
+              {scheduledForBadgeText ? (
+                <Badge
+                  variant="outline"
+                  className="max-w-full border-emerald-500/40 bg-emerald-500/10 text-[11px] text-emerald-700"
+                >
+                  <span className="truncate">Scheduled for: {scheduledForBadgeText}</span>
+                </Badge>
+              ) : null}
               {scheduleError && (
                 <Badge variant="outline" className="text-[11px] border-red-500/40 bg-red-500/10 text-red-700">
                   <AlertCircle className="mr-1 h-3 w-3" />
@@ -431,15 +480,27 @@ export function PersonCard({
 
       <CardContent className="flex flex-1 flex-col space-y-3">
         <section className="space-y-1.5">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-start justify-between gap-2">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Recent Schedule History
+              Recent schedule
             </h4>
-            {historyGroups.length > 0 && (
-              <span className="text-[11px] text-muted-foreground">
-                {serviceHistory.length} recent
-              </span>
-            )}
+            {scheduleLoadLine ? (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="max-w-[14rem] text-right text-[11px] leading-snug text-muted-foreground underline decoration-dotted decoration-muted-foreground/50 underline-offset-2"
+                  >
+                    {scheduleLoadLine}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72" align="end">
+                  <p className="text-sm text-muted-foreground">
+                    {`Total distinct days on the schedule (service or rehearsal), within ±${PLAN_HISTORY_HALF_RANGE_DAYS} days of this plan.`}
+                  </p>
+                </PopoverContent>
+              </Popover>
+            ) : null}
           </div>
 
           {historyGroups.length === 0 ? (
@@ -490,9 +551,7 @@ export function PersonCard({
                             key={rehearsal.id}
                             className="rounded-sm bg-muted/40 px-2 py-1.5 text-[11px] text-muted-foreground"
                           >
-                            <div className="font-medium">
-                              {formatDisplayDate(rehearsal.date)}
-                            </div>
+                            <div className="font-medium">Rehearsal · {formatDisplayDate(rehearsal.date)}</div>
                           </div>
                         ))}
                       </div>

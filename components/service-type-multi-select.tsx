@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,6 +40,7 @@ export function ServiceTypeMultiSelect({
   selectedIds,
   onChange,
 }: ServiceTypeMultiSelectProps) {
+  const listId = useId();
   const [open, setOpen] = useState(false);
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const label = useMemo(() => buildLabel(options, selectedIds), [options, selectedIds]);
@@ -66,6 +67,7 @@ export function ServiceTypeMultiSelect({
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          aria-controls={listId}
           aria-label="Filter service types"
           className="w-full justify-between"
         >
@@ -101,7 +103,7 @@ export function ServiceTypeMultiSelect({
         </div>
         <Command>
           <CommandInput placeholder="Search service types..." />
-          <CommandList>
+          <CommandList id={listId}>
             <CommandEmpty>No service types found.</CommandEmpty>
             <CommandGroup heading="Service Types">
               {options.map((option) => {

@@ -149,12 +149,14 @@ export class PlanningCenterPeopleService {
     serviceTypeId: string,
     planId: string
   ): Promise<{ data: PCResource[]; included: PCResource[] }> {
-    const response = await this.core.fetch<PCResource[]>(
-      `/services/v2/service_types/${serviceTypeId}/plans/${planId}/team_members?include=person,team`
+    const response = await this.core.fetchAllWithIncluded<PCResource>(
+      `/services/v2/service_types/${serviceTypeId}/plans/${planId}/team_members`,
+      { include: "person,team,plan", per_page: "100" },
+      25
     );
 
     return {
-      data: Array.isArray(response.data) ? response.data : [response.data],
+      data: response.data,
       included: response.included || [],
     };
   }

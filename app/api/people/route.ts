@@ -16,8 +16,6 @@ const querySchema = z.object({
 export async function GET(request: Request) {
   const log = logger.withRequest(request);
   return handlePlanningCenterRoute(request, async () => {
-    log.info("Request started");
-
     const { searchParams } = new URL(request.url);
     const parsed = querySchema.safeParse({
       position_id: searchParams.get("position_id") ?? undefined,
@@ -39,7 +37,10 @@ export async function GET(request: Request) {
     const date = parsed.data.date;
 
     if (!positionId || !serviceTypeId) {
-      log.info("Missing position_id or service_type_id, returning empty");
+      log.debug(
+        { positionId, serviceTypeId },
+        "People request missing position_id or service_type_id"
+      );
       return [];
     }
 

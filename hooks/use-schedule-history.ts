@@ -19,10 +19,10 @@ export function useScheduleHistory(
         return {
           planPeople: [],
           frequency: {
-            last30Days: 0,
+            recentServedDays: 0,
             last60Days: 0,
             last90Days: 0,
-            rehearsalLast30Days: 0,
+            recentRehearsalOnlyDays: 0,
             rehearsalLast60Days: 0,
             rehearsalLast90Days: 0,
             totalServed: 0,

@@ -15,6 +15,20 @@ export class PlanningCenterCatalogService {
     return response.data;
   }
 
+  /** Root Services `Organization` (account settings include `time_zone`). */
+  async getOrganization(): Promise<PCResource> {
+    const response = await this.core.fetch<PCResource | PCResource[]>("/services/v2");
+    const { data } = response;
+    if (Array.isArray(data)) {
+      const first = data[0];
+      if (!first) {
+        throw new Error("Planning Center Services organization response was empty");
+      }
+      return first;
+    }
+    return data;
+  }
+
   async getServiceTypes(
     params: Record<string, string> = {}
   ): Promise<PCResource[]> {

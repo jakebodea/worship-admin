@@ -18,7 +18,9 @@
 - `bun run dev`: start local Next.js dev server.
 - `bun run build`: production build.
 - `bun run start`: run built app.
-- `bun run lint`: run ESLint.
+- `bun run lint`: run Oxlint (type-aware + TypeScript diagnostics via `.oxlintrc.json`; plugins include React, Next.js, a11y, import, Vitest, Node, promise, and React performance). Uses `--report-unused-disable-directives-severity=warn`.
+- `bun run lint:ci`: same as `lint` with `--format github` for Action annotations (used by CI).
+- `bun run lint:fix`: run Oxlint with `--fix` (auto-fixes what the linter supports).
 - `bun run typecheck`: run TypeScript checks (`tsc --noEmit`).
 - `bun run test`: run Vitest test suite once.
 - `bun run test:watch`: run Vitest in watch mode.
@@ -30,7 +32,7 @@
 - Use `camelCase` for variables/functions, `PascalCase` for components/types.
 - Keep API routes as transport layers: validate with `zod`, return via `handleRoute(...)`.
 - Put business rules in use-cases, external API calls in services.
-- Follow existing formatting; use ESLint (`eslint.config.mjs`) as source of truth.
+- Follow existing formatting; use Oxlint (`.oxlintrc.json`) as source of truth.
 
 ## Testing Guidelines
 - Framework: Vitest (`*.test.ts` colocated in `lib/use-cases/planning-center/`).
@@ -48,3 +50,11 @@
 - React Query keys are centralized in `lib/query-keys.ts`; use them for hooks/invalidation.
 - Use `lib/http/client.ts` (`getJson`, `postJson`) for client-side API calls instead of ad hoc `fetch` code.
 - Backward compatibility is not a priority during the current dev phase; prefer cleaner APIs/URLs/UX over temporary compatibility shims unless explicitly requested.
+
+## Learned User Preferences
+- When replacing behavior, remove legacy or unused code paths instead of keeping parallel implementations.
+
+## Learned Workspace Facts
+- People availability and blockouts: compare the plan `sort_date` instant to blockouts using each blockout’s Planning Center `time_zone` (calendar-day logic); pass full ISO `date` from the client to `/api/people`. Naive UTC-midnight or date-only string overlap checks can mislabel people near timezone boundaries.
+- Congregation-local business dates (plan windows, schedule history frequency, calendar-day deltas) use the org IANA zone from `NEXT_PUBLIC_PLANNING_CENTER_TIME_ZONE` / `PLANNING_CENTER_TIME_ZONE` with shared helpers in `lib/planning-center/org-calendar.ts`.
+- Person card frequency labels should align with recommendation scoring: distinct calendar service/rehearsal days in org TZ, not raw plan-time row counts or grouped-card counts.

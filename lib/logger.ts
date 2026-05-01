@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 
 const isProduction = process.env.NODE_ENV === "production";
 
+/** Default `info` in all environments; set `LOG_LEVEL=warn` in production to reduce noise. */
 const baseLogger = pino({
   level: process.env.LOG_LEVEL ?? "info",
   serializers: {

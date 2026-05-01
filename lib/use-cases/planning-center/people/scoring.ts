@@ -1,8 +1,11 @@
+import { orgCalendarDaysBetween } from "@/lib/planning-center/org-calendar";
+import { PLAN_HISTORY_HALF_RANGE_DAYS } from "@/lib/planning-center/schedule-load-constants";
 import type { PersonWithAvailability } from "@/lib/types";
 
 function calculateRecommendationScore(
   person: PersonWithAvailability,
-  referenceDate: Date
+  referenceDate: Date,
+  orgTimeZone: string
 ): { score: number; reasoning: string[] } {
   const frequency = person.frequency;
   const reasoning: string[] = [];
@@ -22,12 +25,9 @@ function calculateRecommendationScore(
       year: "numeric",
     }).format(date);
 
-  const baseScore = 100 - frequency.last30Days * 10;
+  const baseScore = 100 - frequency.recentServedDays * 10;
   const daysSinceLastServed = frequency.lastServedDate
-    ? Math.floor(
-        (referenceDate.getTime() - frequency.lastServedDate.getTime()) /
-          (1000 * 60 * 60 * 24)
-      )
+    ? orgCalendarDaysBetween(frequency.lastServedDate, referenceDate, orgTimeZone)
     : 999;
   const recencyBonus = Math.min(Math.max(daysSinceLastServed, 0), 30);
   const upcomingPenalty = (frequency.upcomingServices || 0) * 20;
@@ -35,9 +35,10 @@ function calculateRecommendationScore(
 
   let proximityPenalty = 0;
   if (frequency.nextUpcomingDate) {
-    const daysUntilNext = Math.floor(
-      (frequency.nextUpcomingDate.getTime() - referenceDate.getTime()) /
-        (1000 * 60 * 60 * 24)
+    const daysUntilNext = orgCalendarDaysBetween(
+      referenceDate,
+      frequency.nextUpcomingDate,
+      orgTimeZone
     );
     if (daysUntilNext <= 7) proximityPenalty = 30;
     else if (daysUntilNext <= 14) proximityPenalty = 15;
@@ -45,15 +46,16 @@ function calculateRecommendationScore(
 
   let rehearsalProximityPenalty = 0;
   if (frequency.nextRehearsalDate) {
-    const daysUntilRehearsal = Math.floor(
-      (frequency.nextRehearsalDate.getTime() - referenceDate.getTime()) /
-        (1000 * 60 * 60 * 24)
+    const daysUntilRehearsal = orgCalendarDaysBetween(
+      referenceDate,
+      frequency.nextRehearsalDate,
+      orgTimeZone
     );
     if (daysUntilRehearsal <= 7) rehearsalProximityPenalty = 12;
     else if (daysUntilRehearsal <= 14) rehearsalProximityPenalty = 6;
   }
 
-  const recentRehearsalPenalty = (frequency.rehearsalLast30Days || 0) * 4;
+  const recentRehearsalPenalty = (frequency.recentRehearsalOnlyDays || 0) * 4;
 
   const rawScore =
     baseScore +
@@ -75,9 +77,10 @@ function calculateRecommendationScore(
 
   if (frequency.upcomingServices > 0 && frequency.nextUpcomingDate) {
     const nextDateStr = formatDate(frequency.nextUpcomingDate);
-    const daysUntilNext = Math.floor(
-      (frequency.nextUpcomingDate.getTime() - referenceDate.getTime()) /
-        (1000 * 60 * 60 * 24)
+    const daysUntilNext = orgCalendarDaysBetween(
+      referenceDate,
+      frequency.nextUpcomingDate,
+      orgTimeZone
     );
     if (frequency.upcomingServices === 1) {
       reasoning.push(
@@ -98,9 +101,10 @@ function calculateRecommendationScore(
 
   if (frequency.upcomingRehearsals > 0 && frequency.nextRehearsalDate) {
     const nextRehearsalStr = formatDate(frequency.nextRehearsalDate);
-    const daysUntilRehearsal = Math.floor(
-      (frequency.nextRehearsalDate.getTime() - referenceDate.getTime()) /
-        (1000 * 60 * 60 * 24)
+    const daysUntilRehearsal = orgCalendarDaysBetween(
+      referenceDate,
+      frequency.nextRehearsalDate,
+      orgTimeZone
     );
     reasoning.push(
       frequency.upcomingRehearsals === 1
@@ -112,22 +116,34 @@ function calculateRecommendationScore(
     else if (daysUntilRehearsal <= 14) reasoning.push(`Minor rehearsal penalty: rehearsal ${daysUntilRehearsal} days after`);
   }
 
-  if (frequency.last30Days >= 3) {
-    reasoning.push(`Ranked lower: served ${frequency.last30Days} days in the last 30 days`);
+  const recentEngagementDays =
+    frequency.recentServedDays + (frequency.recentRehearsalOnlyDays ?? 0);
+  if (recentEngagementDays >= 3) {
+    reasoning.push(
+      `Ranked lower: on the schedule ${recentEngagementDays} distinct days in the ${PLAN_HISTORY_HALF_RANGE_DAYS} days before this plan`
+    );
   }
 
-  if (frequency.rehearsalLast30Days >= 2) {
+  if (frequency.recentRehearsalOnlyDays >= 2) {
     reasoning.push(
-      `Light penalty: rehearsed ${frequency.rehearsalLast30Days} day${frequency.rehearsalLast30Days === 1 ? "" : "s"} in the last 30 days`
+      `Light penalty: rehearsed ${frequency.recentRehearsalOnlyDays} day${frequency.recentRehearsalOnlyDays === 1 ? "" : "s"} in the ${PLAN_HISTORY_HALF_RANGE_DAYS} days before this plan`
     );
   }
 
   return { score: rawScore, reasoning };
 }
 
-export function scoreAndNormalizePeople(people: PersonWithAvailability[], referenceDate: Date) {
+export function scoreAndNormalizePeople(
+  people: PersonWithAvailability[],
+  referenceDate: Date,
+  orgTimeZone: string
+) {
   people.forEach((person) => {
-    const { score, reasoning } = calculateRecommendationScore(person, referenceDate);
+    const { score, reasoning } = calculateRecommendationScore(
+      person,
+      referenceDate,
+      orgTimeZone
+    );
     person.recommendationScore = score;
     person.recommendationReasoning = reasoning;
   });

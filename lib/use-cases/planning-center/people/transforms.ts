@@ -10,13 +10,16 @@ import type {
   ScheduleFrequency,
 } from "@/lib/types";
 import type { SelectedPlanMatchContext } from "@/lib/use-cases/planning-center/people/types";
+import {
+  blockoutCoversPlanSortInstant,
+} from "@/lib/use-cases/planning-center/people/calendar-day";
 
 export function getDefaultFrequency(): ScheduleFrequency {
   return {
-    last30Days: 0,
+    recentServedDays: 0,
     last60Days: 0,
     last90Days: 0,
-    rehearsalLast30Days: 0,
+    recentRehearsalOnlyDays: 0,
     rehearsalLast60Days: 0,
     rehearsalLast90Days: 0,
     totalServed: 0,
@@ -39,6 +42,7 @@ export function createBasePerson(rawPerson: RawPerson): PersonWithAvailability {
     isScheduledForSelectedPlanPosition: false,
     isConfirmedForSelectedPlanPosition: false,
     isDeclinedForSelectedPlanPosition: false,
+    selectedPlanAssignmentLabels: [],
   };
 }
 
@@ -105,9 +109,9 @@ export function buildServiceTypeNameMap(serviceTypes: PCResource[]): Map<string,
 
 export function buildBlockoutsPromise(
   personId: string,
-  checkDate: Date | null
+  planSortAt: Date | null
 ): Promise<Blockout[]> {
-  if (!checkDate) return Promise.resolve([]);
+  if (!planSortAt) return Promise.resolve([]);
 
   return planningCenterPeopleService
     .getPersonBlockouts(personId)
@@ -121,6 +125,7 @@ export function buildBlockoutsPromise(
           endsAt: new Date(blockout.attributes.ends_at as string),
           description: blockout.attributes.description || "",
           share: blockout.attributes.share,
+          timeZone: blockout.attributes.time_zone ?? null,
         };
       })
     )
@@ -130,15 +135,12 @@ export function buildBlockoutsPromise(
 export function applyAvailability(
   person: PersonWithAvailability,
   blockouts: Blockout[],
-  checkDate: Date | null
+  planSortAt: Date | null
 ) {
-  const isBlocked = checkDate
-    ? blockouts.some(
-        (blockout) => checkDate >= blockout.startsAt && checkDate <= blockout.endsAt
-      )
+  const isBlocked = planSortAt
+    ? blockouts.some((blockout) => blockoutCoversPlanSortInstant(planSortAt, blockout))
     : false;
 
   person.isBlockedForDate = isBlocked;
-  person.blockouts = blockouts;
   person.availability = isBlocked ? "blocked" : "available";
 }

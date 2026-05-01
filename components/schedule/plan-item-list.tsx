@@ -281,7 +281,7 @@ function PlanItemCard({
 }: PlanItemCardProps) {
   const tone = getItemTone(item);
   const lengthLabel = formatLength(item.length);
-  const handleCardKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleCardKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     onEdit();
@@ -295,15 +295,14 @@ function PlanItemCard({
         isDragged && "bg-muted/80 shadow-lg"
       )}
     >
-      <div
+      <button
+        type="button"
         {...dragAttributes}
         {...dragListeners}
-        role="button"
-        tabIndex={0}
         onClick={onEdit}
         onKeyDown={handleCardKeyDown}
         className={cn(
-          "cursor-grab touch-manipulation select-none transition-colors active:cursor-grabbing",
+          "w-full cursor-grab touch-manipulation select-none border-0 bg-transparent p-0 text-left font-inherit transition-colors active:cursor-grabbing",
           tone.header,
           !isDragged && tone.hover
         )}
@@ -399,7 +398,7 @@ function PlanItemCard({
             <Trash2 className="size-4 transition-colors group-hover:text-destructive" />
           </Button>
         </div>
-      </div>
+      </button>
     </div>
   );
 }

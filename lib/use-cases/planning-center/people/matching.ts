@@ -3,6 +3,34 @@ import type { SelectedPlanMatchContext } from "@/lib/use-cases/planning-center/p
 
 type SchedulableRecord = RawSchedule | RawPlanPerson;
 
+function parseTeamPositionName(
+  teamPositionName: string | undefined
+): { teamName?: string; positionName: string } | null {
+  const raw = (teamPositionName || "").trim();
+  if (!raw) return null;
+
+  if (!raw.includes(" - ")) {
+    return { positionName: raw };
+  }
+
+  const parts = raw.split(" - ");
+  const teamName = parts[0]?.trim();
+  const positionName = parts.slice(1).join(" - ").trim();
+  if (!positionName) return null;
+
+  return {
+    teamName: teamName || undefined,
+    positionName,
+  };
+}
+
+/** Planning Center Services: status `D` / "declined". Excluded from schedule history and load algorithms; matching still uses raw rows so the UI can show "Declined" for the selected plan. */
+export function isDeclinedAssignmentStatus(status: string | undefined): boolean {
+  const s = (status || "").trim();
+  const n = s.toLowerCase();
+  return s === "D" || n === "declined";
+}
+
 export function findMatchingScheduleForSelectedPosition<T extends SchedulableRecord>(
   schedules: T[],
   context: SelectedPlanMatchContext
@@ -21,25 +49,48 @@ export function findMatchingScheduleForSelectedPosition<T extends SchedulableRec
       if (scheduleTeamId && scheduleTeamId !== teamId) return false;
     }
 
-    const teamPositionName =
-      (schedule.attributes.team_position_name as string | undefined) || "";
-
-    if (teamPositionName.includes(" - ")) {
-      const parts = teamPositionName.split(" - ");
-      const scheduleTeamName = parts[0];
-      const schedulePositionName = parts.slice(1).join(" - ");
-      if (selectedTeamName && scheduleTeamName !== selectedTeamName) return false;
-      return schedulePositionName === selectedPositionName;
-    }
-
-    return teamPositionName === selectedPositionName;
+    const parsed = parseTeamPositionName(
+      schedule.attributes.team_position_name as string | undefined
+    );
+    if (!parsed) return false;
+    if (selectedTeamName && parsed.teamName && parsed.teamName !== selectedTeamName) return false;
+    return parsed.positionName === selectedPositionName;
   });
+}
+
+export function getSelectedPlanAssignmentLabels<T extends SchedulableRecord>(
+  schedules: T[],
+  context: SelectedPlanMatchContext
+): string[] {
+  const { planId } = context;
+  if (!planId) return [];
+
+  const labels = new Set<string>();
+
+  for (const schedule of schedules) {
+    const planRel = schedule.relationships?.plan?.data;
+    const schedulePlanId = Array.isArray(planRel) ? planRel[0]?.id : planRel?.id;
+    if (schedulePlanId !== planId) continue;
+
+    if (isDeclinedAssignmentStatus(schedule.attributes.status as string | undefined)) continue;
+
+    const parsed = parseTeamPositionName(
+      schedule.attributes.team_position_name as string | undefined
+    );
+    if (!parsed?.positionName) continue;
+
+    labels.add(parsed.teamName ? `${parsed.teamName} - ${parsed.positionName}` : parsed.positionName);
+  }
+
+  return [...labels];
 }
 
 export function applySelectedPlanStatus(
   person: PersonWithAvailability,
-  matchedSchedule?: SchedulableRecord
+  matchedSchedule?: SchedulableRecord,
+  selectedPlanAssignmentLabels: string[] = []
 ) {
+  person.selectedPlanAssignmentLabels = selectedPlanAssignmentLabels;
   if (!matchedSchedule) return;
 
   person.isScheduledForSelectedPlanPosition = true;
@@ -47,8 +98,7 @@ export function applySelectedPlanStatus(
   const normalizedStatus = status.toLowerCase();
   person.isConfirmedForSelectedPlanPosition =
     status === "C" || normalizedStatus === "confirmed";
-  person.isDeclinedForSelectedPlanPosition =
-    status === "D" || normalizedStatus === "declined";
+  person.isDeclinedForSelectedPlanPosition = isDeclinedAssignmentStatus(status);
 
   const planPersonRel = (matchedSchedule.relationships as { plan_person?: { data?: { id: string } | { id: string }[] | null } } | undefined)
     ?.plan_person?.data;

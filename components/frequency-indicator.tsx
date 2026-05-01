@@ -1,3 +1,4 @@
+import { PLAN_HISTORY_HALF_RANGE_DAYS } from "@/lib/planning-center/schedule-load-constants";
 import type { ScheduleFrequency, FrequencyLevel } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -37,17 +38,17 @@ export function FrequencyIndicator({
         {labels[level]}
       </span>
       <span className="text-xs text-muted-foreground">
-        ({frequency.last30Days} in 30d)
+        ({frequency.recentServedDays} in {PLAN_HISTORY_HALF_RANGE_DAYS}d)
       </span>
     </div>
   );
 }
 
 function getFrequencyLevel(frequency: ScheduleFrequency): FrequencyLevel {
-  const { last30Days } = frequency;
-  
-  if (last30Days === 0) return "low";
-  if (last30Days <= 2) return "medium";
+  const { recentServedDays } = frequency;
+
+  if (recentServedDays === 0) return "low";
+  if (recentServedDays <= 2) return "medium";
   return "high";
 }
 
@@ -55,8 +56,8 @@ export function FrequencyStats({ frequency }: { frequency: ScheduleFrequency }) 
   return (
     <div className="grid grid-cols-3 gap-2 text-center text-xs">
       <div>
-        <div className="font-semibold">{frequency.last30Days}</div>
-        <div className="text-muted-foreground">30d</div>
+        <div className="font-semibold">{frequency.recentServedDays}</div>
+        <div className="text-muted-foreground">{PLAN_HISTORY_HALF_RANGE_DAYS}d</div>
       </div>
       <div>
         <div className="font-semibold">{frequency.last60Days}</div>

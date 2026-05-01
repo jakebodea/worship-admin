@@ -1,22 +1,25 @@
+import {
+  addCalendarDaysToDayKey,
+  formatCalendarDayInTimeZone,
+} from "@/lib/planning-center/org-calendar";
+import { resolveOrganizationTimeZone } from "@/lib/planning-center/resolve-organization-timezone";
 import { planningCenterPlansService } from "@/lib/planning-center/services/plans-service";
 import type { Plan, RawPlan } from "@/lib/types";
 
 export async function getPlansForServiceType(
   serviceTypeId: string
 ): Promise<Plan[]> {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const startDate = new Date(today);
-  const endDate = new Date(today);
-  endDate.setDate(endDate.getDate() + 60); // Next 2 months
+  const orgTz = await resolveOrganizationTimeZone();
+  const afterKey = formatCalendarDayInTimeZone(new Date(), orgTz);
+  const beforeKey = addCalendarDaysToDayKey(afterKey, 60, orgTz);
 
   const rawPlans = await planningCenterPlansService.getPlansInDateRange(
     serviceTypeId,
-    startDate,
-    endDate
+    afterKey,
+    beforeKey
   );
 
-  const parsedPlans = rawPlans
+  const plans = rawPlans
     .map((raw) => {
       const plan = raw as unknown as RawPlan;
       const sortDateStr = plan.attributes.sort_date as string | undefined;
@@ -40,11 +43,6 @@ export async function getPlansForServiceType(
       return parsedPlan;
     })
     .filter((plan): plan is Plan => plan !== null);
-
-  const plans: Plan[] = parsedPlans.filter(
-    (plan) =>
-      !!plan.sortDate && plan.sortDate >= startDate && plan.sortDate <= endDate
-  );
 
   plans.sort((a, b) => (a.sortDate?.getTime() || 0) - (b.sortDate?.getTime() || 0));
   return plans;

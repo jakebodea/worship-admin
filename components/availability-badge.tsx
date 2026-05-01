@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import type { AvailabilityStatus, Blockout } from "@/lib/types";
+import { blockoutCoversPlanSortInstant } from "@/lib/use-cases/planning-center/people/calendar-day";
 
 interface AvailabilityBadgeProps {
   blockouts: Blockout[];
@@ -39,11 +40,13 @@ function getAvailabilityStatus(
     return "available";
   }
 
-  const isBlocked = blockouts.some((blockout) => {
-    const start = new Date(blockout.startsAt);
-    const end = new Date(blockout.endsAt);
-    return checkDate >= start && checkDate <= end;
-  });
+  const isBlocked = blockouts.some((blockout) =>
+    blockoutCoversPlanSortInstant(checkDate, {
+      startsAt: new Date(blockout.startsAt),
+      endsAt: new Date(blockout.endsAt),
+      timeZone: blockout.timeZone,
+    })
+  );
 
   return isBlocked ? "blocked" : "available";
 }

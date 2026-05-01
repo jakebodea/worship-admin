@@ -2,7 +2,13 @@
 
 import { CalendarDays } from "lucide-react";
 import type { SlotRef } from "@/components/schedule/types";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionHeader,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { buttonVariants } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -117,33 +123,37 @@ function PositionAccordionItem({
 
   return (
     <AccordionItem value={position.id} className="rounded-sm border-b-0 transition-colors hover:bg-muted/60">
-      <AccordionTrigger className="gap-1 rounded-none px-1 py-3 hover:no-underline">
-        <div className="flex w-full min-w-0 items-center gap-2">
-          <span className="truncate text-sm font-medium">{position.name}</span>
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {needed > 0 ? `${scheduledCount}/${needed}` : `${scheduledCount}`}
-          </span>
-          <span
-            className={cn(
-              buttonVariants({ variant: "ghost", size: "icon" }),
-              "ml-auto size-7 cursor-pointer"
-            )}
-            title={`Open ${position.name} in scheduler`}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onSelectPosition({
-                teamId,
-                teamName,
-                positionId: position.id,
-                positionName: position.name,
-              });
-            }}
-          >
-            <CalendarDays className="size-4" />
-          </span>
-        </div>
-      </AccordionTrigger>
+      <AccordionHeader className="rounded-none px-1 py-0">
+        <AccordionTrigger className="min-w-0 flex-1 gap-1 rounded-none py-3 hover:no-underline">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="truncate text-sm font-medium">{position.name}</span>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {needed > 0 ? `${scheduledCount}/${needed}` : `${scheduledCount}`}
+            </span>
+          </div>
+        </AccordionTrigger>
+        <button
+          type="button"
+          className={cn(
+            buttonVariants({ variant: "ghost", size: "icon" }),
+            "size-7 shrink-0"
+          )}
+          title={`Open ${position.name} in scheduler`}
+          aria-label={`Open ${position.name} in scheduler`}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onSelectPosition({
+              teamId,
+              teamName,
+              positionId: position.id,
+              positionName: position.name,
+            });
+          }}
+        >
+          <CalendarDays className="size-4" />
+        </button>
+      </AccordionHeader>
 
       <AccordionContent
         className="cursor-pointer pb-3 pt-0"

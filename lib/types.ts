@@ -122,6 +122,8 @@ export interface Blockout {
   endsAt: Date;
   description: string;
   share: boolean;
+  /** Services API `time_zone` — used for calendar-day blockout checks */
+  timeZone?: string | null;
 }
 
 export interface RawBlockout {
@@ -133,6 +135,7 @@ export interface RawBlockout {
     ends_at: string;
     description: string;
     share: boolean;
+    time_zone?: string | null;
   };
 }
 
@@ -227,7 +230,8 @@ export interface RawPlanTime {
   attributes: {
     starts_at?: string;
     ends_at?: string;
-    time_type?: "service" | "rehearsal" | "other" | string;
+    /** Planning Center may send other values; handled as opaque string when parsing. */
+    time_type?: string;
   };
 }
 
@@ -276,8 +280,8 @@ export interface RawPlan {
   };
 }
 
-export type PlanItemType = "song" | "header" | "item" | "media" | string;
-export type PlanItemServicePosition = "pre" | "during" | "post" | string;
+export type PlanItemType = "song" | "header" | "item" | "media";
+export type PlanItemServicePosition = "pre" | "during" | "post";
 
 export interface PlanItemSong {
   id: string;
@@ -462,14 +466,19 @@ export interface TeamPositionGroup {
 // Utility type for frequency tracking
 export interface ScheduleFrequency {
   // Past services (before the reference/plan date)
-  last30Days: number;
+  /**
+   * Distinct past calendar days with a service (on/before plan) within `PLAN_HISTORY_HALF_RANGE_DAYS`.
+   * For “days on the schedule” in the same band as upcoming, add `recentRehearsalOnlyDays` (disjoint).
+   */
+  recentServedDays: number;
   last60Days: number;
   last90Days: number;
   lastServedDate?: Date; // Most recent service BEFORE the plan date
   totalServed: number; // Total past services
 
   // Past rehearsals (before the reference/plan date)
-  rehearsalLast30Days: number;
+  /** Past days with rehearsal but no service, same band as `recentServedDays`; sum with that field for unique engagement days. */
+  recentRehearsalOnlyDays: number;
   rehearsalLast60Days: number;
   rehearsalLast90Days: number;
   lastRehearsalDate?: Date;
@@ -491,12 +500,14 @@ export type FrequencyLevel = "low" | "medium" | "high";
 export interface PersonWithAvailability extends Person {
   availability?: AvailabilityStatus;
   frequency?: ScheduleFrequency;
+  /** Not sent from `/api/people` (use `isBlockedForDate` or `/api/blockouts/:id`). */
   blockouts?: Blockout[];
   serviceHistory?: ServiceHistoryItem[];
   isBlockedForDate?: boolean;
   isScheduledForSelectedPlanPosition?: boolean;
   isConfirmedForSelectedPlanPosition?: boolean;
   isDeclinedForSelectedPlanPosition?: boolean;
+  selectedPlanAssignmentLabels?: string[];
   scheduledPlanPersonId?: string;
   recommendationScore?: number;
   recommendationReasoning?: string[];

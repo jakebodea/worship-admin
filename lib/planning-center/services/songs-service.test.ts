@@ -6,17 +6,18 @@ import {
 import { PlanningCenterSongsService } from "@/lib/planning-center/services/songs-service";
 
 function createCoreClientMock() {
-  return {
-    fetch: vi.fn(),
+  const fetchMock = vi.fn();
+  const core = {
+    fetch: fetchMock,
     fetchAll: vi.fn(),
     fetchAllWithIncluded: vi.fn(),
   } as unknown as PlanningCenterCoreClient;
+  return { core, fetchMock };
 }
 
 describe("PlanningCenterSongsService.getSongLastScheduledItem", () => {
   it("returns null for 404 responses only", async () => {
-    const core = createCoreClientMock();
-    const fetchMock = vi.mocked(core.fetch);
+    const { core, fetchMock } = createCoreClientMock();
     fetchMock.mockRejectedValueOnce(
       new PlanningCenterApiError({
         message: "Planning Center API error: 404 - Not found",
@@ -33,8 +34,7 @@ describe("PlanningCenterSongsService.getSongLastScheduledItem", () => {
   });
 
   it("rethrows non-404 Planning Center errors", async () => {
-    const core = createCoreClientMock();
-    const fetchMock = vi.mocked(core.fetch);
+    const { core, fetchMock } = createCoreClientMock();
     const error = new PlanningCenterApiError({
       message: "Planning Center API error: 500 - Internal error",
       status: 500,

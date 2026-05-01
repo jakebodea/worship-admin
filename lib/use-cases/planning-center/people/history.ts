@@ -1,4 +1,9 @@
+import { PLAN_HISTORY_HALF_RANGE_DAYS } from "@/lib/planning-center/schedule-load-constants";
 import { findIncluded } from "@/lib/planning-center/utils";
+import {
+  formatCalendarDayInTimeZone,
+  orgCalendarDaysRefMinusItem,
+} from "@/lib/planning-center/org-calendar";
 import type {
   PCResource,
   RawPlan,
@@ -9,7 +14,10 @@ import type {
   ScheduleFrequency,
   ServiceHistoryItem,
 } from "@/lib/types";
-import { findMatchingScheduleForSelectedPosition } from "@/lib/use-cases/planning-center/people/matching";
+import {
+  findMatchingScheduleForSelectedPosition,
+  isDeclinedAssignmentStatus,
+} from "@/lib/use-cases/planning-center/people/matching";
 import type {
   HistoryBuildResult,
   SelectedPlanMatchContext,
@@ -79,6 +87,10 @@ function mapPlanPeopleToServiceHistory(
   planTimeById: Map<string, RawPlanTime> = new Map()
 ): ServiceHistoryItem[] {
   return planPeople.flatMap((pp) => {
+    if (isDeclinedAssignmentStatus(pp.attributes.status as string | undefined)) {
+      return [];
+    }
+
     const planRel = pp.relationships?.plan?.data;
     const planId = Array.isArray(planRel) ? planRel[0]?.id : planRel?.id;
     const plan = planId
@@ -154,6 +166,10 @@ function mapSchedulesToServiceHistory(
   historyIncluded: PCResource[]
 ): ServiceHistoryItem[] {
   return schedules.flatMap((schedule) => {
+      if (isDeclinedAssignmentStatus(schedule.attributes.status as string | undefined)) {
+        return [];
+      }
+
       const planRel = schedule.relationships?.plan?.data;
       const planId = Array.isArray(planRel) ? planRel[0]?.id : planRel?.id;
       const plan = planId
@@ -224,7 +240,8 @@ function isRehearsalEngagement(item: ServiceHistoryItem) {
 
 export function buildFrequencyFromServiceHistory(
   serviceHistory: ServiceHistoryItem[],
-  referenceDate: Date
+  referenceDate: Date,
+  orgTimeZone: string
 ): ScheduleFrequency {
   const frequency = getDefaultFrequency();
   const pastServiceDates = new Set<string>();
@@ -241,10 +258,14 @@ export function buildFrequencyFromServiceHistory(
     { hasService: boolean; hasRehearsal: boolean; mostRecentService?: ServiceHistoryItem; mostRecentRehearsal?: ServiceHistoryItem }
   >();
 
-  for (const historyItem of serviceHistory) {
-    const normalized = new Date(historyItem.date);
-    normalized.setHours(0, 0, 0, 0);
-    const dayKey = normalized.toISOString().split("T")[0];
+  const refDayKey = formatCalendarDayInTimeZone(referenceDate, orgTimeZone);
+
+  const loadRelevantHistory = serviceHistory.filter(
+    (item) => !isDeclinedAssignmentStatus(item.status)
+  );
+
+  for (const historyItem of loadRelevantHistory) {
+    const dayKey = formatCalendarDayInTimeZone(historyItem.date, orgTimeZone);
 
     const serviceEngagement = isServiceEngagement(historyItem);
     const rehearsalEngagement = isRehearsalEngagement(historyItem);
@@ -266,16 +287,13 @@ export function buildFrequencyFromServiceHistory(
   }
 
   for (const [dayKey, flags] of dayFlags) {
-    const dayDate = new Date(`${dayKey}T00:00:00.000Z`);
-    const daysDiff = Math.floor(
-      (referenceDate.getTime() - dayDate.getTime()) / (1000 * 60 * 60 * 24)
-    );
+    const daysDiff = orgCalendarDaysRefMinusItem(dayKey, refDayKey);
 
     if (daysDiff >= 0) {
       if (flags.hasService) {
         if (!pastServiceDates.has(dayKey)) {
           pastServiceDates.add(dayKey);
-          if (daysDiff <= 30) frequency.last30Days++;
+          if (daysDiff <= PLAN_HISTORY_HALF_RANGE_DAYS) frequency.recentServedDays++;
           if (daysDiff <= 60) frequency.last60Days++;
           if (daysDiff <= 90) frequency.last90Days++;
         }
@@ -285,13 +303,16 @@ export function buildFrequencyFromServiceHistory(
       if (flags.hasRehearsal && !flags.hasService) {
         if (!pastRehearsalOnlyDates.has(dayKey)) {
           pastRehearsalOnlyDates.add(dayKey);
-          if (daysDiff <= 30) frequency.rehearsalLast30Days++;
+          if (daysDiff <= PLAN_HISTORY_HALF_RANGE_DAYS) frequency.recentRehearsalOnlyDays++;
           if (daysDiff <= 60) frequency.rehearsalLast60Days++;
           if (daysDiff <= 90) frequency.rehearsalLast90Days++;
         }
         if (flags.mostRecentRehearsal) pastRehearsalOnlyItems.push(flags.mostRecentRehearsal);
       }
     } else {
+      // Future relative to plan day: only count inside the same half-range we use when loading plans.
+      if (daysDiff < -PLAN_HISTORY_HALF_RANGE_DAYS) continue;
+
       if (flags.hasService) {
         if (!futureServiceDates.has(dayKey)) {
           futureServiceDates.add(dayKey);
@@ -335,7 +356,8 @@ export function buildHistoryAndFrequencyForPerson(
   historyIncluded: PCResource[],
   referenceDate: Date,
   selectedMatchContext: SelectedPlanMatchContext,
-  historyLimit: number = 4
+  historyLimit: number = 4,
+  orgTimeZone: string
 ): HistoryBuildResult {
   let serviceHistory = mapSchedulesToServiceHistory(
     schedules,
@@ -345,12 +367,15 @@ export function buildHistoryAndFrequencyForPerson(
   const matchedSchedule = findMatchingScheduleForSelectedPosition(schedules, selectedMatchContext);
 
   serviceHistory.sort((a, b) => a.date.getTime() - b.date.getTime());
-  const frequency = buildFrequencyFromServiceHistory(serviceHistory, referenceDate);
+  const frequency = buildFrequencyFromServiceHistory(serviceHistory, referenceDate, orgTimeZone);
+  const refDayKey = formatCalendarDayInTimeZone(referenceDate, orgTimeZone);
   serviceHistory = serviceHistory.filter((item) => {
-    const daysDiff = Math.floor(
-      (referenceDate.getTime() - item.date.getTime()) / (1000 * 60 * 60 * 24)
+    const itemDayKey = formatCalendarDayInTimeZone(item.date, orgTimeZone);
+    const daysDiff = orgCalendarDaysRefMinusItem(itemDayKey, refDayKey);
+    return (
+      daysDiff >= -PLAN_HISTORY_HALF_RANGE_DAYS &&
+      daysDiff <= PLAN_HISTORY_HALF_RANGE_DAYS
     );
-    return daysDiff >= -14 && daysDiff <= 14;
   });
   if (Number.isFinite(historyLimit)) {
     serviceHistory =
@@ -366,7 +391,8 @@ export function buildHistoryAndFrequencyForPlanPeople(
   referenceDate: Date,
   selectedMatchContext: SelectedPlanMatchContext,
   planTimeById: Map<string, RawPlanTime> = new Map(),
-  historyLimit: number = 4
+  historyLimit: number = 4,
+  orgTimeZone: string
 ): HistoryBuildResult {
   let serviceHistory = mapPlanPeopleToServiceHistory(
     planPeople,
@@ -380,12 +406,16 @@ export function buildHistoryAndFrequencyForPlanPeople(
   );
 
   serviceHistory.sort((a, b) => a.date.getTime() - b.date.getTime());
-  const frequency = buildFrequencyFromServiceHistory(serviceHistory, referenceDate);
+  const frequency = buildFrequencyFromServiceHistory(serviceHistory, referenceDate, orgTimeZone);
+  const refDayKey = formatCalendarDayInTimeZone(referenceDate, orgTimeZone);
+
   serviceHistory = serviceHistory.filter((item) => {
-    const daysDiff = Math.floor(
-      (referenceDate.getTime() - item.date.getTime()) / (1000 * 60 * 60 * 24)
+    const itemDayKey = formatCalendarDayInTimeZone(item.date, orgTimeZone);
+    const daysDiff = orgCalendarDaysRefMinusItem(itemDayKey, refDayKey);
+    return (
+      daysDiff >= -PLAN_HISTORY_HALF_RANGE_DAYS &&
+      daysDiff <= PLAN_HISTORY_HALF_RANGE_DAYS
     );
-    return daysDiff >= -14 && daysDiff <= 14;
   });
 
   if (Number.isFinite(historyLimit)) {

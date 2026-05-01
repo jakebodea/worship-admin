@@ -15,6 +15,7 @@ export async function getFutureBlockoutsForPerson(personId: string): Promise<Blo
         endsAt: new Date(blockout.attributes.ends_at),
         description: blockout.attributes.description || "",
         share: blockout.attributes.share,
+        timeZone: blockout.attributes.time_zone ?? null,
       };
     })
     .filter((blockout) => blockout.endsAt >= now);
