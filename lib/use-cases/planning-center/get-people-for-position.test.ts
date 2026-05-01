@@ -312,14 +312,62 @@ describe("getPeopleForPosition", () => {
 
     expect(confirmed.isConfirmedForSelectedPlanPosition).toBe(true);
     expect(confirmed.isScheduledForSelectedPlanPosition).toBe(true);
+    expect(confirmed.selectedPlanAssignmentLabels).toEqual(["Band - Vocals"]);
     expect(confirmed.scheduledPlanPersonId).toBe("pp-confirmed");
 
     expect(scheduled.isConfirmedForSelectedPlanPosition).toBe(false);
     expect(scheduled.isScheduledForSelectedPlanPosition).toBe(true);
+    expect(scheduled.selectedPlanAssignmentLabels).toEqual(["Band - Vocals"]);
     expect(scheduled.scheduledPlanPersonId).toBe("pp-scheduled");
 
     expect(available.isScheduledForSelectedPlanPosition).toBe(false);
+    expect(available.selectedPlanAssignmentLabels).toEqual([]);
     expect(blocked.isBlockedForDate).toBe(true);
+  });
+
+  it("includes same-plan assignments from other positions as labels without marking the selected slot scheduled", async () => {
+    const serviceTypeId = "st-1";
+    const teamId = "team-1";
+    const positionId = "pos-guitar";
+    const planId = "plan-target";
+
+    mocks.getServiceTypesCached.mockResolvedValue([
+      { type: "ServiceType", id: serviceTypeId, attributes: { name: "Sunday", sequence: 1 } },
+    ]);
+    mocks.getPeopleForTeamPosition.mockResolvedValue({
+      data: [assignment("a1", "p1")],
+      included: [
+        person("p1", "Casey", "Elsewhere"),
+        teamPosition(positionId, "Guitar", teamId),
+        team(teamId, "Band"),
+      ],
+    });
+    mocks.getPersonBlockouts.mockResolvedValue([]);
+    mocks.getPersonPlanPeopleWithPlans.mockResolvedValue({
+      data: [
+        planPersonEntry({
+          id: "pp1",
+          planId,
+          teamId,
+          status: "U",
+          teamPositionName: "Band - Keys",
+        }),
+      ],
+      included: [plan(planId, serviceTypeId, "2026-02-22")],
+    });
+
+    const result = await getPeopleForPosition({
+      serviceTypeId,
+      positionId,
+      teamId,
+      planId,
+      date: "2026-02-22",
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.isScheduledForSelectedPlanPosition).toBe(false);
+    expect(result[0]?.selectedPlanAssignmentLabels).toEqual(["Band - Keys"]);
+    expect(result[0]?.scheduledPlanPersonId).toBeUndefined();
   });
 
   it("matches selected plan when plan_person team_position_name is unprefixed (position only)", async () => {

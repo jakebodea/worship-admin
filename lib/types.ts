@@ -507,6 +507,7 @@ export interface PersonWithAvailability extends Person {
   isScheduledForSelectedPlanPosition?: boolean;
   isConfirmedForSelectedPlanPosition?: boolean;
   isDeclinedForSelectedPlanPosition?: boolean;
+  selectedPlanAssignmentLabels?: string[];
   scheduledPlanPersonId?: string;
   recommendationScore?: number;
   recommendationReasoning?: string[];

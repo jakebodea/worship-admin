@@ -254,6 +254,9 @@ export function PersonCard({
   const isDeclined = !!person.isDeclinedForSelectedPlanPosition;
   const isScheduled = !!person.isScheduledForSelectedPlanPosition || scheduleSuccess;
   const isBlocked = !!person.isBlockedForDate;
+  const selectedPlanAssignments = person.selectedPlanAssignmentLabels ?? [];
+  const isScheduledElsewhereOnService =
+    !isScheduled && !isDeclined && selectedPlanAssignments.length > 0;
   const serviceHistory = person.serviceHistory || [];
   const historyGroups = [...buildHistoryGroups(serviceHistory)].sort(
     (a, b) => toDate(a.primary.date).getTime() - toDate(b.primary.date).getTime()
@@ -374,6 +377,15 @@ export function PersonCard({
         : statusVariant === "blocked" || statusVariant === "declined"
           ? "bg-red-500/10 border-red-500/30"
           : null;
+  const scheduledElsewhereOverlayClass = isScheduledElsewhereOnService
+    ? "border-emerald-500/30"
+    : null;
+  const scheduledForBadgeText =
+    selectedPlanAssignments.length === 0
+      ? null
+      : selectedPlanAssignments.length === 1
+        ? selectedPlanAssignments[0]
+        : `${selectedPlanAssignments[0]} +${selectedPlanAssignments.length - 1} more`;
 
   return (
     <Card
@@ -387,6 +399,14 @@ export function PersonCard({
           className={cn(
             "pointer-events-none absolute inset-0 z-10 rounded-lg border-2",
             statusOverlayClass
+          )}
+        />
+      ) : null}
+      {!statusOverlayClass && scheduledElsewhereOverlayClass ? (
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-0 z-10 rounded-lg border-2",
+            scheduledElsewhereOverlayClass
           )}
         />
       ) : null}
@@ -439,6 +459,14 @@ export function PersonCard({
                   </PopoverContent>
                 </Popover>
               )}
+              {scheduledForBadgeText ? (
+                <Badge
+                  variant="outline"
+                  className="max-w-full border-emerald-500/40 bg-emerald-500/10 text-[11px] text-emerald-700"
+                >
+                  <span className="truncate">Scheduled for: {scheduledForBadgeText}</span>
+                </Badge>
+              ) : null}
               {scheduleError && (
                 <Badge variant="outline" className="text-[11px] border-red-500/40 bg-red-500/10 text-red-700">
                   <AlertCircle className="mr-1 h-3 w-3" />

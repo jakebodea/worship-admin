@@ -42,6 +42,7 @@ export function createBasePerson(rawPerson: RawPerson): PersonWithAvailability {
     isScheduledForSelectedPlanPosition: false,
     isConfirmedForSelectedPlanPosition: false,
     isDeclinedForSelectedPlanPosition: false,
+    selectedPlanAssignmentLabels: [],
   };
 }
 

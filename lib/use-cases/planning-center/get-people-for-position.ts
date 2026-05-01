@@ -14,7 +14,10 @@ import {
   type RawPlan,
   type RawPlanTime,
 } from "@/lib/types";
-import { applySelectedPlanStatus } from "@/lib/use-cases/planning-center/people/matching";
+import {
+  applySelectedPlanStatus,
+  getSelectedPlanAssignmentLabels,
+} from "@/lib/use-cases/planning-center/people/matching";
 import {
   buildHistoryAndFrequencyForPlanPeople,
 } from "@/lib/use-cases/planning-center/people/history";
@@ -236,7 +239,11 @@ export async function getPeopleForPosition({
 
         person.frequency = historyResult.frequency;
         person.serviceHistory = historyResult.serviceHistory;
-        applySelectedPlanStatus(person, historyResult.matchedSchedule);
+        applySelectedPlanStatus(
+          person,
+          historyResult.matchedSchedule,
+          getSelectedPlanAssignmentLabels(planPeople, selectedMatchContext)
+        );
       } catch {
         person.frequency = getDefaultFrequency();
         person.serviceHistory = [];
