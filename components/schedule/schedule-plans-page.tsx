@@ -2,8 +2,6 @@
 
 import { startTransition, useCallback, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AccountMenu } from "@/components/account-menu";
-import { PageHeader } from "@/components/page-header";
 import { ServicePlanTableSelector } from "@/components/service-plan-table-selector";
 
 function buildPlanWorkspaceUrl(serviceTypeId: string, planId: string): string {
@@ -38,14 +36,12 @@ export function SchedulePlansPage() {
   );
 
   return (
-    <div className="bg-background min-h-screen">
-      <div className="container mx-auto px-4 py-6 md:py-8">
-        <PageHeader className="mb-6" topRight={<AccountMenu />}>
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Schedule</h1>
-            <p className="text-muted-foreground">Choose a service plan to open the planner.</p>
-          </div>
-        </PageHeader>
+    <main className="min-h-[calc(100svh-3.5rem)] bg-background">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:py-8">
+        <header className="flex flex-col gap-2">
+          <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Schedule</h1>
+          <p className="text-muted-foreground">Choose a service plan to open the planner.</p>
+        </header>
 
         <ServicePlanTableSelector
           selectedServiceTypeId={null}
@@ -53,6 +49,6 @@ export function SchedulePlansPage() {
           onSelect={handleServicePlanSelect}
         />
       </div>
-    </div>
+    </main>
   );
 }

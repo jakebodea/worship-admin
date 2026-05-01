@@ -6,7 +6,15 @@ import { Search } from "lucide-react";
 import { ServiceTypeMultiSelect } from "@/components/service-type-multi-select";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -272,18 +280,19 @@ export function ServicePlanTableSelector({
   useEffect(() => cancelDelayedPrefetch, [cancelDelayedPrefetch]);
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_200px]">
-        <div className="relative">
-          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-          <Input
+        <InputGroup>
+          <InputGroupAddon>
+            <Search />
+          </InputGroupAddon>
+          <InputGroupInput
             value={searchValue}
             onChange={(event) => setSearchValue(event.target.value)}
             placeholder="Search service type, plan title, series, or date"
-            className="pl-9"
             aria-label="Search services and plans"
           />
-        </div>
+        </InputGroup>
 
         <ServiceTypeMultiSelect
           options={serviceTypes ?? []}
@@ -319,29 +328,45 @@ export function ServicePlanTableSelector({
               Array.from({ length: 8 }).map((_, index) => (
                 <TableRow key={`loading-${index}`}>
                   <TableCell className="px-4">
-                    <div className="bg-muted h-4 w-40 animate-pulse rounded" />
+                    <Skeleton className="h-4 w-40" />
                   </TableCell>
                   <TableCell className="px-4">
-                    <div className="bg-muted h-4 w-28 animate-pulse rounded" />
+                    <Skeleton className="h-4 w-28" />
                   </TableCell>
                   <TableCell className="px-4">
-                    <div className="bg-muted h-4 w-36 animate-pulse rounded" />
+                    <Skeleton className="h-4 w-36" />
                   </TableCell>
                   <TableCell className="px-4">
-                    <div className="bg-muted h-4 w-48 animate-pulse rounded" />
+                    <Skeleton className="h-4 w-48" />
                   </TableCell>
                 </TableRow>
               ))
             ) : errorMessage ? (
               <TableRow>
-                <TableCell className="px-4 py-8 text-center text-sm text-muted-foreground" colSpan={4}>
-                  Failed to load plans. Refresh and try again.
+                <TableCell className="px-4 py-10" colSpan={4}>
+                  <Empty>
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <Search />
+                      </EmptyMedia>
+                      <EmptyTitle>Plans failed to load</EmptyTitle>
+                      <EmptyDescription>Refresh and try again.</EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
                 </TableCell>
               </TableRow>
             ) : visibleRows.length === 0 ? (
               <TableRow>
-                <TableCell className="px-4 py-8 text-center text-sm text-muted-foreground" colSpan={4}>
-                  No matching plans found.
+                <TableCell className="px-4 py-10" colSpan={4}>
+                  <Empty>
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <Search />
+                      </EmptyMedia>
+                      <EmptyTitle>No matching plans</EmptyTitle>
+                      <EmptyDescription>Adjust the search, service type, or date window.</EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
                 </TableCell>
               </TableRow>
             ) : (
@@ -355,8 +380,7 @@ export function ServicePlanTableSelector({
                     data-state={isActive ? "selected" : undefined}
                     className={cn(
                       "cursor-pointer",
-                      isScheduledForCurrentUser &&
-                        "bg-emerald-50/70 hover:bg-emerald-100/70 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/35"
+                      isScheduledForCurrentUser && "bg-accent/50 hover:bg-accent"
                     )}
                     tabIndex={0}
                     aria-selected={isActive}
@@ -390,12 +414,7 @@ export function ServicePlanTableSelector({
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate">{row.planTitle || "Untitled plan"}</span>
                         {isScheduledForCurrentUser ? (
-                          <Badge
-                            variant="outline"
-                            className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700"
-                          >
-                            Scheduled
-                          </Badge>
+                          <Badge variant="outline">Scheduled</Badge>
                         ) : null}
                         {isActive ? <Badge variant="secondary">Selected</Badge> : null}
                       </div>

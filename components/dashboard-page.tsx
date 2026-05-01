@@ -3,14 +3,12 @@
 import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, LoaderCircle } from "lucide-react";
-import { AccountMenu } from "@/components/account-menu";
-import { PageHeader } from "@/components/page-header";
+import { LoaderCircle } from "lucide-react";
 import { LineupTab } from "@/components/schedule/lineup-tab";
 import { PlanTab } from "@/components/schedule/plan-tab";
 import { ScheduleViewTab } from "@/components/schedule/schedule-view-tab";
 import type { SlotRef } from "@/components/schedule/types";
-import { Button } from "@/components/ui/button";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePeople } from "@/hooks/use-people";
 import { usePlans } from "@/hooks/use-plans";
@@ -286,12 +284,6 @@ export function DashboardPage() {
     console.error("Schedule error:", message);
   };
 
-  const handleBack = () => {
-    startTransition(() => {
-      router.push("/schedule");
-    });
-  };
-
   const handleViewChange = (nextView: string) => {
     const parsedView = parseDashboardView(nextView);
     navigateTo({
@@ -348,33 +340,21 @@ export function DashboardPage() {
       : null;
 
   return (
-    <div
+    <main
       className={cn(
-        "bg-background min-h-screen",
-        hasSelectedPlan && "xl:h-screen xl:overflow-hidden"
+        "min-h-[calc(100svh-3.5rem)] bg-background",
+        hasSelectedPlan && "lg:h-[calc(100svh-3.5rem)] lg:overflow-hidden"
       )}
     >
       <div
         className={cn(
-          "container mx-auto px-4",
-          hasSelectedPlan ? "py-4 md:py-5 xl:flex xl:h-full xl:flex-col" : "py-6 md:py-8"
+          "mx-auto w-full max-w-7xl px-4",
+          hasSelectedPlan ? "py-4 md:py-5 lg:flex lg:h-full lg:flex-col" : "py-6 md:py-8"
         )}
       >
-        <PageHeader
-          className={cn(hasSelectedPlan ? "mb-4 xl:shrink-0" : "mb-6")}
-          topRowClassName="items-start"
-          topLeft={
-            hasSelectedPlan ? (
-              <Button variant="ghost" onClick={handleBack}>
-                <ArrowLeft className="size-4" />
-                Change Plan
-              </Button>
-            ) : null
-          }
-          topRight={<AccountMenu />}
-        >
+        <header className={cn(hasSelectedPlan ? "mb-4 lg:shrink-0" : "mb-6")}>
           {hasSelectedPlan && selectedServiceType && selectedPlan ? (
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
                   {selectedServiceType.name}
@@ -385,9 +365,9 @@ export function DashboardPage() {
                 <Tabs
                   value={activeView}
                   onValueChange={handleViewChange}
-                  className="xl:min-h-0 xl:flex-1"
+                  className="lg:min-h-0 lg:flex-1"
                 >
-                  <TabsList className="w-full justify-start sm:w-fit">
+                  <TabsList className="w-full justify-start rounded-full sm:w-fit">
                     <TabsTrigger value="schedule">Schedule</TabsTrigger>
                     <TabsTrigger value="lineup">Lineup</TabsTrigger>
                     <TabsTrigger value="plan">Plan</TabsTrigger>
@@ -397,7 +377,7 @@ export function DashboardPage() {
               <p className="text-sm text-muted-foreground">{formatPlanDate(selectedPlan.sortDate)}</p>
             </div>
           ) : hasPlanUrlSelection && isPlanMetadataLoading ? null : (
-            <div>
+            <div className="flex flex-col gap-2">
               <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
                 Select a Plan
               </h1>
@@ -406,7 +386,7 @@ export function DashboardPage() {
               </p>
             </div>
           )}
-        </PageHeader>
+        </header>
 
         {!hasSelectedPlan && (
           isPlanMetadataLoading ? (
@@ -417,22 +397,26 @@ export function DashboardPage() {
               </div>
             </div>
           ) : (
-            <div className="rounded-lg border border-dashed p-6">
-              <>
-                <p className="text-sm text-muted-foreground">
-                  No valid plan is selected. Return to the schedule list to pick one.
-                </p>
-                <Button variant="outline" className="mt-4" onClick={handleBack}>
-                  Go to Schedule Table
-                </Button>
-              </>
-            </div>
+            <Empty className="rounded-2xl border border-dashed">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <LoaderCircle />
+                </EmptyMedia>
+                <EmptyTitle>No valid plan selected</EmptyTitle>
+                <EmptyDescription>
+                  Use the Schedule breadcrumb above to choose a plan from the schedule table.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           )
         )}
 
         {hasSelectedPlan && (
-          <Tabs value={activeView} onValueChange={handleViewChange} className="xl:min-h-0 xl:flex-1">
-            <TabsContent value="schedule" className="mt-0 xl:min-h-0 xl:flex-1">
+          <Tabs value={activeView} onValueChange={handleViewChange} className="lg:min-h-0 lg:flex-1">
+            <TabsContent
+              value="schedule"
+              className="mt-0 flex min-h-0 flex-1 flex-col lg:h-full lg:min-h-0"
+            >
               <ScheduleViewTab
                 teamPositionsLoading={teamPositionsLoading}
                 teamPositionGroups={teamPositionGroups}
@@ -450,7 +434,7 @@ export function DashboardPage() {
               />
             </TabsContent>
 
-            <TabsContent value="lineup" className="mt-0 xl:min-h-0 xl:flex-1">
+            <TabsContent value="lineup" className="mt-0 lg:min-h-0 lg:flex-1">
               <LineupTab
                 groups={teamPositionGroups ?? []}
                 isLoading={teamPositionsLoading}
@@ -458,7 +442,7 @@ export function DashboardPage() {
               />
             </TabsContent>
 
-            <TabsContent value="plan" className="mt-0 xl:min-h-0 xl:flex-1">
+            <TabsContent value="plan" className="mt-0 lg:min-h-0 lg:flex-1">
               <PlanTab
                 serviceTypeId={selectedServiceType?.id ?? null}
                 planId={selectedPlan?.id ?? null}
@@ -467,6 +451,6 @@ export function DashboardPage() {
           </Tabs>
         )}
       </div>
-    </div>
+    </main>
   );
 }

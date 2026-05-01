@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
-import { Loader2 } from "lucide-react";
 
 export default function AuthPage() {
   const [error, setError] = useState("");
@@ -39,21 +41,18 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md">
-        <div className="bg-card border rounded-lg p-8 shadow-lg">
-          <h1 className="text-2xl font-bold mb-2 text-center">
-            Sign In
-          </h1>
-          <p className="text-muted-foreground text-center mb-6">
-            Continue with your Planning Center account
-          </p>
-
-          <div className="space-y-4">
+    <main className="flex min-h-screen items-center justify-center bg-background px-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <CardTitle>Sign in</CardTitle>
+          <CardDescription>Continue with your Planning Center account.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-4">
             {error && (
-              <div className="text-sm text-destructive text-center">
-                {error}
-              </div>
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
 
             <Button
@@ -64,7 +63,7 @@ export default function AuthPage() {
             >
               {loading || isPending ? (
                 <span className="inline-flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Spinner />
                   Redirecting...
                 </span>
               ) : (
@@ -72,8 +71,8 @@ export default function AuthPage() {
               )}
             </Button>
           </div>
-        </div>
-      </div>
-    </div>
+        </CardContent>
+      </Card>
+    </main>
   );
 }
