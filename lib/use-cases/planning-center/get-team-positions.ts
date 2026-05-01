@@ -3,11 +3,16 @@ import { planningCenterPeopleService } from "@/lib/planning-center/services/peop
 import { planningCenterPlansService } from "@/lib/planning-center/services/plans-service";
 import { logger } from "@/lib/logger";
 import { findAllIncluded, findIncluded } from "@/lib/planning-center/utils";
+import {
+  buildPlanSchedulingContext,
+  buildSlotKey,
+  isDeclinedRosterStatus,
+  type PlanRosterEntry,
+} from "@/lib/use-cases/planning-center/plan-scheduling-context";
 import type {
   FilledPositionPerson,
   PCResource,
   RawPlan,
-  RawPerson,
   RawNeededPosition,
   RawPlanPerson,
   RawTeam,
@@ -54,7 +59,12 @@ export async function getNeededTeamPositionsForPlan(
   const planTeamMembers = Array.isArray(planTeamMembersResponse.data)
     ? planTeamMembersResponse.data
     : [planTeamMembersResponse.data];
-  const planTeamMembersIncluded = planTeamMembersResponse.included || [];
+  const planSchedulingContext = buildPlanSchedulingContext({
+    serviceTypeId,
+    planId,
+    planTeamMembers: planTeamMembers as unknown as RawPlanPerson[],
+    included: planTeamMembersResponse.included || [],
+  });
   const teamMap = new Map<string, TeamPositionGroup>();
   const positionsByTeamAndName = new Map<string, TeamPosition>();
 
@@ -119,7 +129,7 @@ export async function getNeededTeamPositionsForPlan(
     group.positions.push(matchedPosition);
   }
 
-  applyPlanTeamMemberSummary(planTeamMembers, planTeamMembersIncluded, positionsByTeamAndName);
+  applyPlanTeamMemberSummary(planSchedulingContext.rosterEntries, positionsByTeamAndName);
   addFilledPositionsToGroups(teamMap, positionsByTeamAndName);
 
   const groupedPositions: TeamPositionGroup[] = Array.from(teamMap.values());
@@ -219,26 +229,22 @@ function getTeamInfo(
 }
 
 function buildTeamPositionKey(teamId: string, positionName: string): string {
-  return `${teamId}::${positionName.trim().toLowerCase()}`;
+  return buildSlotKey(teamId, positionName);
 }
 
 function applyPlanTeamMemberSummary(
-  rawPlanTeamMembers: PCResource[],
-  included: PCResource[],
+  rosterEntries: PlanRosterEntry[],
   positionsByTeamAndName: Map<string, TeamPosition>
 ) {
-  const personInfoById = buildPersonInfoMap(included);
+  for (const rosterEntry of rosterEntries) {
+    if (!rosterEntry.teamId || isDeclinedRosterStatus(rosterEntry.status)) continue;
 
-  for (const raw of rawPlanTeamMembers) {
-    const planPerson = raw as unknown as RawPlanPerson;
-    const status = classifyPlanPersonStatus(planPerson.attributes.status);
-    if (!status) continue;
-
-    const slotKey = getPlanPersonSlotKey(planPerson, positionsByTeamAndName, included);
-    if (!slotKey) continue;
-
-    const slot = positionsByTeamAndName.get(slotKey);
+    const slot = positionsByTeamAndName.get(
+      buildTeamPositionKey(rosterEntry.teamId, rosterEntry.positionName)
+    );
     if (!slot) continue;
+
+    const status = rosterEntry.status === "confirmed" ? "confirmed" : "pending";
 
     if (status === "confirmed") {
       slot.filledConfirmedCount = (slot.filledConfirmedCount ?? 0) + 1;
@@ -246,14 +252,12 @@ function applyPlanTeamMemberSummary(
       slot.filledPendingCount = (slot.filledPendingCount ?? 0) + 1;
     }
 
-    const personId = getPlanPersonId(planPerson) ?? `unknown-${planPerson.id}`;
-    const personInfo = personId ? personInfoById.get(personId) : undefined;
     const entry: FilledPositionPerson = {
-      id: personId,
-      name: personInfo?.name || "Unknown person",
+      id: rosterEntry.personId ?? `unknown-${rosterEntry.planPersonId}`,
+      name: rosterEntry.person?.name || "Unknown person",
       status,
-      rawStatus: (planPerson.attributes.status || "").toString(),
-      photoThumbnailUrl: personInfo?.photoThumbnailUrl ?? null,
+      rawStatus: rosterEntry.rawStatus,
+      photoThumbnailUrl: rosterEntry.person?.photoThumbnailUrl ?? null,
     };
 
     if (!slot.filledPeople) {
@@ -272,106 +276,6 @@ function applyPlanTeamMemberSummary(
       return a.name.localeCompare(b.name);
     });
   }
-}
-
-function buildPersonInfoMap(
-  included: PCResource[]
-): Map<string, { name: string; photoThumbnailUrl: string | null }> {
-  const result = new Map<string, { name: string; photoThumbnailUrl: string | null }>();
-
-  for (const resource of included) {
-    if (resource.type !== "Person") continue;
-    const person = resource as unknown as RawPerson;
-    const firstName = (person.attributes.first_name || "").trim();
-    const lastName = (person.attributes.last_name || "").trim();
-    const fullName = [firstName, lastName].filter(Boolean).join(" ").trim() || "Unknown person";
-    result.set(resource.id, {
-      name: fullName,
-      photoThumbnailUrl: person.attributes.photo_thumbnail_url ?? null,
-    });
-  }
-
-  return result;
-}
-
-function classifyPlanPersonStatus(rawStatus: string | undefined): "confirmed" | "pending" | null {
-  const status = (rawStatus || "").trim().toLowerCase();
-  if (!status) return "pending";
-  if (status === "c" || status === "confirmed") return "confirmed";
-  if (
-    status === "d" ||
-    status.includes("declined") ||
-    status.includes("removed")
-  ) {
-    return null;
-  }
-  return "pending";
-}
-
-function getPlanPersonId(planPerson: RawPlanPerson): string | null {
-  const personRel = planPerson.relationships?.person?.data;
-  if (!personRel || Array.isArray(personRel)) return null;
-  return personRel.id || null;
-}
-
-function getPlanPersonSlotKey(
-  planPerson: RawPlanPerson,
-  positionsByTeamAndName: Map<string, TeamPosition>,
-  included: PCResource[]
-): string | null {
-  const teamId = getPlanPersonTeamId(planPerson);
-  const teamPositionName = (planPerson.attributes.team_position_name || "").trim();
-  if (!teamPositionName) return null;
-
-  if (teamId) {
-    const directKey = buildTeamPositionKey(teamId, teamPositionName);
-    if (positionsByTeamAndName.has(directKey)) return directKey;
-
-    const parsed = parseTeamAndPosition(teamPositionName);
-    if (parsed) {
-      const byParsedPosition = buildTeamPositionKey(teamId, parsed.positionName);
-      if (positionsByTeamAndName.has(byParsedPosition)) return byParsedPosition;
-    }
-  }
-
-  const parsed = parseTeamAndPosition(teamPositionName);
-  if (!parsed) return null;
-
-  const parsedTeamId = findTeamIdByName(included, parsed.teamName);
-  if (!parsedTeamId) return null;
-
-  const key = buildTeamPositionKey(parsedTeamId, parsed.positionName);
-  return positionsByTeamAndName.has(key) ? key : null;
-}
-
-function getPlanPersonTeamId(planPerson: RawPlanPerson): string | null {
-  const teamRel = planPerson.relationships?.team?.data;
-  if (!teamRel || Array.isArray(teamRel)) return null;
-  return teamRel.id || null;
-}
-
-function parseTeamAndPosition(
-  teamPositionName: string
-): { teamName: string; positionName: string } | null {
-  if (!teamPositionName.includes(" - ")) return null;
-  const parts = teamPositionName.split(" - ");
-  const teamName = (parts[0] || "").trim();
-  const positionName = parts.slice(1).join(" - ").trim();
-  if (!teamName || !positionName) return null;
-  return { teamName, positionName };
-}
-
-function findTeamIdByName(included: PCResource[], teamName: string): string | null {
-  const normalized = teamName.trim().toLowerCase();
-  if (!normalized) return null;
-
-  const team = included.find((resource) => {
-    if (resource.type !== "Team") return false;
-    const rawTeam = resource as unknown as RawTeam;
-    return ((rawTeam.attributes.name as string | undefined) || "").trim().toLowerCase() === normalized;
-  });
-
-  return team?.id || null;
 }
 
 async function resolveNeededPositions(

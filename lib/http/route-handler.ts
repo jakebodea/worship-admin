@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { ApiError } from "@/lib/http/api-error";
 import { logger } from "@/lib/logger";
+import { PlanningCenterApiError } from "@/lib/planning-center/core-client";
 
 const log = logger.for("http/route-handler");
 
@@ -34,6 +35,42 @@ export async function handleRoute<T>(handler: () => Promise<T>) {
           details: error.issues,
         },
         { status: 400 }
+      );
+    }
+
+    if (error instanceof PlanningCenterApiError) {
+      const code =
+        error.status === 429
+          ? "PLANNING_CENTER_RATE_LIMITED"
+          : "PLANNING_CENTER_API_ERROR";
+      const message =
+        error.status === 429
+          ? "Planning Center rate limit exceeded. Please wait and try again."
+          : "Planning Center request failed.";
+      const retryAfterSeconds = error.retryAfterSeconds;
+      const headers = retryAfterSeconds
+        ? { "Retry-After": String(retryAfterSeconds) }
+        : undefined;
+
+      log.warn(
+        {
+          err: error,
+          status: error.status,
+          code,
+          rateLimit: error.rateLimit,
+        },
+        "Planning Center route error"
+      );
+
+      return NextResponse.json(
+        {
+          error: message,
+          code,
+          details: error.details,
+          retryAfterSeconds,
+          rateLimit: error.rateLimit,
+        },
+        { status: error.status, headers }
       );
     }
 

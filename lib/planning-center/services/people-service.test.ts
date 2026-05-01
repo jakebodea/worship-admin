@@ -5,7 +5,10 @@ import { PlanningCenterPeopleService } from "@/lib/planning-center/services/peop
 describe("PlanningCenterPeopleService.getPlanTeamMembers", () => {
   it("uses fetchAllWithIncluded so large rosters are not truncated to the first page", async () => {
     const fetchAllWithIncluded = vi.fn().mockResolvedValue({ data: [], included: [] });
-    const core = { fetchAllWithIncluded } as unknown as PlanningCenterCoreClient;
+    const core = {
+      fetchAllWithIncluded,
+      getCacheScope: () => "test-scope",
+    } as unknown as PlanningCenterCoreClient;
     const service = new PlanningCenterPeopleService(core);
 
     await service.getPlanTeamMembers("st-123", "plan-456");

@@ -55,7 +55,7 @@ export class PlanningCenterCatalogService {
     serviceTypeId: string
   ): Promise<{ data: PCResource[]; included: PCResource[] }> {
     const response = await this.core.fetch<PCResource[]>(
-      `/services/v2/service_types/${serviceTypeId}/team_positions?include=team`
+      `/services/v2/service_types/${serviceTypeId}/team_positions?include=team&per_page=100`
     );
 
     const data = Array.isArray(response.data) ? response.data : [response.data];

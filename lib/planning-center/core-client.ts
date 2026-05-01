@@ -1,4 +1,5 @@
 import type { PCApiResponse, PCResource } from "@/lib/types";
+import { createHash } from "node:crypto";
 import { mergeHeaders } from "@/lib/http/merge-headers";
 import { logger } from "@/lib/logger";
 import { getPlanningCenterRequestAccessToken } from "@/lib/planning-center/request-auth-context";
@@ -8,12 +9,23 @@ const PC_BASE_URL = "https://api.planningcenteronline.com";
 const DEFAULT_TIMEOUT_MS = 15000;
 const MAX_RETRIES = 2;
 const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
+const PROACTIVE_RATE_LIMIT_THRESHOLD = 0.8;
+const PROACTIVE_RATE_LIMIT_DELAY_MS = 1000;
+
+export interface PlanningCenterRateLimitInfo {
+  limit?: number;
+  count?: number;
+  period?: string;
+  retryAfterSeconds?: number;
+}
 
 export class PlanningCenterApiError extends Error {
   readonly status: number;
   readonly code?: string;
   readonly details?: unknown;
   readonly responseBody?: string;
+  readonly rateLimit?: PlanningCenterRateLimitInfo;
+  readonly retryAfterSeconds?: number;
 
   constructor({
     message,
@@ -21,12 +33,16 @@ export class PlanningCenterApiError extends Error {
     code,
     details,
     responseBody,
+    rateLimit,
+    retryAfterSeconds,
   }: {
     message: string;
     status: number;
     code?: string;
     details?: unknown;
     responseBody?: string;
+    rateLimit?: PlanningCenterRateLimitInfo;
+    retryAfterSeconds?: number;
   }) {
     super(message);
     this.name = "PlanningCenterApiError";
@@ -34,6 +50,8 @@ export class PlanningCenterApiError extends Error {
     this.code = code;
     this.details = details;
     this.responseBody = responseBody;
+    this.rateLimit = rateLimit;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
@@ -76,6 +94,15 @@ export class PlanningCenterCoreClient {
     return `Basic ${credentials}`;
   }
 
+  getCacheScope(): string {
+    const accessToken = getPlanningCenterRequestAccessToken() ?? this.auth?.accessToken;
+    if (accessToken) {
+      return `bearer:${createHash("sha256").update(accessToken).digest("hex")}`;
+    }
+
+    return "basic";
+  }
+
   async request(
     endpoint: string,
     options: RequestInit = {}
@@ -84,6 +111,7 @@ export class PlanningCenterCoreClient {
       ? endpoint
       : `${PC_BASE_URL}${endpoint}`;
     let lastError: Error | null = null;
+    const method = (options.method ?? "GET").toUpperCase();
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       const controller = new AbortController();
@@ -105,24 +133,42 @@ export class PlanningCenterCoreClient {
 
         if (!response.ok) {
           const errorText = await response.text();
+          const apiError = buildApiError(response.status, errorText, response.headers);
           const canRetry =
-            RETRYABLE_STATUS_CODES.has(response.status) && attempt < MAX_RETRIES;
+            isSafeToRetry(method) &&
+            RETRYABLE_STATUS_CODES.has(response.status) &&
+            attempt < MAX_RETRIES;
           if (canRetry) {
-            log.debug(
-              { status: response.status, attempt: attempt + 1, url: url.replace(/\/$/, "").slice(-80) },
+            const retryDelayMs = getRetryDelayMs(response.status, attempt, apiError);
+            log.warn(
+              {
+                status: response.status,
+                attempt: attempt + 1,
+                retryDelayMs,
+                rateLimit: apiError.rateLimit,
+                url: url.replace(/\/$/, "").slice(-80),
+              },
               "Planning Center API retry"
             );
-            await sleep((attempt + 1) * 300);
+            await sleep(retryDelayMs);
             continue;
           }
 
-          throw buildApiError(response.status, errorText);
+          throw apiError;
         }
+
+        await maybePauseNearRateLimit(response.headers, method);
 
         return response;
       } catch (error) {
         clearTimeout(timeout);
         lastError = error instanceof Error ? error : new Error(String(error));
+        if (lastError instanceof PlanningCenterApiError) {
+          break;
+        }
+        if (!isSafeToRetry(method)) {
+          break;
+        }
         if (!isRetryableError(lastError)) {
           break;
         }
@@ -220,10 +266,15 @@ export class PlanningCenterCoreClient {
   }
 }
 
-function buildApiError(status: number, responseBody: string): PlanningCenterApiError {
+function buildApiError(
+  status: number,
+  responseBody: string,
+  headers?: Headers
+): PlanningCenterApiError {
   let code: string | undefined;
   let details: unknown;
   let message = `Planning Center API error: ${status}`;
+  const rateLimit = headers ? readRateLimitInfo(headers) : undefined;
 
   try {
     const errorJson = JSON.parse(responseBody) as Record<string, unknown>;
@@ -252,6 +303,8 @@ function buildApiError(status: number, responseBody: string): PlanningCenterApiE
     code,
     details,
     responseBody,
+    rateLimit,
+    retryAfterSeconds: rateLimit?.retryAfterSeconds,
   });
 }
 
@@ -267,4 +320,59 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+function isSafeToRetry(method: string): boolean {
+  return method === "GET" || method === "HEAD";
+}
+
+function getRetryDelayMs(
+  status: number,
+  attempt: number,
+  error: PlanningCenterApiError
+): number {
+  if (status === 429 && error.retryAfterSeconds !== undefined) {
+    return Math.max(error.retryAfterSeconds, 1) * 1000;
+  }
+
+  return (attempt + 1) * 500;
+}
+
+async function maybePauseNearRateLimit(
+  headers: Headers,
+  method: string
+): Promise<void> {
+  if (!isSafeToRetry(method)) return;
+
+  const rateLimit = readRateLimitInfo(headers);
+  if (
+    rateLimit.limit === undefined ||
+    rateLimit.count === undefined ||
+    rateLimit.count < rateLimit.limit * PROACTIVE_RATE_LIMIT_THRESHOLD
+  ) {
+    return;
+  }
+
+  log.debug(
+    { rateLimit },
+    "Planning Center API rate limit threshold reached; pausing briefly"
+  );
+  await sleep(PROACTIVE_RATE_LIMIT_DELAY_MS);
+}
+
+function readRateLimitInfo(headers: Headers): PlanningCenterRateLimitInfo {
+  return {
+    limit: readIntegerHeader(headers, "x-pco-api-request-rate-limit"),
+    count: readIntegerHeader(headers, "x-pco-api-request-rate-count"),
+    period: headers.get("x-pco-api-request-rate-period") ?? undefined,
+    retryAfterSeconds: readIntegerHeader(headers, "retry-after"),
+  };
+}
+
+function readIntegerHeader(headers: Headers, name: string): number | undefined {
+  const value = headers.get(name);
+  if (!value) return undefined;
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
