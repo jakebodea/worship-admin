@@ -3,10 +3,14 @@ import { logger } from "@/lib/logger";
 import { PlanningCenterCoreClient } from "@/lib/planning-center/core-client";
 import { formatCalendarDayInTimeZone } from "@/lib/planning-center/org-calendar";
 import { resolveOrganizationTimeZone } from "@/lib/planning-center/resolve-organization-timezone";
+import { PlanningCenterReadCache, stableParams } from "@/lib/planning-center/services/read-cache";
 
 const log = logger.for("planning-center/plans");
+const PLANS_RANGE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export class PlanningCenterPlansService {
+  private readonly cache = new PlanningCenterReadCache();
+
   constructor(private readonly core: PlanningCenterCoreClient) {}
 
   async getPlans(
@@ -29,37 +33,76 @@ export class PlanningCenterPlansService {
     afterDayKey: string,
     beforeDayKey: string
   ): Promise<PCResource[]> {
+    const response = await this.getPlansWithIncludedInDateRange(
+      serviceTypeId,
+      afterDayKey,
+      beforeDayKey
+    );
+    return response.data;
+  }
+
+  async getPlansWithIncludedInDateRange(
+    serviceTypeId: string,
+    afterDayKey: string,
+    beforeDayKey: string,
+    include: string = ""
+  ): Promise<{ data: PCResource[]; included: PCResource[] }> {
     const orgTz = await resolveOrganizationTimeZone();
-    log.info(
-      { serviceTypeId, after: afterDayKey, before: beforeDayKey },
-      "Fetching plans in date range"
-    );
+    const params = {
+      order: "sort_date",
+      per_page: "100",
+      filter: "after",
+      after: afterDayKey,
+      ...(include ? { include } : {}),
+    };
+    const cacheKey = [
+      this.core.getCacheScope(),
+      "plans-range",
+      encodeURIComponent(serviceTypeId),
+      encodeURIComponent(afterDayKey),
+      encodeURIComponent(beforeDayKey),
+      stableParams(params),
+    ].join(":");
 
-    const rawPlans = await this.core.fetchAll<PCResource>(
-      `/services/v2/service_types/${serviceTypeId}/plans`,
-      {
-        order: "sort_date", // ascending: start date first
-        per_page: "100",
-        filter: "after",
-        after: afterDayKey,
-      },
-      3
-    );
+    return this.cache.get(cacheKey, PLANS_RANGE_CACHE_TTL_MS, async () => {
+      log.info(
+        { serviceTypeId, after: afterDayKey, before: beforeDayKey, include: include || null },
+        "Fetching plans in date range"
+      );
 
-    const plans = rawPlans.filter((plan) => {
-      const sortDateStr = plan.attributes.sort_date as string | undefined;
-      if (!sortDateStr) return false;
-      const sortDate = new Date(sortDateStr);
-      if (Number.isNaN(sortDate.getTime())) return false;
-      const planDay = formatCalendarDayInTimeZone(sortDate, orgTz);
-      return planDay >= afterDayKey && planDay <= beforeDayKey;
+      const response = await this.core.fetchAllWithIncluded<PCResource>(
+        `/services/v2/service_types/${serviceTypeId}/plans`,
+        params,
+        3
+      );
+
+      const plans = response.data.filter((plan) => {
+        const sortDateStr = plan.attributes.sort_date as string | undefined;
+        if (!sortDateStr) return false;
+        const sortDate = new Date(sortDateStr);
+        if (Number.isNaN(sortDate.getTime())) return false;
+        const planDay = formatCalendarDayInTimeZone(sortDate, orgTz);
+        return planDay >= afterDayKey && planDay <= beforeDayKey;
+      });
+
+      const planIds = new Set(plans.map((plan) => plan.id));
+      const included = response.included.filter((resource) => {
+        const planRel = resource.relationships?.plan?.data;
+        const planId = Array.isArray(planRel) ? planRel[0]?.id : planRel?.id;
+        return !planId || planIds.has(planId);
+      });
+
+      log.info(
+        {
+          serviceTypeId,
+          count: plans.length,
+          rawCount: response.data.length,
+          includedCount: included.length,
+        },
+        "Plans fetched"
+      );
+      return { data: plans, included };
     });
-
-    log.info(
-      { serviceTypeId, count: plans.length, rawCount: rawPlans.length },
-      "Plans fetched"
-    );
-    return plans;
   }
 
   async getPlan(planId: string): Promise<PCResource> {

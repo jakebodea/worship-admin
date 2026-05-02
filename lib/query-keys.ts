@@ -20,6 +20,8 @@ export const queryKeys = {
     positionId: string | null,
     planId: string | null
   ) => ["people", serviceTypeId, teamId, positionId, planId] as const,
+  peopleHistoryWarmup: (serviceTypeId: string | null, dateKey: string | null) =>
+    ["people-history-warmup", serviceTypeId, dateKey] as const,
   blockouts: (personId: string | null) => ["blockouts", personId] as const,
   scheduleHistory: (personId: string | null, days: number) =>
     ["schedule-history", personId, days] as const,

@@ -96,6 +96,13 @@ function mapPlanPeopleToServiceHistory(
     const plan = planId
       ? (findIncluded(historyIncluded, "Plan", planId) as RawPlan | undefined)
       : undefined;
+    const serviceTypeRel = plan?.relationships?.service_type?.data;
+    const serviceTypeId = Array.isArray(serviceTypeRel) ? serviceTypeRel[0]?.id : serviceTypeRel?.id;
+    const serviceType = serviceTypeId
+      ? findIncluded(historyIncluded, "ServiceType", serviceTypeId)
+      : undefined;
+    const serviceTypeName =
+      (serviceType?.attributes.name as string | undefined) || undefined;
 
     const fallbackDate = plan?.attributes.sort_date
       ? new Date(plan.attributes.sort_date as string)
@@ -116,7 +123,7 @@ function mapPlanPeopleToServiceHistory(
       date,
       teamPositionName: positionName || "",
       teamName,
-      serviceTypeName: undefined,
+      serviceTypeName,
       planTitle: (plan?.attributes.title as string | undefined) || undefined,
       status: (pp.attributes.status as string) || "",
       timeType,

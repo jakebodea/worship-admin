@@ -179,4 +179,13 @@ describe("selected plan roster overlay", () => {
       "Band - Keys",
     ]);
   });
+
+  it("dedupes unprefixed and team-prefixed labels for the same slot", () => {
+    const labels = mergeAssignmentLabels(
+      ["Band - Bass Guitar"],
+      ["Bass Guitar"]
+    );
+
+    expect(labels).toEqual(["Band - Bass Guitar"]);
+  });
 });

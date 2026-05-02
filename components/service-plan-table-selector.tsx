@@ -45,6 +45,7 @@ interface ServicePlanTableSelectorProps {
 type DateRangeFilter = "all" | "14" | "30" | "60";
 const SERVICE_TYPE_FILTER_STORAGE_KEY = "schedule:selected-service-type-ids";
 const TEAM_POSITIONS_PREFETCH_DELAY_MS = 300;
+const PEOPLE_HISTORY_WARMUP_STALE_TIME_MS = 60 * 1000;
 
 interface ServicePlanRow {
   serviceTypeId: string;
@@ -283,6 +284,29 @@ export function ServicePlanTableSelector({
     },
     [queryClient]
   );
+  const warmPeopleHistory = useCallback(
+    (row: ServicePlanRow) => {
+      const dateKey = row.sortDate.toISOString();
+      const params = new URLSearchParams({
+        service_type_id: row.serviceTypeId,
+        date: dateKey,
+      });
+
+      void queryClient.prefetchQuery({
+        queryKey: queryKeys.peopleHistoryWarmup(row.serviceTypeId, dateKey),
+        queryFn: () => getJson<{ warmed: true }>(`/api/people/warmup?${params.toString()}`),
+        staleTime: PEOPLE_HISTORY_WARMUP_STALE_TIME_MS,
+      });
+    },
+    [queryClient]
+  );
+  const prefetchPlanData = useCallback(
+    (row: ServicePlanRow) => {
+      prefetchTeamPositions(row);
+      warmPeopleHistory(row);
+    },
+    [prefetchTeamPositions, warmPeopleHistory]
+  );
   const cancelDelayedPrefetch = useCallback(() => {
     if (!prefetchTimeoutRef.current) return;
     clearTimeout(prefetchTimeoutRef.current);
@@ -293,13 +317,19 @@ export function ServicePlanTableSelector({
       cancelDelayedPrefetch();
       prefetchTimeoutRef.current = setTimeout(() => {
         prefetchTimeoutRef.current = null;
-        prefetchTeamPositions(row);
+        prefetchPlanData(row);
       }, TEAM_POSITIONS_PREFETCH_DELAY_MS);
     },
-    [cancelDelayedPrefetch, prefetchTeamPositions]
+    [cancelDelayedPrefetch, prefetchPlanData]
   );
 
   useEffect(() => cancelDelayedPrefetch, [cancelDelayedPrefetch]);
+
+  const firstVisibleRow = visibleRows[0] ?? null;
+  useEffect(() => {
+    if (isLoading || !firstVisibleRow) return;
+    warmPeopleHistory(firstVisibleRow);
+  }, [firstVisibleRow, isLoading, warmPeopleHistory]);
 
   const myScheduledCount = useMemo(
     () => rows.filter((row) => myScheduledPlanIdSet.has(row.planId)).length,

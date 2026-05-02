@@ -72,7 +72,54 @@ export function applySelectedPlanRosterStatus(
 }
 
 export function mergeAssignmentLabels(...labelGroups: string[][]): string[] {
-  return [...new Set(labelGroups.flat())];
+  const merged = new Map<string, string>();
+
+  for (const rawLabel of labelGroups.flat()) {
+    const label = rawLabel.trim();
+    if (!label) continue;
+
+    const parsed = parseAssignmentLabel(label);
+    const canonicalKey = parsed.positionName.toLowerCase();
+    const existing = merged.get(canonicalKey);
+
+    if (!existing) {
+      merged.set(canonicalKey, label);
+      continue;
+    }
+
+    const existingParsed = parseAssignmentLabel(existing);
+    const labelHasTeam = !!parsed.teamName;
+    const existingHasTeam = !!existingParsed.teamName;
+
+    // Prefer the team-qualified label when both strings describe the same slot.
+    if (labelHasTeam && !existingHasTeam) {
+      merged.set(canonicalKey, label);
+      continue;
+    }
+
+    if (labelHasTeam === existingHasTeam && label !== existing) {
+      merged.set(`${canonicalKey}::${label.toLowerCase()}`, label);
+    }
+  }
+
+  return [...merged.values()];
+}
+
+function parseAssignmentLabel(
+  label: string
+): { teamName?: string; positionName: string } {
+  if (!label.includes(" - ")) {
+    return { positionName: label };
+  }
+
+  const parts = label.split(" - ");
+  const teamName = parts[0]?.trim();
+  const positionName = parts.slice(1).join(" - ").trim();
+
+  return {
+    teamName: teamName || undefined,
+    positionName: positionName || label,
+  };
 }
 
 function findSelectedSlotEntry(

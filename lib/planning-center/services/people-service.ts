@@ -159,7 +159,7 @@ export class PlanningCenterPeopleService {
    * 30 candidates serving on the same Sunday plan triggers one fetch, not 30. PlanTimes rarely
    * change, so the TTL is longer than per-person caches.
    */
-  private async getPlanPlanTimes(planId: string): Promise<PCResource[]> {
+  async getPlanPlanTimes(planId: string): Promise<PCResource[]> {
     return this.cache.get(
       this.buildCacheKey("plan-plan-times", planId),
       PLAN_TIMES_CACHE_TTL_MS,

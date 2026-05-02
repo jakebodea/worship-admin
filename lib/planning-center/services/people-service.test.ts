@@ -21,3 +21,22 @@ describe("PlanningCenterPeopleService.getPlanTeamMembers", () => {
     );
   });
 });
+
+describe("PlanningCenterPeopleService.getPlanPlanTimes", () => {
+  it("fetches all plan times through the shared cache-backed endpoint", async () => {
+    const fetchAll = vi.fn().mockResolvedValue([]);
+    const core = {
+      fetchAll,
+      getCacheScope: () => "test-scope",
+    } as unknown as PlanningCenterCoreClient;
+    const service = new PlanningCenterPeopleService(core);
+
+    await service.getPlanPlanTimes("plan-456");
+
+    expect(fetchAll).toHaveBeenCalledTimes(1);
+    expect(fetchAll).toHaveBeenCalledWith(
+      "/services/v2/plans/plan-456/plan_times",
+      { per_page: "200" }
+    );
+  });
+});

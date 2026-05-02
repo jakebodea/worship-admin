@@ -20,45 +20,12 @@ export function SelectedPositionHeader({
   filter: string;
   onFilterChange: (next: string) => void;
 }) {
-  const position = info?.position;
-  const confirmed = position?.filledConfirmedCount ?? 0;
-  const pending = position?.filledPendingCount ?? 0;
-  const needed = position?.neededCount ?? 0;
-  const filled = confirmed + pending;
-  const total = filled + needed;
-
   return (
-    <div className="flex shrink-0 flex-col gap-3 px-1 pt-1">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div className="flex min-w-0 flex-1 items-baseline gap-3">
-          <p className="truncate text-xl font-semibold leading-tight tracking-tight">
-            {info?.positionName}
-          </p>
-          {position ? (
-            <p className="truncate text-sm text-muted-foreground">
-              {info?.teamName}
-              <span className="mx-1.5 opacity-50">·</span>
-              <span className="tabular-nums">
-                {filled}/{total}
-              </span>
-              {needed > 0 ? (
-                <span className="ml-1.5 font-medium tabular-nums text-red-600 dark:text-red-400">
-                  +{needed}
-                </span>
-              ) : pending > 0 ? (
-                <span
-                  aria-label={`${pending} pending`}
-                  className="ml-1.5 inline-block size-1.5 rounded-full bg-amber-500 align-middle"
-                />
-              ) : filled > 0 ? (
-                <span
-                  aria-label="All confirmed"
-                  className="ml-1.5 inline-block size-1.5 rounded-full bg-emerald-500 align-middle"
-                />
-              ) : null}
-            </p>
-          ) : null}
-        </div>
+    <div className="flex shrink-0 flex-col gap-3 px-1">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="min-w-0 flex-1 truncate text-2xl font-semibold leading-tight tracking-tight">
+          {info?.positionName}
+        </p>
         <Button
           type="button"
           variant="outline"

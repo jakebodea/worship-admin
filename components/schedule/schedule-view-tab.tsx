@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useOrganizationTimeZone } from "@/hooks/use-organization-timezone";
 import { CalendarDays, Search } from "lucide-react";
 import { ScheduleCandidateTile } from "@/components/schedule/schedule-candidate-tile";
 import { PositionPickerList } from "@/components/schedule/position-picker-list";
@@ -35,6 +36,7 @@ interface ScheduleViewTabProps {
   peopleLoading: boolean;
   selectedServiceTypeId: string | null;
   selectedPlanId: string | null;
+  planSortDate: Date | null;
   onToggleTeam: (teamId: string) => void;
   onSelectSlot: (slot: SlotRef) => void;
   onScheduleSuccess: () => void;
@@ -51,11 +53,13 @@ export function ScheduleViewTab({
   peopleLoading,
   selectedServiceTypeId,
   selectedPlanId,
+  planSortDate,
   onToggleTeam,
   onSelectSlot,
   onScheduleSuccess,
   onScheduleError,
 }: ScheduleViewTabProps) {
+  const orgTimeZone = useOrganizationTimeZone();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [filter, setFilter] = useState("");
   /** Tailwind `lg` — sidebar visible; sheet only below this width. */
@@ -206,6 +210,8 @@ export function ScheduleViewTab({
                             person={person}
                             serviceTypeId={selectedServiceTypeId}
                             planId={selectedPlanId}
+                            planSortDate={planSortDate}
+                            orgTimeZone={orgTimeZone}
                             teamId={selectedTeam}
                             positionId={selectedPosition}
                             onScheduleSuccess={onScheduleSuccess}
@@ -226,6 +232,8 @@ export function ScheduleViewTab({
                             person={person}
                             serviceTypeId={selectedServiceTypeId}
                             planId={selectedPlanId}
+                            planSortDate={planSortDate}
+                            orgTimeZone={orgTimeZone}
                             teamId={selectedTeam}
                             positionId={selectedPosition}
                             onScheduleSuccess={onScheduleSuccess}

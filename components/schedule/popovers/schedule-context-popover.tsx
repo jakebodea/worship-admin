@@ -2,12 +2,10 @@
 
 import { Fragment, type ReactNode } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { PLAN_HISTORY_HALF_RANGE_DAYS } from "@/lib/planning-center/schedule-load-constants";
 import {
   buildServiceHistoryGroups,
   formatCombinedHistoryPositionLabel,
-  formatServiceHistoryDisplayDate,
   getHistoryStatusDotClass,
   toServiceHistoryDate,
 } from "@/lib/use-cases/planning-center/people/service-history-display";
@@ -25,9 +23,8 @@ export function ScheduleContextPopover({ serviceHistory, children }: ScheduleCon
       toServiceHistoryDate(a.primary.date).getTime() - toServiceHistoryDate(b.primary.date).getTime()
   );
 
-
   const rows = (
-    <ul className="grid grid-cols-[auto_auto_1fr] items-start gap-x-3 gap-y-1.5 px-2 py-2">
+    <ul className="inline-grid max-w-full grid-cols-[auto_auto_auto] items-start gap-x-3 gap-y-2 px-3 py-2.5">
       {historyGroups.map(({ dayKey, primary, additionalServices, rehearsals }) => (
         <Fragment key={dayKey}>
           <li className="contents">
@@ -38,8 +35,8 @@ export function ScheduleContextPopover({ serviceHistory, children }: ScheduleCon
                 getHistoryStatusDotClass(primary.status)
               )}
             />
-            <span className="whitespace-nowrap text-sm font-medium tabular-nums text-foreground">
-              {formatServiceHistoryDisplayDate(primary.date)}
+            <span className="whitespace-nowrap text-sm font-normal tabular-nums text-foreground">
+              {formatPopoverHistoryDate(primary)}
             </span>
             <span className="text-sm leading-snug text-muted-foreground">
               {formatCombinedHistoryPositionLabel(primary, additionalServices)}
@@ -48,10 +45,11 @@ export function ScheduleContextPopover({ serviceHistory, children }: ScheduleCon
           {rehearsals.map((rehearsal) => (
             <li key={rehearsal.id} className="contents">
               <span aria-hidden />
-              <span className="whitespace-nowrap pl-3 text-xs tabular-nums text-muted-foreground/70">
-                {formatServiceHistoryDisplayDate(rehearsal.date)}
+              <span className="-mt-1 whitespace-nowrap text-xs leading-none tabular-nums text-muted-foreground/70">
+                {formatPopoverHistoryDate(rehearsal, { includeServiceTypeName: false })} -{" "}
+                <span className="text-muted-foreground/50">Rehearsal</span>
               </span>
-              <span className="text-xs leading-snug text-muted-foreground/60">Rehearsal</span>
+              <span aria-hidden />
             </li>
           ))}
         </Fragment>
@@ -62,20 +60,48 @@ export function ScheduleContextPopover({ serviceHistory, children }: ScheduleCon
   return (
     <Popover>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent align="start" sideOffset={6} className="w-[26rem] p-0">
-        <div className="border-b border-border/40 px-4 py-2.5">
+      <PopoverContent
+        align="start"
+        side="right"
+        sideOffset={10}
+        collisionPadding={16}
+        className="w-auto max-w-[min(44rem,calc(100vw-2rem))] overflow-hidden p-0"
+      >
+        <div className="border-b border-border/40 px-5 py-3">
           <p className="text-sm font-semibold tracking-tight text-foreground">
             Schedule ±{PLAN_HISTORY_HALF_RANGE_DAYS} days from this service
           </p>
         </div>
         {historyGroups.length === 0 ? (
-          <p className="px-4 py-3 text-sm text-muted-foreground">No recent history</p>
-        ) : historyGroups.length > 8 ? (
-          <ScrollArea className="max-h-96">{rows}</ScrollArea>
+          <p className="px-5 py-4 text-sm text-muted-foreground">No recent history</p>
         ) : (
-          rows
+          <div className="max-h-[min(40rem,calc(100vh-8rem),calc(var(--radix-popover-content-available-height)-1rem))] overflow-y-auto">
+            {rows}
+          </div>
         )}
       </PopoverContent>
     </Popover>
   );
+}
+
+function formatPopoverHistoryDate(
+  item: ServiceHistoryItem,
+  options: { includeServiceTypeName?: boolean } = {}
+) {
+  const base = formatServiceHistoryDisplayDateWithoutYear(item.date);
+  if (options.includeServiceTypeName === false) return base;
+  const serviceTypeName = item.serviceTypeName?.trim();
+  return serviceTypeName ? `${base} (${serviceTypeName})` : base;
+}
+
+function formatServiceHistoryDisplayDateWithoutYear(date: Date | string | undefined) {
+  if (!date) return "Unknown date";
+  const dateObj = toServiceHistoryDate(date);
+  if (Number.isNaN(dateObj.getTime())) return "Invalid date";
+
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(dateObj);
 }

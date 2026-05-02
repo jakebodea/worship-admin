@@ -336,18 +336,17 @@ export function DashboardPage() {
         )}
       >
         {hasSelectedPlan && selectedServiceType && selectedPlan ? (
-          <header className="mb-3 shrink-0">
-            <div className="flex min-w-0 items-baseline gap-2">
-              <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight md:text-2xl">
-                {selectedServiceType.name}
-                {planSubtitle && (
-                  <span className="font-normal text-muted-foreground"> / {planSubtitle}</span>
-                )}
-              </h1>
-              <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
-                · {formatPlanDate(selectedPlan.sortDate)}
+          <header className="mb-6 shrink-0">
+            <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight md:text-2xl">
+              {selectedServiceType.name}
+              {planSubtitle && (
+                <span className="font-normal text-muted-foreground"> / {planSubtitle}</span>
+              )}
+              <span className="font-light text-muted-foreground tabular-nums">
+                {' / '}
+                {formatPlanDate(selectedPlan.sortDate)}
               </span>
-            </div>
+            </h1>
           </header>
         ) : null}
 
@@ -378,6 +377,7 @@ export function DashboardPage() {
                 peopleLoading={peopleLoading}
                 selectedServiceTypeId={selectedServiceType?.id ?? null}
                 selectedPlanId={selectedPlan?.id ?? null}
+                planSortDate={selectedPlan?.sortDate ?? null}
                 onToggleTeam={toggleTeamCollapsed}
                 onSelectSlot={handleSlotSelect}
                 onScheduleSuccess={handleScheduleSuccess}

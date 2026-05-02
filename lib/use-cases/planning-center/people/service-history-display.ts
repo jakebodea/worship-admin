@@ -1,4 +1,6 @@
 import type { ScheduleFrequency, ServiceHistoryItem } from "@/lib/types";
+import { orgCalendarDaysRefMinusItem } from "@/lib/planning-center/org-calendar";
+import { formatCalendarDayInTimeZone } from "@/lib/use-cases/planning-center/people/calendar-day";
 
 /** Distinct engagement days in the plan-history band (parity: past = service days + rehearsal-only days; future = same split). */
 export function formatScheduleFrequencyLine(frequency: ScheduleFrequency | undefined): string | null {
@@ -159,6 +161,55 @@ export function buildServiceHistoryGroups(items: ServiceHistoryItem[]): ServiceH
   }
 
   return mergedOrder.map((key) => mergedGroups.get(key)!);
+}
+
+function absOrgCalendarDaysBetween(a: Date, b: Date, orgTimeZone: string): number {
+  const tz = orgTimeZone.trim() || "UTC";
+  const dayA = formatCalendarDayInTimeZone(a, tz);
+  const dayB = formatCalendarDayInTimeZone(b, tz);
+  return Math.abs(orgCalendarDaysRefMinusItem(dayA, dayB));
+}
+
+/** Shorthand for strip/summary: latest service day in history. */
+export function pickLatestServiceHistoryGroup(groups: ServiceHistoryGroup[]): ServiceHistoryGroup | null {
+  if (groups.length === 0) return null;
+  return groups.reduce((best, g) => {
+    const t = toServiceHistoryDate(g.primary.date).getTime();
+    const bt = toServiceHistoryDate(best.primary.date).getTime();
+    return t > bt ? g : best;
+  });
+}
+
+/**
+ * History group whose primary service is on the calendar day closest to `referenceDate` in `orgTimeZone`.
+ * Tie-break: more recent calendar instant (later `primary.date`).
+ */
+export function pickServiceHistoryGroupClosestToReference(
+  groups: ServiceHistoryGroup[],
+  referenceDate: Date | string | null | undefined,
+  orgTimeZone: string
+): ServiceHistoryGroup | null {
+  if (groups.length === 0) return null;
+  const ref = toServiceHistoryDate(referenceDate ?? undefined);
+  if (Number.isNaN(ref.getTime())) {
+    return pickLatestServiceHistoryGroup(groups);
+  }
+  const tz = orgTimeZone.trim() || "UTC";
+  let best = groups[0]!;
+  let bestDelta = absOrgCalendarDaysBetween(toServiceHistoryDate(best.primary.date), ref, tz);
+  for (let i = 1; i < groups.length; i++) {
+    const g = groups[i]!;
+    const delta = absOrgCalendarDaysBetween(toServiceHistoryDate(g.primary.date), ref, tz);
+    if (delta < bestDelta) {
+      best = g;
+      bestDelta = delta;
+    } else if (delta === bestDelta) {
+      const gt = toServiceHistoryDate(g.primary.date).getTime();
+      const bt = toServiceHistoryDate(best.primary.date).getTime();
+      if (gt > bt) best = g;
+    }
+  }
+  return best;
 }
 
 export function formatCombinedHistoryPositionLabel(

@@ -12,7 +12,8 @@ import {
   buildServiceHistoryGroups,
   formatCombinedHistoryPositionLabel,
   formatServiceHistoryDisplayDate,
-  toServiceHistoryDate,
+  pickLatestServiceHistoryGroup,
+  pickServiceHistoryGroupClosestToReference,
 } from "@/lib/use-cases/planning-center/people/service-history-display";
 import type { PersonWithAvailability } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -46,6 +47,9 @@ export interface ScheduleCandidateTileProps {
   person: PersonWithAvailability;
   serviceTypeId?: string | null;
   planId?: string | null;
+  /** Plan sort instant; drives “closest” history summary on the strip. */
+  planSortDate?: Date | null;
+  orgTimeZone: string;
   teamId?: string | null;
   positionId?: string | null;
   onScheduleSuccess?: () => void;
@@ -56,6 +60,8 @@ export function ScheduleCandidateTile({
   person,
   serviceTypeId,
   planId,
+  planSortDate,
+  orgTimeZone,
   teamId,
   positionId,
   onScheduleSuccess,
@@ -115,11 +121,11 @@ export function ScheduleCandidateTile({
 
   const initials = `${person.firstName?.[0] ?? ""}${person.lastName?.[0] ?? ""}` || "?";
 
-  const historyGroups = [...buildServiceHistoryGroups(person.serviceHistory ?? [])].sort(
-    (a, b) =>
-      toServiceHistoryDate(a.primary.date).getTime() - toServiceHistoryDate(b.primary.date).getTime()
-  );
-  const latestHistory = historyGroups[historyGroups.length - 1];
+  const historyGroups = buildServiceHistoryGroups(person.serviceHistory ?? []);
+  const summaryHistoryGroup =
+    planSortDate != null
+      ? pickServiceHistoryGroupClosestToReference(historyGroups, planSortDate, orgTimeZone)
+      : pickLatestServiceHistoryGroup(historyGroups);
 
   const scheduledForShort =
     selectedPlanAssignments.length === 0
@@ -130,14 +136,17 @@ export function ScheduleCandidateTile({
 
   const contextLine: ReactNode = isScheduledElsewhereOnService && scheduledForShort ? (
     <span className="text-amber-700 dark:text-amber-400">Also: {scheduledForShort}</span>
-  ) : latestHistory ? (
+  ) : summaryHistoryGroup ? (
     <>
       <span className="text-foreground/80">
-        {formatServiceHistoryDisplayDate(latestHistory.primary.date)}
+        {formatServiceHistoryDisplayDate(summaryHistoryGroup.primary.date)}
       </span>
       <span className="text-muted-foreground/70"> · </span>
       <span className="truncate">
-        {formatCombinedHistoryPositionLabel(latestHistory.primary, latestHistory.additionalServices)}
+        {formatCombinedHistoryPositionLabel(
+          summaryHistoryGroup.primary,
+          summaryHistoryGroup.additionalServices
+        )}
       </span>
     </>
   ) : null;
