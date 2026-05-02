@@ -377,7 +377,6 @@ export function DashboardPage() {
                 peopleLoading={peopleLoading}
                 selectedServiceTypeId={selectedServiceType?.id ?? null}
                 selectedPlanId={selectedPlan?.id ?? null}
-                planSortDate={selectedPlan?.sortDate ?? null}
                 onToggleTeam={toggleTeamCollapsed}
                 onSelectSlot={handleSlotSelect}
                 onScheduleSuccess={handleScheduleSuccess}

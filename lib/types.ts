@@ -508,6 +508,8 @@ export interface PersonWithAvailability extends Person {
   isScheduledForSelectedPlanPosition?: boolean;
   isConfirmedForSelectedPlanPosition?: boolean;
   isDeclinedForSelectedPlanPosition?: boolean;
+  /** From Services `PlanPerson` / `Schedule` `decline_reason` when declined for the selected plan slot. */
+  selectedPlanDeclineReason?: string | null;
   selectedPlanAssignmentLabels?: string[];
   scheduledPlanPersonId?: string;
   recommendationScore?: number;

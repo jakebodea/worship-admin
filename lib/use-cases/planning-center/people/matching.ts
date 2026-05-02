@@ -106,6 +106,7 @@ export function applySelectedPlanStatus(
   selectedPlanAssignmentLabels: string[] = []
 ) {
   person.selectedPlanAssignmentLabels = selectedPlanAssignmentLabels;
+  person.selectedPlanDeclineReason = undefined;
   if (!matchedSchedule) return;
 
   person.isScheduledForSelectedPlanPosition = true;
@@ -121,4 +122,10 @@ export function applySelectedPlanStatus(
     ? planPersonRel[0]?.id
     : planPersonRel?.id;
   person.scheduledPlanPersonId = planPersonId || matchedSchedule.id;
+
+  if (person.isDeclinedForSelectedPlanPosition) {
+    const raw = (matchedSchedule.attributes as { decline_reason?: string | null }).decline_reason;
+    person.selectedPlanDeclineReason =
+      typeof raw === "string" && raw.trim().length > 0 ? raw.trim() : null;
+  }
 }
