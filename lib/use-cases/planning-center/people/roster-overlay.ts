@@ -61,6 +61,7 @@ export function applySelectedPlanRosterStatus(
   assignmentLabels: string[] = overlay.assignmentLabels
 ) {
   person.selectedPlanAssignmentLabels = assignmentLabels;
+  person.selectedPlanDeclineReason = undefined;
   if (!overlay.selectedSlotEntry) return;
 
   person.isScheduledForSelectedPlanPosition = true;
@@ -69,6 +70,10 @@ export function applySelectedPlanRosterStatus(
   person.isDeclinedForSelectedPlanPosition =
     overlay.selectedSlotEntry.status === "declined";
   person.scheduledPlanPersonId = overlay.selectedSlotEntry.planPersonId;
+
+  if (person.isDeclinedForSelectedPlanPosition) {
+    person.selectedPlanDeclineReason = overlay.selectedSlotEntry.declineReason ?? null;
+  }
 }
 
 export function mergeAssignmentLabels(...labelGroups: string[][]): string[] {

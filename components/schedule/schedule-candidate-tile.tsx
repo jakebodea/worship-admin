@@ -91,6 +91,9 @@ export function ScheduleCandidateTile({
           : "available";
   const statusMeta = STATUS_META[statusVariant];
 
+  const isUnavailableForSlot = isBlocked || isDeclined;
+  const unavailableSlotLabel = isBlocked ? "Blocked" : isDeclined ? "Declined" : null;
+
   const recommendationPercentage =
     isBlocked || person.recommendationScore === undefined
       ? null
@@ -117,9 +120,16 @@ export function ScheduleCandidateTile({
       ? "ring-2 ring-emerald-500/80 ring-offset-2 ring-offset-background"
       : statusVariant === "scheduled"
         ? "ring-2 ring-amber-500/80 ring-offset-2 ring-offset-background"
-        : statusVariant === "declined" || statusVariant === "blocked"
+        : statusVariant === "declined"
           ? "ring-2 ring-red-500/70 ring-offset-2 ring-offset-background"
           : "";
+
+  const blockedAvatarTint = isBlocked ? (
+    <span
+      aria-hidden
+      className="pointer-events-none absolute inset-0 z-[1] rounded-full bg-red-500/[0.26] dark:bg-red-500/[0.2]"
+    />
+  ) : null;
 
   const elsewhereAssignmentsLabel = `Also scheduled for: ${selectedPlanAssignments.join(", ")}`;
   const elsewhereAvatarAriaLabel = `${person.fullName}. ${elsewhereAssignmentsLabel}`;
@@ -139,6 +149,25 @@ export function ScheduleCandidateTile({
     </PopoverContent>
   );
 
+  const showDeclinedAvatarPopover = isDeclined && !isBlocked;
+  const trimmedDeclineReason = person.selectedPlanDeclineReason?.trim() ?? "";
+  const declineReasonBody =
+    trimmedDeclineReason.length > 0
+      ? trimmedDeclineReason
+      : "No note was saved with this decline in Planning Center.";
+  const planDeclineReasonPopover = (
+    <PopoverContent
+      align="start"
+      side="right"
+      sideOffset={8}
+      collisionPadding={16}
+      className="w-auto max-w-[18rem] border border-border/60 bg-popover px-3 py-2.5 text-sm leading-snug shadow-md"
+    >
+      <p className="text-xs font-medium text-muted-foreground">Decline reason</p>
+      <p className="mt-1.5 leading-relaxed text-foreground [overflow-wrap:anywhere]">{declineReasonBody}</p>
+    </PopoverContent>
+  );
+
   const avatarInner = (
     <>
       <AvatarImage src={person.photoThumbnailUrl || undefined} alt={person.fullName} />
@@ -153,13 +182,32 @@ export function ScheduleCandidateTile({
         "hover:bg-muted/30"
       )}
     >
-      {isScheduledElsewhereOnPlan ? (
+      {showDeclinedAvatarPopover ? (
         <Popover>
           <PopoverTrigger asChild>
             <button
               type="button"
               className={cn(
-                "shrink-0 cursor-pointer rounded-full border-0 bg-transparent p-0",
+                "relative inline-flex shrink-0 cursor-pointer overflow-visible rounded-full border-0 bg-transparent p-0",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              )}
+              aria-label={`Decline reason for ${person.fullName}`}
+              title="View decline reason"
+            >
+              <Avatar className={cn("size-9", statusRing)} aria-hidden>
+                {avatarInner}
+              </Avatar>
+            </button>
+          </PopoverTrigger>
+          {planDeclineReasonPopover}
+        </Popover>
+      ) : isScheduledElsewhereOnPlan ? (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                "relative shrink-0 cursor-pointer overflow-visible rounded-full border-0 bg-transparent p-0",
                 "outline-2 outline-dashed outline-offset-2 outline-blue-500",
                 "hover:outline-blue-600 dark:outline-blue-400 dark:hover:outline-blue-300",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -170,18 +218,39 @@ export function ScheduleCandidateTile({
               <Avatar className={cn("size-9", statusRing)} aria-hidden>
                 {avatarInner}
               </Avatar>
+              {blockedAvatarTint}
             </button>
           </PopoverTrigger>
           {planElsewherePopover}
         </Popover>
       ) : (
-        <Avatar className={cn("size-9 shrink-0", statusRing)} title={statusMeta.label || undefined}>
-          {avatarInner}
-        </Avatar>
+        <span className="relative inline-flex shrink-0 overflow-visible">
+          <Avatar className={cn("size-9", statusRing)} title={statusMeta.label || undefined}>
+            {avatarInner}
+          </Avatar>
+          {blockedAvatarTint}
+        </span>
       )}
 
       <div className="flex min-w-0 flex-1 items-center gap-1.5">
-        <p className="min-w-0 truncate text-base font-medium leading-tight text-foreground">{person.fullName}</p>
+        <p
+          className={cn(
+            "min-w-0 truncate text-base font-medium leading-tight text-foreground",
+            isUnavailableForSlot && "text-muted-foreground line-through"
+          )}
+        >
+          {person.fullName}
+        </p>
+        {unavailableSlotLabel ? (
+          <span
+            className={cn(
+              "shrink-0 text-[0.65rem] font-semibold uppercase tracking-wide",
+              isBlocked ? "text-amber-800 dark:text-amber-400" : "text-red-700 dark:text-red-400"
+            )}
+          >
+            {unavailableSlotLabel}
+          </span>
+        ) : null}
         <ScheduleContextPopover serviceHistory={serviceHistory}>
           <button
             type="button"

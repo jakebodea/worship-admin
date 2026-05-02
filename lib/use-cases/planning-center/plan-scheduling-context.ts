@@ -26,6 +26,8 @@ export interface PlanRosterEntry {
   label: string;
   status: PlanRosterStatus;
   rawStatus: string;
+  /** Services `plan_person.decline_reason` when present. */
+  declineReason?: string | null;
 }
 
 export interface PlanSchedulingContext {
@@ -182,7 +184,14 @@ function normalizeRosterEntry(
     label: teamName ? `${teamName} - ${positionName}` : positionName,
     status,
     rawStatus: (member.attributes.status || "").toString(),
+    declineReason: normalizeDeclineReason(member.attributes.decline_reason),
   };
+}
+
+function normalizeDeclineReason(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const t = raw.trim();
+  return t.length > 0 ? t : null;
 }
 
 function classifyRosterStatus(rawStatus: string | undefined): PlanRosterStatus {
