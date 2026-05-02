@@ -279,7 +279,14 @@ function AppTopBar() {
   );
 }
 
-function SidebarAccountPanel({ onOpenShortcuts }: { onOpenShortcuts: () => void }) {
+function SidebarAccountPanel({
+  onOpenShortcuts,
+  onPeekLockChange,
+}: {
+  onOpenShortcuts: () => void;
+  /** Keeps collapsed offcanvas sidebar peek visible while dropdown content is portaled. */
+  onPeekLockChange?: (locked: boolean) => void;
+}) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { setTheme, theme } = useTheme();
@@ -361,7 +368,13 @@ function SidebarAccountPanel({ onOpenShortcuts }: { onOpenShortcuts: () => void 
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <DropdownMenu open={accountMenuOpen} onOpenChange={setAccountMenuOpen}>
+        <DropdownMenu
+          open={accountMenuOpen}
+          onOpenChange={(open) => {
+            setAccountMenuOpen(open);
+            onPeekLockChange?.(open);
+          }}
+        >
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
               <Avatar className="size-6 rounded-md">
@@ -382,7 +395,7 @@ function SidebarAccountPanel({ onOpenShortcuts }: { onOpenShortcuts: () => void 
           <DropdownMenuContent
             side="bottom"
             align="start"
-            className="max-w-none min-w-[14rem] w-[var(--radix-dropdown-menu-trigger-width)] gap-0 rounded-xl border-border/60 bg-popover p-1 shadow-xl shadow-black/35"
+            className="z-[80] max-w-none min-w-[14rem] w-[var(--radix-dropdown-menu-trigger-width)] gap-0 rounded-xl border-border/60 bg-popover p-1 shadow-xl shadow-black/35"
           >
             <DropdownMenuLabel className="cursor-default rounded-none px-2.5 py-2.5 pb-2 font-normal">
               <span className="block truncate text-sm font-semibold text-foreground">
@@ -490,14 +503,24 @@ function AppSidebar({
 }) {
   const pathname = usePathname();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [sidebarPeekLocked, setSidebarPeekLocked] = useState(false);
 
   useHotkey(SHORTCUTS_PALETTE_HOTKEY, () => setShortcutsOpen(true), { ignoreInputs: true });
 
   return (
     <>
-      <Sidebar variant="inset" collapsible="offcanvas" collapsePreview={collapsePreview} trailingChrome={trailingChrome}>
+      <Sidebar
+        variant="inset"
+        collapsible="offcanvas"
+        collapsePreview={collapsePreview}
+        peekLocked={sidebarPeekLocked}
+        trailingChrome={trailingChrome}
+      >
         <SidebarHeader>
-          <SidebarAccountPanel onOpenShortcuts={() => setShortcutsOpen(true)} />
+          <SidebarAccountPanel
+            onOpenShortcuts={() => setShortcutsOpen(true)}
+            onPeekLockChange={setSidebarPeekLocked}
+          />
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
