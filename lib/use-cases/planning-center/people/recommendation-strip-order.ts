@@ -11,7 +11,14 @@ function tailSortKey(person: PersonWithAvailability): number {
   return 2;
 }
 
-/** Everyone except blocked/declined (highest → lowest recommendation), then blocked & declined at the end. */
+/** Within actionable: confirmed first, then on-slot (pending), then everyone else. */
+function actionableSortKey(person: PersonWithAvailability): number {
+  if (person.isConfirmedForSelectedPlanPosition) return 0;
+  if (person.isScheduledForSelectedPlanPosition) return 1;
+  return 2;
+}
+
+/** On-slot people first, then everyone else by recommendation, then blocked & declined at the end. */
 export function partitionPeopleForRecommendationStrip(people: PersonWithAvailability[]): {
   actionable: PersonWithAvailability[];
   exceptions: PersonWithAvailability[];
@@ -25,6 +32,8 @@ export function partitionPeopleForRecommendationStrip(people: PersonWithAvailabi
   }
 
   actionable.sort((a, b) => {
+    const tk = actionableSortKey(a) - actionableSortKey(b);
+    if (tk !== 0) return tk;
     const as = a.recommendationScore ?? 0;
     const bs = b.recommendationScore ?? 0;
     if (bs !== as) return bs - as;

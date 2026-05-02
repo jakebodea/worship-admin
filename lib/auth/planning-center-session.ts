@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { getDevBypassSession, isDevAuthBypassEnabled } from "@/lib/auth/dev-bypass";
 import { ApiError } from "@/lib/http/api-error";
 import { runWithPlanningCenterRequestAuth } from "@/lib/planning-center/request-auth-context";
 
@@ -37,6 +38,17 @@ export type PlanningCenterUserAuthContext = {
 };
 
 export async function requirePlanningCenterAccessToken(request: Request) {
+  if (isDevAuthBypassEnabled()) {
+    return {
+      session: getDevBypassSession() as unknown as NonNullable<
+        Awaited<ReturnType<typeof auth.api.getSession>>
+      >,
+      accessToken: "",
+      scopes: [],
+      accountId: "dev-bypass-account",
+    };
+  }
+
   const session = await auth.api.getSession({
     headers: request.headers,
   });
@@ -117,6 +129,12 @@ export async function withPlanningCenterUser<T>(
   handler: (ctx: PlanningCenterUserAuthContext) => Promise<T>
 ): Promise<T> {
   const authContext = await requirePlanningCenterAccessToken(request);
+
+  if (!authContext.accessToken) {
+    // Dev bypass: skip the per-request bearer so the core client falls back to
+    // Basic auth using PLANNING_CENTER_CLIENT/PLANNING_CENTER_PAT.
+    return handler(authContext);
+  }
 
   return runWithPlanningCenterRequestAuth(
     { accessToken: authContext.accessToken },

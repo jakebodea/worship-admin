@@ -5,7 +5,7 @@ import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { ServiceTypeMultiSelect } from "@/components/service-type-multi-select";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Empty,
   EmptyDescription,
@@ -126,6 +126,7 @@ export function ServicePlanTableSelector({
     () => (selectedServiceTypeId ? [selectedServiceTypeId] : readStoredServiceTypeIds())
   );
   const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>("60");
+  const [showMineOnly, setShowMineOnly] = useState(false);
 
   const allServiceTypeIds = useMemo(
     () => (serviceTypes ?? []).map((serviceType) => serviceType.id),
@@ -211,12 +212,30 @@ export function ServicePlanTableSelector({
     });
   }, [planQueries, serviceTypes]);
 
+  const planIdsForLookup = useMemo(
+    () => [...new Set(rows.map((row) => row.planId))],
+    [rows]
+  );
+  const {
+    data: myScheduledPlans,
+    isLoading: myScheduledPlansLoading,
+    isFetching: myScheduledPlansFetching,
+  } = useMyScheduledPlans(planIdsForLookup);
+  const myScheduledPlanIdSet = useMemo(
+    () => new Set(myScheduledPlans?.planIds ?? []),
+    [myScheduledPlans?.planIds]
+  );
+
   const visibleRows = useMemo(() => {
     const normalizedSearch = searchValue.trim().toLowerCase();
 
     return rows.filter((row) => {
       if (selectedServiceTypeIdSet.size === 0) return false;
       if (!selectedServiceTypeIdSet.has(row.serviceTypeId)) {
+        return false;
+      }
+
+      if (showMineOnly && !myScheduledPlanIdSet.has(row.planId)) {
         return false;
       }
 
@@ -239,20 +258,23 @@ export function ServicePlanTableSelector({
 
       return haystack.includes(normalizedSearch);
     });
-  }, [dateRangeFilter, orgTimeZone, rows, searchValue, selectedServiceTypeIdSet]);
+  }, [
+    dateRangeFilter,
+    myScheduledPlanIdSet,
+    orgTimeZone,
+    rows,
+    searchValue,
+    selectedServiceTypeIdSet,
+    showMineOnly,
+  ]);
 
   const plansLoading = planQueries.some((query) => query.isLoading);
-  const isLoading = serviceTypesLoading || plansLoading;
   const errorMessage = planQueries.find((query) => query.isError)?.error;
-  const planIdsForLookup = useMemo(
-    () => [...new Set(rows.map((row) => row.planId))],
-    [rows]
-  );
-  const { data: myScheduledPlans } = useMyScheduledPlans(planIdsForLookup);
-  const myScheduledPlanIdSet = useMemo(
-    () => new Set(myScheduledPlans?.planIds ?? []),
-    [myScheduledPlans?.planIds]
-  );
+  // Hold the table until we know which rows belong to the current user — avoids the
+  // "scheduled" markers popping in after rows render.
+  const awaitingMyScheduled =
+    planIdsForLookup.length > 0 && (myScheduledPlansLoading || (!myScheduledPlans && myScheduledPlansFetching));
+  const isLoading = serviceTypesLoading || plansLoading || awaitingMyScheduled;
   const prefetchTeamPositions = useCallback(
     (row: ServicePlanRow) => {
       void queryClient.prefetchQuery(
@@ -279,9 +301,49 @@ export function ServicePlanTableSelector({
 
   useEffect(() => cancelDelayedPrefetch, [cancelDelayedPrefetch]);
 
+  const myScheduledCount = useMemo(
+    () => rows.filter((row) => myScheduledPlanIdSet.has(row.planId)).length,
+    [rows, myScheduledPlanIdSet]
+  );
+  const mineTabDisabled = !isLoading && myScheduledCount === 0;
+
+  // If "mine only" was selected and no rows match, fall back to "all".
+  useEffect(() => {
+    if (showMineOnly && mineTabDisabled) setShowMineOnly(false);
+  }, [mineTabDisabled, showMineOnly]);
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_200px]">
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <Tabs
+          value={showMineOnly ? "mine" : "all"}
+          onValueChange={(next) => setShowMineOnly(next === "mine")}
+        >
+          <TabsList className="h-8">
+            <TabsTrigger value="all" className="px-3 text-xs">
+              All
+            </TabsTrigger>
+            <TabsTrigger
+              value="mine"
+              className="gap-1.5 px-3 text-xs"
+              disabled={mineTabDisabled}
+            >
+              <span
+                aria-hidden
+                className="size-1.5 rounded-full bg-emerald-500"
+              />
+              Mine
+              {myScheduledCount > 0 ? (
+                <span className="tabular-nums text-muted-foreground">
+                  {myScheduledCount}
+                </span>
+              ) : null}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      <div className="grid shrink-0 gap-2 sm:grid-cols-[minmax(0,1fr)_180px_160px]">
         <InputGroup>
           <InputGroupAddon>
             <Search />
@@ -289,7 +351,7 @@ export function ServicePlanTableSelector({
           <InputGroupInput
             value={searchValue}
             onChange={(event) => setSearchValue(event.target.value)}
-            placeholder="Search service type, plan title, series, or date"
+            placeholder="Search service type, plan, series, or date"
             aria-label="Search services and plans"
           />
         </InputGroup>
@@ -313,31 +375,31 @@ export function ServicePlanTableSelector({
         </NativeSelect>
       </div>
 
-      <div className="overflow-hidden rounded-lg border">
+      <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border/40">
         <Table>
-          <TableHeader className="bg-muted">
-            <TableRow className="hover:bg-muted">
-              <TableHead className="w-[30%] px-4">Service Type</TableHead>
-              <TableHead className="w-[20%] px-4">Date</TableHead>
-              <TableHead className="w-[25%] px-4">Series</TableHead>
-              <TableHead className="px-4">Plan</TableHead>
+          <TableHeader className="sticky top-0 z-10 bg-background">
+            <TableRow className="border-b border-border/40 hover:bg-transparent [&>th]:h-9 [&>th]:text-xs [&>th]:font-medium [&>th]:text-muted-foreground">
+              <TableHead className="w-[30%] pl-5 pr-3">Service type</TableHead>
+              <TableHead className="w-[20%] px-3">Date</TableHead>
+              <TableHead className="w-[25%] px-3">Series</TableHead>
+              <TableHead className="px-3">Plan</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               Array.from({ length: 8 }).map((_, index) => (
-                <TableRow key={`loading-${index}`}>
-                  <TableCell className="px-4">
-                    <Skeleton className="h-4 w-40" />
+                <TableRow key={`loading-${index}`} className="[&>td]:h-10">
+                  <TableCell className="pl-5 pr-3">
+                    <Skeleton className="h-3.5 w-40" />
                   </TableCell>
-                  <TableCell className="px-4">
-                    <Skeleton className="h-4 w-28" />
+                  <TableCell className="px-3">
+                    <Skeleton className="h-3.5 w-28" />
                   </TableCell>
-                  <TableCell className="px-4">
-                    <Skeleton className="h-4 w-36" />
+                  <TableCell className="px-3">
+                    <Skeleton className="h-3.5 w-36" />
                   </TableCell>
-                  <TableCell className="px-4">
-                    <Skeleton className="h-4 w-48" />
+                  <TableCell className="px-3">
+                    <Skeleton className="h-3.5 w-48" />
                   </TableCell>
                 </TableRow>
               ))
@@ -379,11 +441,17 @@ export function ServicePlanTableSelector({
                     key={`${row.serviceTypeId}:${row.planId}`}
                     data-state={isActive ? "selected" : undefined}
                     className={cn(
-                      "cursor-pointer",
-                      isScheduledForCurrentUser && "bg-accent/50 hover:bg-accent"
+                      "group/row relative cursor-pointer transition-none hover:bg-muted/60 [&>td]:h-10 [&>td]:py-0 [&>td]:transition-none",
+                      isScheduledForCurrentUser &&
+                        "[&>td:first-child]:shadow-[inset_2px_0_0_0_#10b981]"
                     )}
                     tabIndex={0}
                     aria-selected={isActive}
+                    aria-label={
+                      isScheduledForCurrentUser
+                        ? `${row.serviceTypeName} — you are scheduled`
+                        : undefined
+                    }
                     onClick={() =>
                       onSelect({
                         serviceTypeId: row.serviceTypeId,
@@ -401,23 +469,26 @@ export function ServicePlanTableSelector({
                       });
                     }}
                   >
-                    <TableCell className="px-4 font-medium">{row.serviceTypeName}</TableCell>
-                    <TableCell className="px-4">{formatDate(row.sortDate)}</TableCell>
-                    <TableCell className="px-4">
+                    <TableCell
+                      className={cn(
+                        "pl-5 pr-3 font-medium",
+                        isScheduledForCurrentUser && "text-emerald-700 dark:text-emerald-300"
+                      )}
+                    >
+                      {row.serviceTypeName}
+                    </TableCell>
+                    <TableCell className="px-3 tabular-nums text-muted-foreground">
+                      {formatDate(row.sortDate)}
+                    </TableCell>
+                    <TableCell className="px-3 text-muted-foreground">
                       {row.seriesTitle ? (
                         <span className="truncate">{row.seriesTitle}</span>
                       ) : (
-                        <Badge variant="secondary">No series</Badge>
+                        <span className="opacity-30">—</span>
                       )}
                     </TableCell>
-                    <TableCell className="px-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate">{row.planTitle || "Untitled plan"}</span>
-                        {isScheduledForCurrentUser ? (
-                          <Badge variant="outline">Scheduled</Badge>
-                        ) : null}
-                        {isActive ? <Badge variant="secondary">Selected</Badge> : null}
-                      </div>
+                    <TableCell className="px-3">
+                      <span className="truncate">{row.planTitle || "Untitled plan"}</span>
                     </TableCell>
                   </TableRow>
                 );

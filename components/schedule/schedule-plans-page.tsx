@@ -36,13 +36,8 @@ export function SchedulePlansPage() {
   );
 
   return (
-    <main className="min-h-[calc(100svh-3.5rem)] bg-background">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:py-8">
-        <header className="flex flex-col gap-2">
-          <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Schedule</h1>
-          <p className="text-muted-foreground">Choose a service plan to open the planner.</p>
-        </header>
-
+    <main className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      <div className="mx-auto flex w-full max-w-7xl min-h-0 flex-1 flex-col px-4 py-4">
         <ServicePlanTableSelector
           selectedServiceTypeId={null}
           selectedPlanId={null}

@@ -29,14 +29,14 @@ describe("partitionPeopleForRecommendationStrip", () => {
     expect(exceptions.map((p) => p.id)).toEqual(["3"]);
   });
 
-  it("keeps scheduled and confirmed in the main strip, ordered by score", () => {
+  it("places on-slot people first (confirmed before pending), then the rest by score", () => {
     const people = [
       basePerson("1", "Scheduled", { isScheduledForSelectedPlanPosition: true, recommendationScore: 100 }),
       basePerson("2", "Open", { recommendationScore: 5 }),
       basePerson("3", "Confirmed", { isConfirmedForSelectedPlanPosition: true, recommendationScore: 0 }),
     ];
     const { actionable, exceptions } = partitionPeopleForRecommendationStrip(people);
-    expect(actionable.map((p) => p.id)).toEqual(["1", "2", "3"]);
+    expect(actionable.map((p) => p.id)).toEqual(["3", "1", "2"]);
     expect(exceptions.map((p) => p.id)).toEqual([]);
   });
 

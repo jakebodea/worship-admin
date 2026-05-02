@@ -8,8 +8,7 @@ import { LineupTab } from "@/components/schedule/lineup-tab";
 import { PlanTab } from "@/components/schedule/plan-tab";
 import { ScheduleViewTab } from "@/components/schedule/schedule-view-tab";
 import type { SlotRef } from "@/components/schedule/types";
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { usePeople } from "@/hooks/use-people";
 import { usePlans } from "@/hooks/use-plans";
 import { useServiceTypes } from "@/hooks/use-service-types";
@@ -284,17 +283,6 @@ export function DashboardPage() {
     console.error("Schedule error:", message);
   };
 
-  const handleViewChange = (nextView: string) => {
-    const parsedView = parseDashboardView(nextView);
-    navigateTo({
-      serviceTypeId: selectedServiceType?.id ?? null,
-      planId: selectedPlan?.id ?? null,
-      teamId: selectedTeam,
-      positionId: selectedPosition,
-      view: parsedView,
-    });
-  };
-
   const handleSlotSelect = (slot: SlotRef) => {
     if (selectedPlanId) {
       setCollapsedTeamsByPlan((prev) => {
@@ -340,82 +328,45 @@ export function DashboardPage() {
       : null;
 
   return (
-    <main
-      className={cn(
-        "min-h-[calc(100svh-3.5rem)] bg-background",
-        hasSelectedPlan && "lg:h-[calc(100svh-3.5rem)] lg:overflow-hidden"
-      )}
-    >
+    <main className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       <div
         className={cn(
-          "mx-auto w-full max-w-7xl px-4",
-          hasSelectedPlan ? "py-4 md:py-5 lg:flex lg:h-full lg:flex-col" : "py-6 md:py-8"
+          "mx-auto flex w-full max-w-7xl min-h-0 flex-1 flex-col px-4",
+          hasSelectedPlan ? "py-3" : "py-6"
         )}
       >
-        <header className={cn(hasSelectedPlan ? "mb-4 lg:shrink-0" : "mb-6")}>
-          {hasSelectedPlan && selectedServiceType && selectedPlan ? (
-            <div className="flex flex-col gap-2">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-                  {selectedServiceType.name}
-                  {planSubtitle && (
-                    <span className="font-normal text-muted-foreground"> / {planSubtitle}</span>
-                  )}
-                </h1>
-                <Tabs
-                  value={activeView}
-                  onValueChange={handleViewChange}
-                  className="lg:min-h-0 lg:flex-1"
-                >
-                  <TabsList className="w-full justify-start rounded-full sm:w-fit">
-                    <TabsTrigger value="schedule">Schedule</TabsTrigger>
-                    <TabsTrigger value="lineup">Lineup</TabsTrigger>
-                    <TabsTrigger value="plan">Plan</TabsTrigger>
-                  </TabsList>
-                </Tabs>
-              </div>
-              <p className="text-sm text-muted-foreground">{formatPlanDate(selectedPlan.sortDate)}</p>
-            </div>
-          ) : hasPlanUrlSelection && isPlanMetadataLoading ? null : (
-            <div className="flex flex-col gap-2">
-              <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
-                Select a Plan
+        {hasSelectedPlan && selectedServiceType && selectedPlan ? (
+          <header className="mb-3 shrink-0">
+            <div className="flex min-w-0 items-baseline gap-2">
+              <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight md:text-2xl">
+                {selectedServiceType.name}
+                {planSubtitle && (
+                  <span className="font-normal text-muted-foreground"> / {planSubtitle}</span>
+                )}
               </h1>
-              <p className="text-muted-foreground">
-                Open the schedule table to choose a plan before editing lineup details.
-              </p>
+              <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
+                · {formatPlanDate(selectedPlan.sortDate)}
+              </span>
             </div>
-          )}
-        </header>
+          </header>
+        ) : null}
 
-        {!hasSelectedPlan && (
-          isPlanMetadataLoading ? (
-            <div className="flex min-h-[40vh] items-center justify-center">
-              <div className="flex items-center gap-2">
-                <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Loading plan details...</p>
-              </div>
-            </div>
-          ) : (
-            <Empty className="rounded-2xl border border-dashed">
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <LoaderCircle />
-                </EmptyMedia>
-                <EmptyTitle>No valid plan selected</EmptyTitle>
-                <EmptyDescription>
-                  Use the Schedule breadcrumb above to choose a plan from the schedule table.
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          )
-        )}
-
-        {hasSelectedPlan && (
-          <Tabs value={activeView} onValueChange={handleViewChange} className="lg:min-h-0 lg:flex-1">
+        {!hasSelectedPlan ? (
+          <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
+            {isPlanMetadataLoading ? (
+              <>
+                <LoaderCircle className="size-4 animate-spin" />
+                Loading plan details…
+              </>
+            ) : (
+              <span>No plan selected · use the Schedule breadcrumb to choose one.</span>
+            )}
+          </div>
+        ) : (
+          <Tabs value={activeView} className="flex min-h-0 flex-1 flex-col">
             <TabsContent
               value="schedule"
-              className="mt-0 flex min-h-0 flex-1 flex-col lg:h-full lg:min-h-0"
+              className="mt-0 flex min-h-0 flex-1 flex-col"
             >
               <ScheduleViewTab
                 teamPositionsLoading={teamPositionsLoading}
@@ -434,7 +385,7 @@ export function DashboardPage() {
               />
             </TabsContent>
 
-            <TabsContent value="lineup" className="mt-0 lg:min-h-0 lg:flex-1">
+            <TabsContent value="lineup" className="mt-0 flex min-h-0 flex-1 flex-col">
               <LineupTab
                 groups={teamPositionGroups ?? []}
                 isLoading={teamPositionsLoading}
@@ -442,7 +393,7 @@ export function DashboardPage() {
               />
             </TabsContent>
 
-            <TabsContent value="plan" className="mt-0 lg:min-h-0 lg:flex-1">
+            <TabsContent value="plan" className="mt-0 flex min-h-0 flex-1 flex-col">
               <PlanTab
                 serviceTypeId={selectedServiceType?.id ?? null}
                 planId={selectedPlan?.id ?? null}

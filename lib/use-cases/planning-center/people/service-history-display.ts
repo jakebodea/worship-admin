@@ -51,6 +51,15 @@ export function getHistoryStatusBadgeClass(status: string | undefined): string {
   return "border-border bg-muted/80 text-muted-foreground";
 }
 
+export function getHistoryStatusDotClass(status: string | undefined): string {
+  const raw = (status || "").trim();
+  const normalized = raw.toLowerCase();
+  if (raw === "C" || normalized === "confirmed") return "bg-emerald-500";
+  if (raw === "U" || normalized === "unconfirmed") return "bg-amber-500";
+  if (raw === "D" || normalized === "declined") return "bg-red-500";
+  return "bg-muted-foreground/50";
+}
+
 function toDayKey(value: Date | string | undefined): string | null {
   const date = toServiceHistoryDate(value);
   if (Number.isNaN(date.getTime())) return null;

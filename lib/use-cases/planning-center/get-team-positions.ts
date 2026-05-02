@@ -254,6 +254,7 @@ function applyPlanTeamMemberSummary(
 
     const entry: FilledPositionPerson = {
       id: rosterEntry.personId ?? `unknown-${rosterEntry.planPersonId}`,
+      planPersonId: rosterEntry.planPersonId,
       name: rosterEntry.person?.name || "Unknown person",
       status,
       rawStatus: rosterEntry.rawStatus,

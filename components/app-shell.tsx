@@ -24,6 +24,7 @@ import {
   Settings2,
   Sun,
 } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTheme } from "next-themes";
 import { authClient } from "@/lib/auth-client";
 import { getJson, postJson } from "@/lib/http/client";
@@ -38,7 +39,6 @@ import {
   BreadcrumbLink,
   BreadcrumbList,
   BreadcrumbPage,
-  BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import {
   DropdownMenu,
@@ -214,35 +214,68 @@ function SidebarResizeRail({
   );
 }
 
-function AppBreadcrumbs() {
+type TopBarView = "schedule" | "lineup" | "plan";
+
+function parseTopBarView(value: string | null): TopBarView {
+  if (value === "lineup") return "lineup";
+  if (value === "plan") return "plan";
+  return "schedule";
+}
+
+function AppTopBar() {
+  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const hasPlan = pathname === "/schedule/plan";
-  const view = searchParams.get("view");
-  const currentPage = hasPlan ? (view === "lineup" ? "Lineup" : view === "plan" ? "Plan" : "Planner") : "Plans";
+  const view = parseTopBarView(searchParams.get("view"));
+
+  const handleViewChange = useCallback(
+    (next: string) => {
+      const parsed = parseTopBarView(next);
+      const params = new URLSearchParams(searchParams.toString());
+      if (parsed === "schedule") {
+        params.delete("view");
+      } else {
+        params.set("view", parsed);
+      }
+      const query = params.toString();
+      const url = query ? `${pathname}?${query}` : pathname;
+      startTransition(() => router.replace(url));
+    },
+    [pathname, router, searchParams]
+  );
 
   return (
-    <Breadcrumb>
-      <BreadcrumbList>
-        <BreadcrumbItem>
-          {hasPlan ? (
-            <BreadcrumbLink asChild>
-              <Link href="/schedule">Schedule</Link>
-            </BreadcrumbLink>
-          ) : (
-            <BreadcrumbPage>Schedule</BreadcrumbPage>
-          )}
-        </BreadcrumbItem>
-        {hasPlan ? (
-          <>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>{currentPage}</BreadcrumbPage>
-            </BreadcrumbItem>
-          </>
-        ) : null}
-      </BreadcrumbList>
-    </Breadcrumb>
+    <div className="flex w-full min-w-0 items-center gap-3">
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            {hasPlan ? (
+              <BreadcrumbLink asChild>
+                <Link href="/schedule">Schedule</Link>
+              </BreadcrumbLink>
+            ) : (
+              <BreadcrumbPage>Schedule</BreadcrumbPage>
+            )}
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+      {hasPlan ? (
+        <Tabs value={view} onValueChange={handleViewChange} className="ml-auto">
+          <TabsList className="h-8">
+            <TabsTrigger value="schedule" className="px-3 text-xs">
+              Schedule
+            </TabsTrigger>
+            <TabsTrigger value="lineup" className="px-3 text-xs">
+              Lineup
+            </TabsTrigger>
+            <TabsTrigger value="plan" className="px-3 text-xs">
+              Plan
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      ) : null}
+    </div>
   );
 }
 
@@ -330,23 +363,17 @@ function SidebarAccountPanel({ onOpenShortcuts }: { onOpenShortcuts: () => void 
       <SidebarMenuItem>
         <DropdownMenu open={accountMenuOpen} onOpenChange={setAccountMenuOpen}>
           <DropdownMenuTrigger asChild>
-            <SidebarMenuButton
-              size="lg"
-              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-            >
-              <Avatar className="size-8 rounded-lg">
+            <SidebarMenuButton className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
+              <Avatar className="size-6 rounded-md">
                 {data?.session.image ? <AvatarImage src={data.session.image} alt={avatarName ?? "User"} /> : null}
-                <AvatarFallback className="rounded-lg bg-primary text-xs font-medium text-primary-foreground">
+                <AvatarFallback className="rounded-md bg-primary text-[10px] font-medium text-primary-foreground">
                   {initialsFromName(avatarName)}
                 </AvatarFallback>
               </Avatar>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">{organizationName}</span>
-                <span className="truncate text-xs text-muted-foreground">{data?.session.name ?? "Admin"}</span>
-              </div>
+              <span className="flex-1 truncate text-left text-sm font-medium">{organizationName}</span>
               <ChevronDown
                 className={cn(
-                  "ml-auto transition-transform group-data-[collapsible=icon]:hidden",
+                  "ml-auto size-3.5 text-muted-foreground transition-transform group-data-[collapsible=icon]:hidden",
                   accountMenuOpen ? "rotate-180" : null
                 )}
               />
@@ -567,13 +594,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         }
       />
       <SidebarInset className="min-h-0 overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border/60 px-4">
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/50 px-3">
           <SidebarTrigger />
           <Suspense fallback={null}>
-            <AppBreadcrumbs />
+            <AppTopBar />
           </Suspense>
         </header>
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">{children}</div>
+        <div className="flex min-h-0 flex-1 flex-col">{children}</div>
       </SidebarInset>
     </SidebarProvider>
   );

@@ -117,32 +117,30 @@ export function PlanItemList({
 
       <ScrollArea className="min-h-0 flex-1">
         {isLoading ? (
-          <div className="space-y-3 pb-28 pr-0 sm:pb-6 sm:pr-3">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <Skeleton key={index} className="h-32 w-full rounded-xl" />
+          <div className="space-y-2 pr-0 sm:pr-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <Skeleton key={index} className="h-14 w-full rounded-md" />
             ))}
           </div>
         ) : items.length === 0 ? (
-          <Card className="mx-0 border-dashed px-6 py-10 text-center sm:mr-3">
-            <div className="mx-auto flex max-w-md flex-col items-center gap-3">
-              <div className="bg-muted text-muted-foreground rounded-full p-3">
-                <FileMusic className="size-6" />
-              </div>
+          <Card className="mx-0 border-dashed border-border/50 bg-transparent px-6 py-8 text-center sm:mr-3">
+            <div className="mx-auto flex max-w-sm flex-col items-center gap-3">
+              <FileMusic className="size-5 text-muted-foreground/70" />
               <div>
-                <p className="text-base font-semibold">This plan does not have any structure yet.</p>
-                <p className="text-muted-foreground mt-1 text-sm">
-                  Start by adding a song, a header, or a custom item.
+                <p className="text-sm font-medium">This plan has no structure yet</p>
+                <p className="text-muted-foreground mt-0.5 text-xs">
+                  Add a song, header, or item from the toolbar above.
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-2">
-                <Button type="button" onClick={onAddSong}>
+                <Button type="button" size="sm" onClick={onAddSong}>
                   <Music4 className="size-4" />
                   Add Song
                 </Button>
-                <Button type="button" variant="outline" onClick={onAddHeader}>
+                <Button type="button" variant="outline" size="sm" onClick={onAddHeader}>
                   Add Header
                 </Button>
-                <Button type="button" variant="outline" onClick={onAddItem}>
+                <Button type="button" variant="outline" size="sm" onClick={onAddItem}>
                   Add Item
                 </Button>
               </div>
@@ -160,8 +158,8 @@ export function PlanItemList({
               items={items.map((item) => item.id)}
               strategy={verticalListSortingStrategy}
             >
-              <div className="pb-28 sm:pb-6 sm:pr-3">
-                <div className="overflow-hidden rounded-lg border bg-background">
+              <div className="pb-4 sm:pr-3">
+                <div className="overflow-hidden rounded-lg border border-border/50 bg-background">
                   {items.map((item) => (
                     <SortablePlanItem
                       key={item.id}
@@ -307,7 +305,7 @@ function PlanItemCard({
           !isDragged && tone.hover
         )}
       >
-        <div className="hidden items-center gap-3 px-4 py-3 sm:flex">
+        <div className="hidden items-center gap-3 px-3 py-2 sm:flex">
           <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -354,7 +352,7 @@ function PlanItemCard({
           </div>
         </div>
 
-        <div className="flex items-start gap-3 px-4 py-3 sm:hidden">
+        <div className="flex items-start gap-3 px-3 py-2.5 sm:hidden">
           <div className="min-w-0 flex-1 text-left">
             <div className="flex flex-wrap items-center gap-2">
               <p className="min-w-0 break-words font-semibold">{item.title || "Untitled item"}</p>

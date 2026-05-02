@@ -5,7 +5,16 @@ import { logger } from "@/lib/logger";
 
 const log = logger.for("middleware");
 
+function isDevAuthBypassEnabled(): boolean {
+  if (process.env.NODE_ENV === "production") return false;
+  return process.env.DEV_AUTH_BYPASS === "1" || process.env.DEV_AUTH_BYPASS === "true";
+}
+
 export function proxy(request: NextRequest) {
+  if (isDevAuthBypassEnabled()) {
+    return NextResponse.next();
+  }
+
   const sessionCookie = getSessionCookie(request);
 
   if (request.nextUrl.pathname.startsWith("/api/auth")) {
