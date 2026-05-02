@@ -136,6 +136,7 @@ function SidebarProvider({
   )
 }
 
+/** Keeps offcanvas peek styling while true (e.g. header dropdown open — content portals outside hover group). */
 function Sidebar({
   side = "left",
   variant = "sidebar",
@@ -144,6 +145,7 @@ function Sidebar({
   children,
   trailingChrome,
   collapsePreview = false,
+  peekLocked = false,
   ...props
 }: React.ComponentProps<"div"> & {
   side?: "left" | "right"
@@ -151,6 +153,7 @@ function Sidebar({
   collapsible?: "offcanvas" | "icon" | "none"
   trailingChrome?: React.ReactNode
   collapsePreview?: boolean
+  peekLocked?: boolean
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
 
@@ -194,19 +197,23 @@ function Sidebar({
     )
   }
 
+  const offcanvasPeekVisible =
+    "group-data-[collapsible=offcanvas]:group-hover/sidebar-peek:top-3 group-data-[collapsible=offcanvas]:group-hover/sidebar-peek:bottom-3 group-data-[collapsible=offcanvas]:group-hover/sidebar-peek:z-[60] group-data-[collapsible=offcanvas]:group-hover/sidebar-peek:h-auto group-data-[collapsible=offcanvas]:group-data-[peek-locked]/sidebar-peek:top-3 group-data-[collapsible=offcanvas]:group-data-[peek-locked]/sidebar-peek:bottom-3 group-data-[collapsible=offcanvas]:group-data-[peek-locked]/sidebar-peek:z-[60] group-data-[collapsible=offcanvas]:group-data-[peek-locked]/sidebar-peek:h-auto"
+
   const offcanvasPeekCard =
     collapsible === "offcanvas"
       ? cn(
-          "group-data-[collapsible=offcanvas]:group-hover/sidebar-peek:top-3 group-data-[collapsible=offcanvas]:group-hover/sidebar-peek:bottom-3 group-data-[collapsible=offcanvas]:group-hover/sidebar-peek:z-[60] group-data-[collapsible=offcanvas]:group-hover/sidebar-peek:h-auto",
+          offcanvasPeekVisible,
           side === "left"
-            ? "group-data-[collapsible=offcanvas]:group-hover/sidebar-peek:left-3"
-            : "group-data-[collapsible=offcanvas]:group-hover/sidebar-peek:right-3"
+            ? "group-data-[collapsible=offcanvas]:group-hover/sidebar-peek:left-3 group-data-[collapsible=offcanvas]:group-data-[peek-locked]/sidebar-peek:left-3"
+            : "group-data-[collapsible=offcanvas]:group-hover/sidebar-peek:right-3 group-data-[collapsible=offcanvas]:group-data-[peek-locked]/sidebar-peek:right-3"
         )
       : null
 
   return (
     <div
       className="group group/sidebar-peek peer hidden text-sidebar-foreground md:block"
+      data-peek-locked={peekLocked || undefined}
       data-state={state}
       data-collapsible={state === "collapsed" ? collapsible : ""}
       data-variant={variant}
@@ -257,7 +264,7 @@ function Sidebar({
             collapsePreview ? "opacity-[0.38]" : "opacity-100",
             "group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow-sm",
             collapsible === "offcanvas" &&
-              "group-data-[collapsible=offcanvas]:group-hover/sidebar-peek:rounded-xl group-data-[collapsible=offcanvas]:group-hover/sidebar-peek:border group-data-[collapsible=offcanvas]:group-hover/sidebar-peek:border-sidebar-border group-data-[collapsible=offcanvas]:group-hover/sidebar-peek:shadow-xl"
+              "group-data-[collapsible=offcanvas]:group-hover/sidebar-peek:rounded-xl group-data-[collapsible=offcanvas]:group-hover/sidebar-peek:border group-data-[collapsible=offcanvas]:group-hover/sidebar-peek:border-sidebar-border group-data-[collapsible=offcanvas]:group-hover/sidebar-peek:shadow-xl group-data-[collapsible=offcanvas]:group-data-[peek-locked]/sidebar-peek:rounded-xl group-data-[collapsible=offcanvas]:group-data-[peek-locked]/sidebar-peek:border group-data-[collapsible=offcanvas]:group-data-[peek-locked]/sidebar-peek:border-sidebar-border group-data-[collapsible=offcanvas]:group-data-[peek-locked]/sidebar-peek:shadow-xl"
           )}
         >
           {children}
