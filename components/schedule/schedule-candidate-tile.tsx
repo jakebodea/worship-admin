@@ -1,20 +1,13 @@
 "use client";
 
-import { type ReactNode } from "react";
 import { CalendarPlus, Info, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { PlanPersonStatusMenu, type PlanPersonStatusValue } from "@/components/schedule/plan-person-status-menu";
 import { RecommendationPopover } from "@/components/schedule/popovers/recommendation-popover";
 import { ScheduleContextPopover } from "@/components/schedule/popovers/schedule-context-popover";
 import { useSchedulePlanPerson } from "@/hooks/use-schedule-plan-person";
-import {
-  buildServiceHistoryGroups,
-  formatCombinedHistoryPositionLabel,
-  formatServiceHistoryDisplayDate,
-  pickLatestServiceHistoryGroup,
-  pickServiceHistoryGroupClosestToReference,
-} from "@/lib/use-cases/planning-center/people/service-history-display";
 import type { PersonWithAvailability } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -47,9 +40,6 @@ export interface ScheduleCandidateTileProps {
   person: PersonWithAvailability;
   serviceTypeId?: string | null;
   planId?: string | null;
-  /** Plan sort instant; drives “closest” history summary on the strip. */
-  planSortDate?: Date | null;
-  orgTimeZone: string;
   teamId?: string | null;
   positionId?: string | null;
   onScheduleSuccess?: () => void;
@@ -60,8 +50,6 @@ export function ScheduleCandidateTile({
   person,
   serviceTypeId,
   planId,
-  planSortDate,
-  orgTimeZone,
   teamId,
   positionId,
   onScheduleSuccess,
@@ -87,8 +75,9 @@ export function ScheduleCandidateTile({
   });
 
   const isScheduled = fromServerScheduled || scheduleSuccess;
+
   const selectedPlanAssignments = person.selectedPlanAssignmentLabels ?? [];
-  const isScheduledElsewhereOnService =
+  const isScheduledElsewhereOnPlan =
     !isScheduled && !isDeclined && selectedPlanAssignments.length > 0;
 
   const statusVariant: StatusVariant = isBlocked
@@ -121,36 +110,6 @@ export function ScheduleCandidateTile({
 
   const initials = `${person.firstName?.[0] ?? ""}${person.lastName?.[0] ?? ""}` || "?";
 
-  const historyGroups = buildServiceHistoryGroups(person.serviceHistory ?? []);
-  const summaryHistoryGroup =
-    planSortDate != null
-      ? pickServiceHistoryGroupClosestToReference(historyGroups, planSortDate, orgTimeZone)
-      : pickLatestServiceHistoryGroup(historyGroups);
-
-  const scheduledForShort =
-    selectedPlanAssignments.length === 0
-      ? null
-      : selectedPlanAssignments.length === 1
-        ? selectedPlanAssignments[0]
-        : `${selectedPlanAssignments[0]} +${selectedPlanAssignments.length - 1}`;
-
-  const contextLine: ReactNode = isScheduledElsewhereOnService && scheduledForShort ? (
-    <span className="text-amber-700 dark:text-amber-400">Also: {scheduledForShort}</span>
-  ) : summaryHistoryGroup ? (
-    <>
-      <span className="text-foreground/80">
-        {formatServiceHistoryDisplayDate(summaryHistoryGroup.primary.date)}
-      </span>
-      <span className="text-muted-foreground/70"> · </span>
-      <span className="truncate">
-        {formatCombinedHistoryPositionLabel(
-          summaryHistoryGroup.primary,
-          summaryHistoryGroup.additionalServices
-        )}
-      </span>
-    </>
-  ) : null;
-
   const serviceHistory = person.serviceHistory ?? [];
 
   const statusRing =
@@ -162,6 +121,31 @@ export function ScheduleCandidateTile({
           ? "ring-2 ring-red-500/70 ring-offset-2 ring-offset-background"
           : "";
 
+  const elsewhereAssignmentsLabel = `Also scheduled for: ${selectedPlanAssignments.join(", ")}`;
+  const elsewhereAvatarAriaLabel = `${person.fullName}. ${elsewhereAssignmentsLabel}`;
+
+  const planElsewherePopover = (
+    <PopoverContent
+      align="start"
+      side="right"
+      sideOffset={8}
+      collisionPadding={16}
+      className="w-auto max-w-[16rem] border-dashed border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs leading-snug shadow-sm dark:border-blue-800 dark:bg-blue-950"
+    >
+      <p className="text-foreground [overflow-wrap:anywhere]">
+        <span className="font-medium text-foreground/90">Also scheduled for:</span>{" "}
+        <span className="text-muted-foreground dark:text-blue-100/85">{selectedPlanAssignments.join(", ")}</span>
+      </p>
+    </PopoverContent>
+  );
+
+  const avatarInner = (
+    <>
+      <AvatarImage src={person.photoThumbnailUrl || undefined} alt={person.fullName} />
+      <AvatarFallback className="bg-muted text-xs font-medium">{initials}</AvatarFallback>
+    </>
+  );
+
   return (
     <article
       className={cn(
@@ -169,39 +153,44 @@ export function ScheduleCandidateTile({
         "hover:bg-muted/30"
       )}
     >
-      <Avatar
-        className={cn("size-9 shrink-0", statusRing)}
-        title={statusMeta.label || undefined}
-      >
-        <AvatarImage src={person.photoThumbnailUrl || undefined} alt={person.fullName} />
-        <AvatarFallback className="bg-muted text-xs font-medium">{initials}</AvatarFallback>
-      </Avatar>
+      {isScheduledElsewhereOnPlan ? (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                "shrink-0 cursor-pointer rounded-full border-0 bg-transparent p-0",
+                "outline-2 outline-dashed outline-offset-2 outline-blue-500",
+                "hover:outline-blue-600 dark:outline-blue-400 dark:hover:outline-blue-300",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              )}
+              aria-label={elsewhereAvatarAriaLabel}
+              title={elsewhereAssignmentsLabel}
+            >
+              <Avatar className={cn("size-9", statusRing)} aria-hidden>
+                {avatarInner}
+              </Avatar>
+            </button>
+          </PopoverTrigger>
+          {planElsewherePopover}
+        </Popover>
+      ) : (
+        <Avatar className={cn("size-9 shrink-0", statusRing)} title={statusMeta.label || undefined}>
+          {avatarInner}
+        </Avatar>
+      )}
 
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <p className="truncate text-sm font-medium leading-tight text-foreground">
-            {person.fullName}
-          </p>
-          <ScheduleContextPopover serviceHistory={serviceHistory}>
-            <button
-              type="button"
-              className="inline-flex shrink-0 cursor-pointer appearance-none items-center justify-center border-0 bg-transparent p-0 text-muted-foreground/60 hover:text-foreground"
-              aria-label="Schedule context"
-            >
-              <Info className="size-3.5" />
-            </button>
-          </ScheduleContextPopover>
-        </div>
-        {contextLine ? (
-          <ScheduleContextPopover serviceHistory={serviceHistory}>
-            <button
-              type="button"
-              className="flex min-w-0 items-center gap-1 truncate text-left text-[13px] text-muted-foreground hover:text-foreground"
-            >
-              {contextLine}
-            </button>
-          </ScheduleContextPopover>
-        ) : null}
+      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+        <p className="min-w-0 truncate text-base font-medium leading-tight text-foreground">{person.fullName}</p>
+        <ScheduleContextPopover serviceHistory={serviceHistory}>
+          <button
+            type="button"
+            className="inline-flex size-8 shrink-0 cursor-pointer appearance-none items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted-foreground/70 hover:bg-muted/60 hover:text-foreground"
+            aria-label="Schedule context"
+          >
+            <Info className="size-4" />
+          </button>
+        </ScheduleContextPopover>
       </div>
 
       <div className="hidden w-28 shrink-0 sm:block">
