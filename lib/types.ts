@@ -95,6 +95,7 @@ export interface TeamPosition {
 
 export interface FilledPositionPerson {
   id: string;
+  planPersonId: string;
   name: string;
   status: "pending" | "confirmed";
   rawStatus: string;

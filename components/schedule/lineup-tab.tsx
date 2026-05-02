@@ -14,6 +14,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getInitials } from "@/lib/format/initials";
 import type { FilledPositionPerson, TeamPosition, TeamPositionGroup } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -73,10 +74,10 @@ function TeamColumn({
   const totalNeeded = group.positions.reduce((sum, position) => sum + (position.neededCount ?? 0), 0);
 
   return (
-    <section className="w-[420px] shrink-0">
-      <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
-        <header className="flex items-baseline justify-between gap-2 px-4 py-3">
-          <h3 className="truncate text-lg font-semibold">{group.teamName}</h3>
+    <section className="w-[380px] shrink-0">
+      <div className="overflow-hidden rounded-lg border border-border/40 bg-card/50">
+        <header className="flex items-baseline justify-between gap-2 border-b border-border/40 px-3 py-2">
+          <h3 className="truncate text-sm font-semibold tracking-tight">{group.teamName}</h3>
           <p className="text-xs text-muted-foreground tabular-nums">
             {totalNeeded > 0 ? `${totalScheduled}/${totalNeeded}` : `${totalScheduled}`}
           </p>
@@ -85,7 +86,7 @@ function TeamColumn({
         <Accordion
           type="multiple"
           defaultValue={group.positions.map((position) => position.id)}
-          className="w-full px-3 py-1"
+          className="w-full px-2 py-0.5"
         >
           {group.positions.map((position, index) => (
             <div key={position.id}>
@@ -95,7 +96,7 @@ function TeamColumn({
                 position={position}
                 onSelectPosition={onSelectPosition}
               />
-              {index < group.positions.length - 1 ? <Separator className="opacity-35" /> : null}
+              {index < group.positions.length - 1 ? <Separator className="opacity-30" /> : null}
             </div>
           ))}
         </Accordion>
@@ -119,24 +120,30 @@ function PositionAccordionItem({
   const pending = position.filledPendingCount ?? 0;
   const scheduledCount = confirmed + pending;
   const needed = position.neededCount ?? 0;
+  const total = scheduledCount + needed;
   const people = position.filledPeople ?? [];
 
   return (
-    <AccordionItem value={position.id} className="rounded-sm border-b-0 transition-colors hover:bg-muted/60">
+    <AccordionItem value={position.id} className="rounded-sm border-b-0 transition-colors hover:bg-muted/40">
       <AccordionHeader className="rounded-none px-1 py-0">
-        <AccordionTrigger className="min-w-0 flex-1 gap-1 rounded-none py-3 hover:no-underline">
+        <AccordionTrigger className="min-w-0 flex-1 gap-1 rounded-none py-2 hover:no-underline">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <span className="truncate text-sm font-medium">{position.name}</span>
-            <span className="text-xs text-muted-foreground tabular-nums">
-              {needed > 0 ? `${scheduledCount}/${needed}` : `${scheduledCount}`}
+            <span className="text-[11px] text-muted-foreground tabular-nums">
+              {needed > 0 ? `${scheduledCount}/${total}` : `${scheduledCount}`}
             </span>
+            {needed > 0 ? (
+              <span className="text-[11px] font-medium text-red-600 dark:text-red-400 tabular-nums">
+                +{needed}
+              </span>
+            ) : null}
           </div>
         </AccordionTrigger>
         <button
           type="button"
           className={cn(
             buttonVariants({ variant: "ghost", size: "icon" }),
-            "size-7 shrink-0"
+            "size-7 shrink-0 text-muted-foreground hover:text-foreground"
           )}
           title={`Open ${position.name} in scheduler`}
           aria-label={`Open ${position.name} in scheduler`}
@@ -151,7 +158,7 @@ function PositionAccordionItem({
             });
           }}
         >
-          <CalendarDays className="size-4" />
+          <CalendarDays className="size-3.5" />
         </button>
       </AccordionHeader>
 
@@ -199,11 +206,4 @@ function PersonRow({ person }: { person: FilledPositionPerson }) {
       />
     </li>
   );
-}
-
-function getInitials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0]?.slice(0, 2).toUpperCase() || "?";
-  return `${parts[0]?.[0] || ""}${parts[1]?.[0] || ""}`.toUpperCase();
 }

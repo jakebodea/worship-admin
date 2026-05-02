@@ -299,6 +299,7 @@ describe("getNeededTeamPositionsForPlan", () => {
     expect(vocals?.filledPeople).toEqual([
       {
         id: "person-1",
+        planPersonId: "pp-confirmed",
         name: "Amy Leader",
         status: "confirmed",
         rawStatus: "C",
@@ -306,6 +307,7 @@ describe("getNeededTeamPositionsForPlan", () => {
       },
       {
         id: "person-2",
+        planPersonId: "pp-pending",
         name: "Ben Singer",
         status: "pending",
         rawStatus: "U",

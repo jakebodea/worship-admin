@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
+import {
+  getDevBypassPlanningCenterAccount,
+  getDevBypassSession,
+  isDevAuthBypassEnabled,
+  loadDevBypassIdentity,
+} from "@/lib/auth/dev-bypass";
 import { getPlanningCenterIdentityForAccount } from "@/lib/auth/planning-center-identity";
 import {
   getSelectedPlanningCenterAccountId,
@@ -19,6 +25,22 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   return handleRoute(async () => {
+    if (isDevAuthBypassEnabled()) {
+      const identity = await loadDevBypassIdentity();
+      const devSession = getDevBypassSession(identity);
+      const devAccount = getDevBypassPlanningCenterAccount(identity);
+      return {
+        session: {
+          userId: devSession.user.id,
+          name: devSession.user.name,
+          email: devSession.user.email,
+          image: devSession.user.image,
+        },
+        selectedAccountId: devAccount.id,
+        accounts: [devAccount],
+      };
+    }
+
     const session = await auth.api.getSession({
       headers: request.headers,
     });
@@ -70,6 +92,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   return handleRoute(async () => {
+    if (isDevAuthBypassEnabled()) {
+      const devAccount = getDevBypassPlanningCenterAccount();
+      return NextResponse.json({
+        success: true,
+        selectedAccountId: devAccount.id,
+      });
+    }
+
     const session = await auth.api.getSession({
       headers: request.headers,
     });

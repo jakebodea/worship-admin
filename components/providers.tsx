@@ -1,7 +1,10 @@
 "use client";
 
+import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import { ThemeProvider } from "next-themes";
+import { AppShell } from "@/components/app-shell";
 import { Toaster } from "@/components/ui/sonner";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useState } from "react";
@@ -21,12 +24,16 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <QueryClientProvider client={queryClient}>
-      {children}
-      {process.env.NODE_ENV !== "production" ? (
-        <ReactQueryDevtools initialIsOpen={true} buttonPosition="bottom-right" />
-      ) : null}
-      <Toaster richColors position={isMobile ? "top-center" : undefined} />
-    </QueryClientProvider>
+    <HotkeysProvider>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <QueryClientProvider client={queryClient}>
+          <AppShell>{children}</AppShell>
+          {process.env.NODE_ENV !== "production" ? (
+            <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-right" />
+          ) : null}
+          <Toaster richColors position={isMobile ? "top-center" : undefined} />
+        </QueryClientProvider>
+      </ThemeProvider>
+    </HotkeysProvider>
   );
 }

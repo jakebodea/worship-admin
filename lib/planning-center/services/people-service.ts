@@ -5,6 +5,7 @@ import { PlanningCenterReadCache, stableParams } from "@/lib/planning-center/ser
 const ASSIGNMENTS_CACHE_TTL_MS = 5 * 60 * 1000;
 const PERSON_READ_CACHE_TTL_MS = 60 * 1000;
 const PLAN_TEAM_MEMBERS_CACHE_TTL_MS = 30 * 1000;
+const PLAN_TIMES_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export class PlanningCenterPeopleService {
   private readonly cache = new PlanningCenterReadCache();
@@ -103,10 +104,74 @@ export class PlanningCenterPeopleService {
           maxPages
         );
 
+        const data = response.data;
+        const included = response.included || [];
+        const enrichedIncluded = await this.enrichSchedulesWithRehearsalTimes(data, included);
+
         return {
-          data: response.data,
-          included: response.included || [],
+          data,
+          included: enrichedIncluded,
         };
+      }
+    );
+  }
+
+  /**
+   * `include=plan_times` only sideloads service-typed PlanTimes. Rehearsal PlanTime IDs are
+   * listed in `schedule.relationships.times` but their resources aren't included. Fetch them
+   * per-plan and merge into `included` so downstream history processing can classify them.
+   */
+  private async enrichSchedulesWithRehearsalTimes(
+    schedules: PCResource[],
+    included: PCResource[]
+  ): Promise<PCResource[]> {
+    const sideloadedPlanTimeIds = new Set(
+      included.filter((r) => r.type === "PlanTime").map((r) => r.id)
+    );
+
+    const missingByPlan = new Map<string, Set<string>>();
+    for (const schedule of schedules) {
+      const planRel = schedule.relationships?.plan?.data as { id?: string } | undefined;
+      const planId = planRel?.id;
+      if (!planId) continue;
+      const timesRel = (schedule.relationships?.times?.data ?? []) as { id?: string }[];
+      for (const t of timesRel) {
+        if (!t.id || sideloadedPlanTimeIds.has(t.id)) continue;
+        if (!missingByPlan.has(planId)) missingByPlan.set(planId, new Set());
+        missingByPlan.get(planId)!.add(t.id);
+      }
+    }
+
+    if (missingByPlan.size === 0) return included;
+
+    const fetched = await Promise.all(
+      [...missingByPlan.entries()].map(async ([planId, idSet]) => {
+        const planTimes = await this.getPlanPlanTimes(planId);
+        return planTimes.filter((pt) => idSet.has(pt.id));
+      })
+    );
+
+    return [...included, ...fetched.flat()];
+  }
+
+  /**
+   * Cached fetch of all PlanTimes for a plan. Shared across candidates so a position page with
+   * 30 candidates serving on the same Sunday plan triggers one fetch, not 30. PlanTimes rarely
+   * change, so the TTL is longer than per-person caches.
+   */
+  async getPlanPlanTimes(planId: string): Promise<PCResource[]> {
+    return this.cache.get(
+      this.buildCacheKey("plan-plan-times", planId),
+      PLAN_TIMES_CACHE_TTL_MS,
+      async () => {
+        try {
+          return await this.core.fetchAll<PCResource>(
+            `/services/v2/plans/${planId}/plan_times`,
+            { per_page: "200" }
+          );
+        } catch {
+          return [];
+        }
       }
     );
   }
@@ -166,6 +231,31 @@ export class PlanningCenterPeopleService {
       data: Array.isArray(response.data) ? response.data : [response.data],
       included: response.included || [],
     };
+  }
+
+  async updatePlanPersonStatus(
+    planPersonId: string,
+    status: "C" | "U" | "D"
+  ): Promise<PCResource> {
+    const response = await this.core.fetch<PCResource>(
+      `/services/v2/plan_people/${planPersonId}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          data: {
+            type: "PlanPerson",
+            id: planPersonId,
+            attributes: {
+              status,
+            },
+          },
+        }),
+      }
+    );
+    return response.data;
   }
 
   /**
