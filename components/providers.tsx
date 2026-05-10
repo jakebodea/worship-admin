@@ -9,7 +9,13 @@ import { Toaster } from "@/components/ui/sonner";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useState } from "react";
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({
+  children,
+  peoplePageEnabled,
+}: {
+  children: React.ReactNode;
+  peoplePageEnabled: boolean;
+}) {
   const isMobile = useIsMobile();
   const [queryClient] = useState(
     () =>
@@ -27,7 +33,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <HotkeysProvider>
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
         <QueryClientProvider client={queryClient}>
-          <AppShell>{children}</AppShell>
+          <AppShell peoplePageEnabled={peoplePageEnabled}>{children}</AppShell>
           {process.env.NODE_ENV !== "production" ? (
             <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-right" />
           ) : null}

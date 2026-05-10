@@ -16,13 +16,28 @@ export class PlanningCenterPeopleService {
     return this.core.fetchAll<PCResource>(`/services/v2/teams/${teamId}/people?include=person`);
   }
 
+  async getPerson(personId: string): Promise<PCResource> {
+    return this.cache.get(
+      this.buildCacheKey("person", personId),
+      PERSON_READ_CACHE_TTL_MS,
+      async () => {
+        const response = await this.core.fetch<PCResource>(`/services/v2/people/${personId}`);
+        return response.data;
+      }
+    );
+  }
+
   async getPersonTeamPositions(personId: string): Promise<PCResource[]> {
     return this.core.fetchAll<PCResource>(
       `/services/v2/people/${personId}/person_team_position_assignments?include=team_position`
     );
   }
 
-  async getAllPeopleFromTeams(): Promise<{ people: PCResource[]; included: PCResource[] }> {
+  async getAllPeopleFromTeams(): Promise<{
+    people: PCResource[];
+    included: PCResource[];
+    teamNamesByPersonId: Map<string, Set<string>>;
+  }> {
     const teams = await this.core.fetchAll<PCResource>("/services/v2/teams");
     const activeTeams = teams.filter(
       (team) => !(team.attributes.archived_at as string | null | undefined)
@@ -30,10 +45,10 @@ export class PlanningCenterPeopleService {
 
     const allPeople: PCResource[] = [];
     const allIncluded: PCResource[] = [];
+    const teamNamesByPersonId = new Map<string, Set<string>>();
     const seenIds = new Set<string>();
-    const teamBatch = activeTeams.slice(0, 10);
 
-    for (const team of teamBatch) {
+    for (const team of activeTeams) {
       try {
         const response = await this.core.fetch<PCResource[]>(
           `/services/v2/teams/${team.id}/people?include=person`
@@ -63,6 +78,16 @@ export class PlanningCenterPeopleService {
             seenIds.add(personResource.id);
             allPeople.push(personResource);
           }
+
+          if (personResource) {
+            const teamName = team.attributes.name;
+            if (typeof teamName === "string" && teamName.trim()) {
+              if (!teamNamesByPersonId.has(personResource.id)) {
+                teamNamesByPersonId.set(personResource.id, new Set());
+              }
+              teamNamesByPersonId.get(personResource.id)!.add(teamName);
+            }
+          }
         }
 
         allIncluded.push(...included);
@@ -71,7 +96,7 @@ export class PlanningCenterPeopleService {
       }
     }
 
-    return { people: allPeople, included: allIncluded };
+    return { people: allPeople, included: allIncluded, teamNamesByPersonId };
   }
 
   async getPersonBlockouts(
