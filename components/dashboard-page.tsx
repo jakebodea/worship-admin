@@ -4,9 +4,12 @@ import { startTransition, useCallback, useEffect, useMemo, useState } from "reac
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { LoaderCircle } from "lucide-react";
+import { PlanningCenterServicesIcon } from "@/components/planning-center-services-icon";
 import { LineupTab } from "@/components/schedule/lineup-tab";
 import { PlanTab } from "@/components/schedule/plan-tab";
 import { ScheduleViewTab } from "@/components/schedule/schedule-view-tab";
+import { Button } from "@/components/ui/button";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import type { SlotRef } from "@/components/schedule/types";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { usePeople } from "@/hooks/use-people";
@@ -331,22 +334,50 @@ export function DashboardPage() {
     <main className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       <div
         className={cn(
-          "mx-auto flex w-full max-w-7xl min-h-0 flex-1 flex-col px-4",
-          hasSelectedPlan ? "py-3" : "py-6"
+          "mx-auto flex w-full max-w-7xl min-h-0 flex-1 flex-col px-3 sm:px-4",
+          hasSelectedPlan ? "py-2 sm:py-3" : "py-6"
         )}
       >
         {hasSelectedPlan && selectedServiceType && selectedPlan ? (
-          <header className="mb-6 shrink-0">
-            <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight md:text-2xl">
-              {selectedServiceType.name}
-              {planSubtitle && (
-                <span className="font-normal text-muted-foreground"> / {planSubtitle}</span>
-              )}
-              <span className="font-light text-muted-foreground tabular-nums">
-                {' / '}
-                {formatPlanDate(selectedPlan.sortDate)}
-              </span>
-            </h1>
+          <header className="mb-3 shrink-0 sm:mb-5">
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <h1 className="flex min-w-0 flex-col gap-0.5 text-base font-semibold leading-tight tracking-tight sm:block sm:truncate sm:text-xl md:text-2xl">
+                <span className="min-w-0 truncate">
+                  {selectedServiceType.name}
+                  {planSubtitle ? (
+                    <span className="font-normal text-muted-foreground"> / {planSubtitle}</span>
+                  ) : null}
+                </span>
+                <span className="min-w-0 truncate text-sm font-light tabular-nums text-muted-foreground sm:text-xl md:text-2xl">
+                  <span className="hidden sm:inline"> / </span>
+                  {formatPlanDate(selectedPlan.sortDate)}
+                </span>
+              </h1>
+              {selectedPlan.planningCenterUrl ? (
+                <HoverCard openDelay={120} closeDelay={120}>
+                  <HoverCardTrigger asChild>
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="icon-sm"
+                      className="shrink-0"
+                    >
+                      <a
+                        href={selectedPlan.planningCenterUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label="Open in Planning Center"
+                      >
+                        <PlanningCenterServicesIcon className="size-4" />
+                      </a>
+                    </Button>
+                  </HoverCardTrigger>
+                  <HoverCardContent side="bottom" align="end" sideOffset={8} className="w-auto px-3 py-2">
+                    <p className="text-xs font-medium">Open in Planning Center</p>
+                  </HoverCardContent>
+                </HoverCard>
+              ) : null}
+            </div>
           </header>
         ) : null}
 

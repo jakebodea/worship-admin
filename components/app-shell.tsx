@@ -246,8 +246,8 @@ function AppTopBar() {
   );
 
   return (
-    <div className="flex w-full min-w-0 items-center gap-3">
-      <Breadcrumb>
+    <div className="flex w-full min-w-0 items-center gap-2 sm:gap-3">
+      <Breadcrumb className="shrink-0">
         <BreadcrumbList>
           <BreadcrumbItem>
             {hasPlan ? (
@@ -261,15 +261,15 @@ function AppTopBar() {
         </BreadcrumbList>
       </Breadcrumb>
       {hasPlan ? (
-        <Tabs value={view} onValueChange={handleViewChange} className="ml-auto">
+        <Tabs value={view} onValueChange={handleViewChange} className="ml-auto min-w-0 overflow-x-auto">
           <TabsList className="h-8">
-            <TabsTrigger value="schedule" className="px-3 text-xs">
+            <TabsTrigger value="schedule" className="px-2 text-xs sm:px-3">
               Schedule
             </TabsTrigger>
-            <TabsTrigger value="lineup" className="px-3 text-xs">
+            <TabsTrigger value="lineup" className="px-2 text-xs sm:px-3">
               Lineup
             </TabsTrigger>
-            <TabsTrigger value="plan" className="px-3 text-xs">
+            <TabsTrigger value="plan" className="px-2 text-xs sm:px-3">
               Plan
             </TabsTrigger>
           </TabsList>
@@ -530,7 +530,7 @@ function AppSidebar({
                   <SidebarMenuButton
                     asChild
                     isActive={pathname.startsWith("/schedule")}
-                    tooltip="Schedule"
+                    hoverCard="Schedule"
                   >
                     <Link href="/schedule">
                       <CalendarDays />
@@ -545,7 +545,18 @@ function AppSidebar({
         <SidebarFooter>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton type="button" tooltip="Shortcuts" onClick={() => setShortcutsOpen(true)}>
+              <SidebarMenuButton
+                type="button"
+                hoverCard={{
+                  children: (
+                    <div className="flex items-center gap-3">
+                      <p className="text-xs font-medium">Shortcuts</p>
+                      <HotkeyChord binding={SHORTCUTS_PALETTE_HOTKEY} id="shortcuts-sidebar-hover" />
+                    </div>
+                  ),
+                }}
+                onClick={() => setShortcutsOpen(true)}
+              >
                 <Settings2 />
                 <span>Shortcuts</span>
               </SidebarMenuButton>

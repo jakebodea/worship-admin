@@ -1,6 +1,6 @@
 "use client";
 
-import { PanelLeft, Search, X } from "lucide-react";
+import { ChevronsUpDown, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { TeamPosition } from "@/lib/types";
@@ -21,26 +21,28 @@ export function SelectedPositionHeader({
   onFilterChange: (next: string) => void;
 }) {
   return (
-    <div className="flex shrink-0 flex-col gap-3 px-1">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="min-w-0 flex-1 truncate text-2xl font-semibold leading-tight tracking-tight">
+    <div className="flex shrink-0 flex-col gap-2 px-1 sm:gap-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+        <p className="min-w-0 truncate text-xl font-semibold leading-tight tracking-tight sm:text-2xl">
           {info?.positionName}
         </p>
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="shrink-0 gap-1.5 lg:hidden"
+          className="h-8 shrink-0 gap-1 px-2.5 text-xs sm:px-3 sm:text-sm lg:hidden"
           onClick={onOpenPicker}
           disabled={!hasSlots || teamPositionsLoading}
+          title="Change position"
+          aria-label="Change position"
         >
-          <PanelLeft className="size-4 opacity-70" aria-hidden />
-          Change position
+          <span>Positions</span>
+          <ChevronsUpDown className="size-3.5 opacity-60" aria-hidden />
         </Button>
       </div>
 
       <div className="flex items-center gap-3">
-        <div className="relative max-w-sm flex-1">
+        <div className="relative w-full flex-1 sm:max-w-sm">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/70"
             aria-hidden

@@ -67,6 +67,13 @@ function formatDate(date: Date): string {
   }).format(date);
 }
 
+function formatMobileDate(date: Date): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
 function parsePlanDate(value: Date | string | undefined): Date | null {
   if (!value) return null;
   const parsed = value instanceof Date ? value : new Date(value);
@@ -406,7 +413,7 @@ export function ServicePlanTableSelector({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border/40">
-        <Table>
+        <Table className="hidden md:table">
           <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow className="border-b border-border/40 hover:bg-transparent [&>th]:h-9 [&>th]:text-xs [&>th]:font-medium [&>th]:text-muted-foreground">
               <TableHead className="w-[30%] pl-5 pr-3">Service type</TableHead>
@@ -526,6 +533,107 @@ export function ServicePlanTableSelector({
             )}
           </TableBody>
         </Table>
+
+        <div className="flex flex-col md:hidden">
+          {isLoading ? (
+            Array.from({ length: 8 }).map((_, index) => (
+              <div key={`mobile-loading-${index}`} className="border-b border-border/35 px-4 py-3 last:border-b-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Skeleton className="h-4 w-36" />
+                    <Skeleton className="h-3.5 w-52 max-w-full" />
+                  </div>
+                  <Skeleton className="h-3.5 w-20 shrink-0" />
+                </div>
+              </div>
+            ))
+          ) : errorMessage ? (
+            <div className="px-4 py-10">
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <Search />
+                  </EmptyMedia>
+                  <EmptyTitle>Plans failed to load</EmptyTitle>
+                  <EmptyDescription>Refresh and try again.</EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            </div>
+          ) : visibleRows.length === 0 ? (
+            <div className="px-4 py-10">
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <Search />
+                  </EmptyMedia>
+                  <EmptyTitle>No matching plans</EmptyTitle>
+                  <EmptyDescription>Adjust the search, service type, or date window.</EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            </div>
+          ) : (
+            visibleRows.map((row) => {
+              const isActive = row.planId === selectedPlanId;
+              const isScheduledForCurrentUser = myScheduledPlanIdSet.has(row.planId);
+
+              return (
+                <button
+                  key={`mobile-${row.serviceTypeId}:${row.planId}`}
+                  type="button"
+                  data-state={isActive ? "selected" : undefined}
+                  className={cn(
+                    "relative flex w-full cursor-pointer flex-col gap-1.5 border-b border-border/35 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                    isActive && "bg-muted/60",
+                    isScheduledForCurrentUser && "shadow-[inset_3px_0_0_0_#10b981]"
+                  )}
+                  aria-current={isActive ? "page" : undefined}
+                  aria-label={
+                    isScheduledForCurrentUser
+                      ? `${row.serviceTypeName} — you are scheduled`
+                      : undefined
+                  }
+                  onClick={() =>
+                    onSelect({
+                      serviceTypeId: row.serviceTypeId,
+                      planId: row.planId,
+                    })
+                  }
+                  onTouchStart={() => prefetchPlanData(row)}
+                >
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p
+                        className={cn(
+                          "truncate text-sm font-semibold leading-tight",
+                          isScheduledForCurrentUser && "text-emerald-700 dark:text-emerald-300"
+                        )}
+                      >
+                        {row.serviceTypeName}
+                      </p>
+                      <p className="mt-1 truncate text-base font-medium leading-tight">
+                        {row.planTitle || "Untitled plan"}
+                      </p>
+                    </div>
+                    <span className="shrink-0 pt-0.5 text-xs tabular-nums text-muted-foreground">
+                      {formatMobileDate(row.sortDate)}
+                    </span>
+                  </div>
+                  <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                    {isScheduledForCurrentUser ? (
+                      <span className="inline-flex shrink-0 items-center gap-1 font-medium text-emerald-700 dark:text-emerald-300">
+                        <span aria-hidden className="size-1.5 rounded-full bg-emerald-500" />
+                        Mine
+                      </span>
+                    ) : null}
+                    <span className="min-w-0 truncate">
+                      {row.seriesTitle || "No series"}
+                    </span>
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
       </div>
     </div>
   );
