@@ -178,7 +178,7 @@ export function ScheduleCandidateTile({
   return (
     <article
       className={cn(
-        "group/row relative flex items-center gap-4 px-3 py-3 transition-colors",
+        "group/row relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2.5 gap-y-1.5 px-3 py-2.5 transition-colors sm:flex sm:gap-4 sm:py-3",
         "hover:bg-muted/30"
       )}
     >
@@ -194,7 +194,7 @@ export function ScheduleCandidateTile({
               aria-label={`Decline reason for ${person.fullName}`}
               title="View decline reason"
             >
-              <Avatar className={cn("size-9", statusRing)} aria-hidden>
+              <Avatar className={cn("size-8 sm:size-9", statusRing)} aria-hidden>
                 {avatarInner}
               </Avatar>
             </button>
@@ -215,7 +215,7 @@ export function ScheduleCandidateTile({
               aria-label={elsewhereAvatarAriaLabel}
               title={elsewhereAssignmentsLabel}
             >
-              <Avatar className={cn("size-9", statusRing)} aria-hidden>
+              <Avatar className={cn("size-8 sm:size-9", statusRing)} aria-hidden>
                 {avatarInner}
               </Avatar>
               {blockedAvatarTint}
@@ -225,17 +225,17 @@ export function ScheduleCandidateTile({
         </Popover>
       ) : (
         <span className="relative inline-flex shrink-0 overflow-visible">
-          <Avatar className={cn("size-9", statusRing)} title={statusMeta.label || undefined}>
+          <Avatar className={cn("size-8 sm:size-9", statusRing)} title={statusMeta.label || undefined}>
             {avatarInner}
           </Avatar>
           {blockedAvatarTint}
         </span>
       )}
 
-      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+      <div className="flex min-w-0 flex-1 items-center gap-1">
         <p
           className={cn(
-            "min-w-0 truncate text-base font-medium leading-tight text-foreground",
+            "min-w-0 truncate text-sm font-medium leading-tight text-foreground sm:text-base",
             isUnavailableForSlot && "text-muted-foreground line-through"
           )}
         >
@@ -254,7 +254,7 @@ export function ScheduleCandidateTile({
         <ScheduleContextPopover serviceHistory={serviceHistory}>
           <button
             type="button"
-            className="inline-flex size-8 shrink-0 cursor-pointer appearance-none items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted-foreground/70 hover:bg-muted/60 hover:text-foreground"
+            className="inline-flex size-6 shrink-0 cursor-pointer appearance-none items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted-foreground/70 hover:bg-muted/60 hover:text-foreground sm:size-8"
             aria-label="Schedule context"
           >
             <Info className="size-4" />
@@ -262,19 +262,19 @@ export function ScheduleCandidateTile({
         </ScheduleContextPopover>
       </div>
 
-      <div className="hidden w-28 shrink-0 sm:block">
+      <div className="col-span-2 col-start-2 row-start-2 min-w-0 sm:col-auto sm:row-auto sm:block sm:w-28 sm:shrink-0">
         {recommendationPercentage !== null ? (
           <RecommendationPopover reasoning={person.recommendationReasoning} personId={person.id}>
             <button
               type="button"
-              className="flex w-full flex-col items-end gap-1.5 text-right"
+              className="flex w-full items-center gap-2 text-left sm:flex-col sm:items-end sm:gap-1.5 sm:text-right"
               aria-label={`${recommendationPercentage} percent fit`}
             >
-              <span className={cn("text-base font-semibold tabular-nums leading-none", recTone(recommendationPercentage))}>
+              <span className={cn("shrink-0 text-xs font-semibold tabular-nums leading-none sm:text-base", recTone(recommendationPercentage))}>
                 {recommendationPercentage}
                 <span className="ml-0.5 text-[11px] font-normal text-muted-foreground">%</span>
               </span>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted/50">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted/50 sm:h-1.5">
                 <div
                   className={cn("h-full rounded-full transition-all", recBar(recommendationPercentage))}
                   style={{ width: `${Math.max(4, recommendationPercentage)}%` }}
@@ -287,12 +287,12 @@ export function ScheduleCandidateTile({
         )}
       </div>
 
-      <div className="flex w-20 shrink-0 justify-end">
+      <div className="col-start-3 row-span-2 row-start-1 flex w-9 shrink-0 justify-end sm:row-auto sm:w-20">
         {!isScheduled ? (
           <Button
             variant="outline"
             size="sm"
-            className="h-8 w-full gap-1.5"
+            className="h-8 w-8 gap-1.5 px-0 sm:w-full sm:px-3"
             disabled={!canSchedule || isScheduling}
             onClick={() => void handleSchedule(person.id)}
             title={disableReason}
@@ -325,7 +325,7 @@ export function ScheduleCandidateTile({
       </div>
 
       {scheduleError ? (
-        <p className="absolute -bottom-1 left-14 text-[10px] text-destructive">{scheduleError}</p>
+        <p className="col-span-2 col-start-2 text-[10px] text-destructive sm:absolute sm:-bottom-1 sm:left-14">{scheduleError}</p>
       ) : null}
     </article>
   );

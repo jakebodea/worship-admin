@@ -37,6 +37,7 @@ export async function getPlansForServiceType(
           plan.relationships?.series?.data
             ? plan.relationships.series.data.id
             : null,
+        planningCenterUrl: plan.attributes.planning_center_url ?? null,
         createdAt: new Date(plan.attributes.created_at as string),
         sortDate,
       };

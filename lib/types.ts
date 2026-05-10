@@ -258,6 +258,7 @@ export interface Plan {
   title: string;
   seriesTitle?: string;
   seriesId?: string | null;
+  planningCenterUrl?: string | null;
   createdAt: Date;
   sortDate?: Date;
 }
@@ -268,6 +269,7 @@ export interface RawPlan {
   attributes: {
     title: string;
     series_title?: string;
+    planning_center_url?: string | null;
     created_at: string;
     sort_date?: string;
   };

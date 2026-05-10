@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, Search } from "lucide-react";
+import { CalendarDays, Search, X } from "lucide-react";
 import { ScheduleCandidateTile } from "@/components/schedule/schedule-candidate-tile";
 import { PositionPickerList } from "@/components/schedule/position-picker-list";
 import { SectionLabel } from "@/components/schedule/section-label";
@@ -14,12 +14,14 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { partitionPeopleForRecommendationStrip } from "@/lib/use-cases/planning-center/people/recommendation-strip-order";
 import type { SlotRef } from "@/components/schedule/types";
@@ -142,7 +144,7 @@ export function ScheduleViewTab({
   );
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col gap-4 lg:h-full lg:flex-row">
+    <div className="flex min-h-0 w-full flex-1 flex-col gap-3 sm:gap-4 lg:h-full lg:flex-row">
       <aside
         className="hidden min-h-0 w-[min(18rem,28vw)] shrink-0 flex-col overflow-hidden rounded-xl border border-sidebar-border/40 bg-sidebar/60 text-sidebar-foreground lg:flex lg:max-h-full lg:self-start"
         aria-label="Positions"
@@ -150,7 +152,7 @@ export function ScheduleViewTab({
         {positionPickerList}
       </aside>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 lg:h-full">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 sm:gap-4 lg:h-full">
         {selectedPosition ? (
           <>
             <SelectedPositionHeader
@@ -196,7 +198,7 @@ export function ScheduleViewTab({
                   </EmptyHeader>
                 </Empty>
               ) : (
-                <div className="flex min-h-0 flex-col gap-5 pb-4 pr-2">
+                <div className="flex min-h-0 flex-col gap-4 pb-4 sm:gap-5 sm:pr-2">
                   {filteredActionable.length > 0 ? (
                     <section className="flex flex-col gap-2">
                       <div className="overflow-hidden rounded-xl border border-border/40 bg-card/30 divide-y divide-border/25">
@@ -249,18 +251,32 @@ export function ScheduleViewTab({
       </div>
 
       <div className="lg:hidden">
-        <Sheet open={pickerOpen} onOpenChange={setPickerOpen}>
-          <SheetContent
-            side="left"
-            showCloseButton
-            className="flex w-[min(100vw,20rem)] flex-col gap-0 overflow-hidden border-r bg-sidebar p-0 text-sidebar-foreground sm:max-w-[20rem]"
+        <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+          <DialogContent
+            showCloseButton={false}
+            className="fixed inset-0 left-0 top-0 z-50 flex h-svh max-h-none w-screen max-w-none translate-x-0 translate-y-0 grid-cols-none flex-col gap-0 overflow-hidden rounded-none border-0 bg-sidebar p-0 text-sidebar-foreground shadow-none duration-200 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:max-w-none"
           >
-            <SheetHeader className="shrink-0 border-b border-sidebar-border p-4 pr-12">
-              <SheetTitle className="text-sm">Positions</SheetTitle>
-            </SheetHeader>
+            <DialogHeader className="flex h-12 shrink-0 flex-row items-center justify-between gap-3 border-b border-sidebar-border/70 px-3 py-0 text-left">
+              <div className="min-w-0">
+                <DialogTitle className="truncate text-sm">Positions</DialogTitle>
+                <DialogDescription className="sr-only">
+                  Choose a team position for this plan.
+                </DialogDescription>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-9 shrink-0"
+                onClick={() => setPickerOpen(false)}
+                aria-label="Close positions"
+              >
+                <X className="size-4" aria-hidden />
+              </Button>
+            </DialogHeader>
             {positionPickerList}
-          </SheetContent>
-        </Sheet>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
