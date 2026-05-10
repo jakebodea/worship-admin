@@ -23,6 +23,7 @@ import {
   Moon,
   Settings2,
   Sun,
+  Users,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTheme } from "next-themes";
@@ -39,6 +40,7 @@ import {
   BreadcrumbLink,
   BreadcrumbList,
   BreadcrumbPage,
+  BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import {
   DropdownMenu,
@@ -227,6 +229,8 @@ function AppTopBar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const hasPlan = pathname === "/schedule/plan";
+  const isPeople = pathname.startsWith("/people");
+  const isPersonDetail = /^\/people\/[^/]+/.test(pathname);
   const view = parseTopBarView(searchParams.get("view"));
 
   const handleViewChange = useCallback(
@@ -249,15 +253,31 @@ function AppTopBar() {
     <div className="flex w-full min-w-0 items-center gap-2 sm:gap-3">
       <Breadcrumb className="shrink-0">
         <BreadcrumbList>
-          <BreadcrumbItem>
-            {hasPlan ? (
-              <BreadcrumbLink asChild>
-                <Link href="/schedule">Schedule</Link>
-              </BreadcrumbLink>
-            ) : (
-              <BreadcrumbPage>Schedule</BreadcrumbPage>
-            )}
-          </BreadcrumbItem>
+          {isPersonDetail ? (
+            <>
+              <BreadcrumbItem>
+                <BreadcrumbLink asChild>
+                  <Link href="/people">People</Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>Person</BreadcrumbPage>
+              </BreadcrumbItem>
+            </>
+          ) : (
+            <BreadcrumbItem>
+              {isPeople ? (
+                <BreadcrumbPage>People</BreadcrumbPage>
+              ) : hasPlan ? (
+                <BreadcrumbLink asChild>
+                  <Link href="/schedule">Schedule</Link>
+                </BreadcrumbLink>
+              ) : (
+                <BreadcrumbPage>Schedule</BreadcrumbPage>
+              )}
+            </BreadcrumbItem>
+          )}
         </BreadcrumbList>
       </Breadcrumb>
       {hasPlan ? (
@@ -497,9 +517,11 @@ function SidebarAccountPanel({
 function AppSidebar({
   trailingChrome,
   collapsePreview = false,
+  peoplePageEnabled,
 }: {
   trailingChrome: ReactNode;
   collapsePreview?: boolean;
+  peoplePageEnabled: boolean;
 }) {
   const pathname = usePathname();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -538,6 +560,20 @@ function AppSidebar({
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                {peoplePageEnabled ? (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={pathname.startsWith("/people")}
+                      hoverCard="People"
+                    >
+                      <Link href="/people">
+                        <Users />
+                        <span>People</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ) : null}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -589,7 +625,13 @@ function AppSidebar({
   );
 }
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({
+  children,
+  peoplePageEnabled,
+}: {
+  children: ReactNode;
+  peoplePageEnabled: boolean;
+}) {
   const pathname = usePathname();
   const isAuthRoute = pathname.startsWith("/auth");
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
@@ -619,6 +661,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <SidebarToggleHotkey />
       <AppSidebar
         collapsePreview={sidebarCollapsePreview}
+        peoplePageEnabled={peoplePageEnabled}
         trailingChrome={
           <SidebarResizeRail
             width={sidebarWidth}

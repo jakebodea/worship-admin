@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { Providers } from "@/components/providers";
+import { peoplePageFlag } from "@/flags";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,17 +30,19 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const peoplePageEnabled = await peoplePageFlag();
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <Providers>{children}</Providers>
+        <Providers peoplePageEnabled={peoplePageEnabled}>{children}</Providers>
         <Analytics />
       </body>
     </html>

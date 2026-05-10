@@ -54,6 +54,7 @@
 ## Learned User Preferences
 - When replacing behavior, remove legacy or unused code paths instead of keeping parallel implementations.
 - Prefer shadcn HoverCard for hover-revealed UI labels/help. Do not introduce Tooltip-based hover UI; replace existing tooltips with HoverCard when touching nearby code.
+- For People detail pages, prefer app-shell breadcrumb navigation over in-page back buttons.
 
 ## Learned Workspace Facts
 - People availability and blockouts: compare the plan `sort_date` instant to blockouts using each blockout’s Planning Center `time_zone` (calendar-day logic); pass full ISO `date` from the client to `/api/people`. Naive UTC-midnight or date-only string overlap checks can mislabel people near timezone boundaries.
