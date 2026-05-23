@@ -283,6 +283,29 @@ export class PlanningCenterPeopleService {
     return response.data;
   }
 
+  async deletePlanPerson(
+    planPersonId: string,
+    context?: { personId?: string; serviceTypeId?: string; planId?: string }
+  ): Promise<void> {
+    const endpoint =
+      context?.serviceTypeId && context.planId
+        ? `/services/v2/service_types/${context.serviceTypeId}/plans/${context.planId}/team_members/${planPersonId}`
+        : context?.personId
+          ? `/services/v2/people/${context.personId}/plan_people/${planPersonId}`
+          : `/services/v2/plan_people/${planPersonId}`;
+
+    await this.core.request(endpoint, {
+      method: "DELETE",
+    });
+    if (context?.serviceTypeId && context.planId) {
+      this.invalidateScheduleCaches({
+        personId: context.personId,
+        serviceTypeId: context.serviceTypeId,
+        planId: context.planId,
+      });
+    }
+  }
+
   /**
    * Schedule a person to a plan for a team. Creates a PlanPerson in Planning Center Services.
    */
@@ -334,17 +357,19 @@ export class PlanningCenterPeopleService {
     serviceTypeId,
     planId,
   }: {
-    personId: string;
+    personId?: string;
     serviceTypeId: string;
     planId: string;
   }) {
     const scope = this.core.getCacheScope();
-    const personSchedulesPrefix = [
-      scope,
-      "person-schedules",
-      encodeURIComponent(personId),
-      "",
-    ].join(":");
+    const personSchedulesPrefix = personId
+      ? [
+          scope,
+          "person-schedules",
+          encodeURIComponent(personId),
+          "",
+        ].join(":")
+      : null;
     const planTeamMembersKey = this.buildCacheKey(
       "plan-team-members",
       serviceTypeId,
@@ -352,7 +377,10 @@ export class PlanningCenterPeopleService {
     );
 
     this.cache.deleteWhere((key) => {
-      return key.startsWith(personSchedulesPrefix) || key === planTeamMembersKey;
+      return (
+        (personSchedulesPrefix ? key.startsWith(personSchedulesPrefix) : false) ||
+        key === planTeamMembersKey
+      );
     });
   }
 }

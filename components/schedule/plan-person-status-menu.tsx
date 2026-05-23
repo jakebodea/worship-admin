@@ -1,17 +1,19 @@
 "use client";
 
-import { Check, Loader2, MoreVertical } from "lucide-react";
+import { Check, Loader2, MoreVertical, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   type PlanPersonStatusCode,
   useUpdatePlanPersonStatus,
 } from "@/hooks/use-update-plan-person-status";
+import { useUnschedulePlanPerson } from "@/hooks/use-unschedule-plan-person";
 import { cn } from "@/lib/utils";
 
 export type PlanPersonStatusValue = "confirmed" | "scheduled" | "declined";
@@ -31,6 +33,9 @@ const ITEMS: { value: PlanPersonStatusValue; label: string; dotClassName: string
 export interface PlanPersonStatusMenuProps {
   planPersonId: string | null | undefined;
   currentStatus: PlanPersonStatusValue;
+  serviceTypeId?: string | null;
+  personId?: string | null;
+  planId?: string | null;
   onSuccess?: () => void;
   onError?: (message: string) => void;
 }
@@ -38,10 +43,15 @@ export interface PlanPersonStatusMenuProps {
 export function PlanPersonStatusMenu({
   planPersonId,
   currentStatus,
+  serviceTypeId,
+  personId,
+  planId,
   onSuccess,
   onError,
 }: PlanPersonStatusMenuProps) {
   const { isUpdating, handleUpdate } = useUpdatePlanPersonStatus({ onSuccess, onError });
+  const { isUnscheduling, handleUnschedule } = useUnschedulePlanPerson({ onSuccess, onError });
+  const isBusy = isUpdating || isUnscheduling;
 
   return (
     <DropdownMenu>
@@ -52,9 +62,9 @@ export function PlanPersonStatusMenu({
           size="icon"
           className="ml-auto size-8"
           aria-label="Change status"
-          disabled={!planPersonId || isUpdating}
+          disabled={!planPersonId || isBusy}
         >
-          {isUpdating ? (
+          {isBusy ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
             <MoreVertical className="size-4" />
@@ -74,6 +84,15 @@ export function PlanPersonStatusMenu({
             ) : null}
           </DropdownMenuItem>
         ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onSelect={() =>
+            void handleUnschedule(planPersonId, { serviceTypeId, personId, planId })
+          }
+        >
+          <Trash2 className="size-3.5" aria-hidden />
+          <span className="flex-1">Unschedule</span>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
