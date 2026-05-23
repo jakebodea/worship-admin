@@ -1,0 +1,258 @@
+import { pool } from "@/lib/db/pool";
+import {
+  getPlanningCenterIdentityFromAccessToken,
+  type PlanningCenterIdentity,
+} from "@/lib/auth/planning-center-identity";
+import { getPlanningCenterAccountIdentity } from "@/lib/use-cases/admin/planning-center-account-identities";
+
+export type AdminAccountActivity = {
+  userId: string;
+  name: string;
+  email: string;
+  image: string | null;
+  createdAt: string;
+  updatedAt: string;
+  linkedAccounts: number;
+  providers: string[];
+  activeSessions: number;
+  loginEvents: number;
+  loginEvents7d: number;
+  loginEvents30d: number;
+  signOutEvents: number;
+  activityEvents: number;
+  firstLoginAt: string | null;
+  lastLoginAt: string | null;
+  lastActivityAt: string | null;
+};
+
+export type AdminLinkedAccount = {
+  id: string;
+  providerAccountId: string;
+  providerId: string;
+  createdAt: string;
+  updatedAt: string;
+  scope: string | null;
+  accessTokenExpiresAt: string | null;
+  refreshTokenExpiresAt: string | null;
+  activityEvents: number;
+  linkedEvents: number;
+  firstActivityAt: string | null;
+  lastActivityAt: string | null;
+  identity: PlanningCenterIdentity | null;
+};
+
+export type AdminUserAccountDetail = AdminAccountActivity & {
+  linkedAccountDetails: AdminLinkedAccount[];
+};
+
+type AccountActivityRow = {
+  user_id: string;
+  name: string;
+  email: string;
+  image: string | null;
+  created_at: Date;
+  updated_at: Date;
+  linked_accounts: number | string;
+  providers: string[] | null;
+  active_sessions: number | string;
+  login_events: number | string;
+  login_events_7d: number | string;
+  login_events_30d: number | string;
+  sign_out_events: number | string;
+  activity_events: number | string;
+  first_login_at: Date | null;
+  last_login_at: Date | null;
+  last_activity_at: Date | null;
+};
+
+type LinkedAccountRow = {
+  id: string;
+  provider_account_id: string;
+  provider_id: string;
+  created_at: Date;
+  updated_at: Date;
+  scope: string | null;
+  access_token_expires_at: Date | null;
+  refresh_token_expires_at: Date | null;
+  access_token: string | null;
+  activity_events: number | string;
+  linked_events: number | string;
+  first_activity_at: Date | null;
+  last_activity_at: Date | null;
+};
+
+function toNumber(value: number | string): number {
+  return typeof value === "number" ? value : Number(value);
+}
+
+function toIsoString(value: Date | null): string | null {
+  return value ? value.toISOString() : null;
+}
+
+export function getAdminEmailAllowlist(): string[] {
+  const configured = process.env.WORSHIP_ADMIN_ADMIN_EMAILS;
+  if (!configured) return ["jakebodea@gmail.com"];
+
+  return configured
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+export function isAdminEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return getAdminEmailAllowlist().includes(email.toLowerCase());
+}
+
+export async function getAccountActivity(): Promise<AdminAccountActivity[]> {
+  const { rows } = await pool.query<AccountActivityRow>(`
+    with linked_accounts as (
+      select
+        "userId" as user_id,
+        count(*)::int as linked_accounts,
+        array_agg(distinct "providerId" order by "providerId") as providers
+      from account
+      group by "userId"
+    ),
+    active_sessions as (
+      select
+        "userId" as user_id,
+        count(*)::int as active_sessions
+      from session
+      where "expiresAt" > now()
+      group by "userId"
+    ),
+    activity as (
+      select
+        actor_user_id as user_id,
+        count(*)::int as activity_events,
+        count(*) filter (where event_type = 'auth_session_created')::int as login_events,
+        count(*) filter (
+          where event_type = 'auth_session_created'
+            and created_at >= now() - interval '7 days'
+        )::int as login_events_7d,
+        count(*) filter (
+          where event_type = 'auth_session_created'
+            and created_at >= now() - interval '30 days'
+        )::int as login_events_30d,
+        count(*) filter (where event_type = 'auth_session_deleted')::int as sign_out_events,
+        min(created_at) filter (where event_type = 'auth_session_created') as first_login_at,
+        max(created_at) filter (where event_type = 'auth_session_created') as last_login_at,
+        max(created_at) as last_activity_at
+      from activity_events
+      where actor_user_id is not null
+      group by actor_user_id
+    )
+    select
+      u.id as user_id,
+      u.name,
+      u.email,
+      u.image,
+      u."createdAt" as created_at,
+      u."updatedAt" as updated_at,
+      coalesce(la.linked_accounts, 0) as linked_accounts,
+      coalesce(la.providers, array[]::text[]) as providers,
+      coalesce(s.active_sessions, 0) as active_sessions,
+      coalesce(a.login_events, 0) as login_events,
+      coalesce(a.login_events_7d, 0) as login_events_7d,
+      coalesce(a.login_events_30d, 0) as login_events_30d,
+      coalesce(a.sign_out_events, 0) as sign_out_events,
+      coalesce(a.activity_events, 0) as activity_events,
+      a.first_login_at,
+      a.last_login_at,
+      a.last_activity_at
+    from "user" u
+    left join linked_accounts la on la.user_id = u.id
+    left join active_sessions s on s.user_id = u.id
+    left join activity a on a.user_id = u.id
+    order by a.last_login_at desc nulls last, u."createdAt" desc;
+  `);
+
+  return rows.map((row) => ({
+    userId: row.user_id,
+    name: row.name,
+    email: row.email,
+    image: row.image,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+    linkedAccounts: toNumber(row.linked_accounts),
+    providers: row.providers ?? [],
+    activeSessions: toNumber(row.active_sessions),
+    loginEvents: toNumber(row.login_events),
+    loginEvents7d: toNumber(row.login_events_7d),
+    loginEvents30d: toNumber(row.login_events_30d),
+    signOutEvents: toNumber(row.sign_out_events),
+    activityEvents: toNumber(row.activity_events),
+    firstLoginAt: toIsoString(row.first_login_at),
+    lastLoginAt: toIsoString(row.last_login_at),
+    lastActivityAt: toIsoString(row.last_activity_at),
+  }));
+}
+
+export async function getUserAccountDetail(
+  userId: string
+): Promise<AdminUserAccountDetail | null> {
+  const accounts = await getAccountActivity();
+  const user = accounts.find((account) => account.userId === userId);
+  if (!user) return null;
+
+  const { rows } = await pool.query<LinkedAccountRow>(
+    `
+      select
+        a.id,
+        a."accountId" as provider_account_id,
+        a."providerId" as provider_id,
+        a."createdAt" as created_at,
+        a."updatedAt" as updated_at,
+        a.scope,
+        a."accessTokenExpiresAt" as access_token_expires_at,
+        a."refreshTokenExpiresAt" as refresh_token_expires_at,
+        a."accessToken" as access_token,
+        count(e.id)::int as activity_events,
+        count(e.id) filter (where e.event_type = 'auth_account_linked')::int as linked_events,
+        min(e.created_at) as first_activity_at,
+        max(e.created_at) as last_activity_at
+      from account a
+      left join activity_events e on e.actor_account_id = a.id
+      where a."userId" = $1
+      group by
+        a.id,
+        a."accountId",
+        a."providerId",
+        a."createdAt",
+        a."updatedAt",
+        a.scope,
+        a."accessTokenExpiresAt",
+        a."refreshTokenExpiresAt"
+      order by a."updatedAt" desc;
+    `,
+    [userId]
+  );
+
+  const linkedAccountDetails = await Promise.all(
+    rows.map(async (row) => {
+      const storedIdentity = await getPlanningCenterAccountIdentity(row.id);
+      return {
+        id: row.id,
+        providerAccountId: row.provider_account_id,
+        providerId: row.provider_id,
+        createdAt: row.created_at.toISOString(),
+        updatedAt: row.updated_at.toISOString(),
+        scope: row.scope,
+        accessTokenExpiresAt: toIsoString(row.access_token_expires_at),
+        refreshTokenExpiresAt: toIsoString(row.refresh_token_expires_at),
+        activityEvents: toNumber(row.activity_events),
+        linkedEvents: toNumber(row.linked_events),
+        firstActivityAt: toIsoString(row.first_activity_at),
+        lastActivityAt: toIsoString(row.last_activity_at),
+        identity:
+          storedIdentity ?? await getPlanningCenterIdentityFromAccessToken(row.access_token),
+      };
+    })
+  );
+
+  return {
+    ...user,
+    linkedAccountDetails,
+  };
+}

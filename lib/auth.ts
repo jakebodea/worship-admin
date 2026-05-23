@@ -2,12 +2,14 @@ import { betterAuth } from "better-auth";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
 import { nextCookies } from "better-auth/next-js";
 import { PostgresDialect } from "kysely";
+import { getPlanningCenterIdentityFromAccessToken } from "@/lib/auth/planning-center-identity";
 import {
   getActivityRequestContext,
   recordActivityEvent,
 } from "@/lib/db/activity-events";
 import { pool } from "@/lib/db/pool";
 import { logger } from "@/lib/logger";
+import { upsertPlanningCenterAccountIdentity } from "@/lib/use-cases/admin/planning-center-account-identities";
 
 const baseUrl = process.env.BETTER_AUTH_URL;
 const secret = process.env.BETTER_AUTH_SECRET;
@@ -79,6 +81,31 @@ async function recordAuthEventSafely(
   }
 }
 
+async function getPlanningCenterIdentitySafely(account: {
+  id: string;
+  accountId: string;
+  accessToken?: string | null;
+}) {
+  try {
+    const identity = await getPlanningCenterIdentityFromAccessToken(account.accessToken);
+    if (identity) {
+      await upsertPlanningCenterAccountIdentity({
+        accountId: account.id,
+        providerAccountId: account.accountId,
+        identity,
+      });
+    }
+    return identity;
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    authEventLog.warn(
+      { err, accountId: account.id },
+      "Failed to record Planning Center account identity"
+    );
+    return null;
+  }
+}
+
 export const auth = betterAuth({
   baseURL: baseUrl,
   secret,
@@ -128,11 +155,15 @@ export const auth = betterAuth({
             return;
           }
 
+          const identity = await getPlanningCenterIdentitySafely(account);
           await recordAuthEventSafely("auth_account_linked", {
             userId: account.userId,
             accountId: account.id,
             metadata: {
               providerId: account.providerId,
+              organizationId: identity?.organizationId ?? null,
+              organizationName: identity?.organizationName ?? null,
+              planningCenterUserId: identity?.sub ?? null,
             },
             context,
           });
