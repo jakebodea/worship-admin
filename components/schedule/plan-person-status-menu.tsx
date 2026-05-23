@@ -36,6 +36,8 @@ export interface PlanPersonStatusMenuProps {
   serviceTypeId?: string | null;
   personId?: string | null;
   planId?: string | null;
+  teamId?: string | null;
+  positionId?: string | null;
   onSuccess?: () => void;
   onError?: (message: string) => void;
 }
@@ -46,6 +48,8 @@ export function PlanPersonStatusMenu({
   serviceTypeId,
   personId,
   planId,
+  teamId,
+  positionId,
   onSuccess,
   onError,
 }: PlanPersonStatusMenuProps) {
@@ -75,7 +79,16 @@ export function PlanPersonStatusMenu({
         {ITEMS.map(({ value, label, dotClassName }) => (
           <DropdownMenuItem
             key={value}
-            onSelect={() => void handleUpdate(planPersonId, STATUS_TO_CODE[value])}
+            disabled={currentStatus === value}
+            onSelect={() =>
+              handleUpdate(planPersonId, STATUS_TO_CODE[value], {
+                serviceTypeId,
+                personId,
+                planId,
+                teamId,
+                positionId,
+              })
+            }
           >
             <span className={cn("size-1.5 shrink-0 rounded-full", dotClassName)} aria-hidden />
             <span className="flex-1">{label}</span>
@@ -87,7 +100,13 @@ export function PlanPersonStatusMenu({
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={() =>
-            void handleUnschedule(planPersonId, { serviceTypeId, personId, planId })
+            handleUnschedule(planPersonId, {
+              serviceTypeId,
+              personId,
+              planId,
+              teamId,
+              positionId,
+            })
           }
         >
           <Trash2 className="size-3.5" aria-hidden />

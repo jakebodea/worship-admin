@@ -1,8 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { HttpClientError, patchJson } from "@/lib/http/client";
+import {
+  cancelScheduleMutationQueries,
+  optimisticallyUpdatePlanPersonStatus,
+  restoreScheduleCaches,
+  settleScheduleMutationQueries,
+  type ScheduleMutationInvalidateContext,
+} from "@/hooks/use-schedule-cache-optimism";
 
 export type PlanPersonStatusCode = "C" | "U" | "D";
 
@@ -24,38 +31,55 @@ export function useUpdatePlanPersonStatus({
   onError?: (message: string) => void;
 } = {}) {
   const queryClient = useQueryClient();
-  const [isUpdating, setIsUpdating] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
 
-  const handleUpdate = async (
-    planPersonId: string | null | undefined,
-    status: PlanPersonStatusCode
-  ) => {
-    if (!planPersonId || isUpdating) return;
-
-    setIsUpdating(true);
-    setUpdateError(null);
-
-    try {
-      await patchJson<{ success: boolean }>(
+  const updateMutation = useMutation({
+    mutationFn: ({
+      planPersonId,
+      status,
+      context,
+    }: {
+      planPersonId: string;
+      status: PlanPersonStatusCode;
+      context?: ScheduleMutationInvalidateContext;
+    }) =>
+      patchJson<{ success: boolean }>(
         `/api/schedule/${encodeURIComponent(planPersonId)}/status`,
-        { status }
-      );
-
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["team-positions"] }),
-        queryClient.invalidateQueries({ queryKey: ["people"] }),
-      ]);
-
+        {
+          status,
+          serviceTypeId: context?.serviceTypeId ?? undefined,
+          personId: context?.personId ?? undefined,
+          planId: context?.planId ?? undefined,
+        }
+      ),
+    onMutate: async ({ planPersonId, status, context }) => {
+      await cancelScheduleMutationQueries(queryClient, context ?? {});
+      return {
+        snapshot: optimisticallyUpdatePlanPersonStatus(queryClient, planPersonId, status),
+      };
+    },
+    onSuccess: (_result, variables) => {
+      settleScheduleMutationQueries(queryClient, variables.context ?? {});
       onSuccess?.();
-    } catch (err) {
+    },
+    onError: (err, _variables, context) => {
+      restoreScheduleCaches(queryClient, context?.snapshot);
       const message = formatUpdateStatusError(err);
       setUpdateError(message);
       onError?.(message);
-    } finally {
-      setIsUpdating(false);
-    }
+    },
+  });
+
+  const handleUpdate = (
+    planPersonId: string | null | undefined,
+    status: PlanPersonStatusCode,
+    context?: ScheduleMutationInvalidateContext
+  ) => {
+    if (!planPersonId || updateMutation.isPending) return;
+
+    setUpdateError(null);
+    updateMutation.mutate({ planPersonId, status, context });
   };
 
-  return { isUpdating, updateError, handleUpdate };
+  return { isUpdating: updateMutation.isPending, updateError, handleUpdate };
 }

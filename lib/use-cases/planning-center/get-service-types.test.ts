@@ -1,19 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 import { getServiceTypes } from "@/lib/use-cases/planning-center/get-service-types";
 
-const { getServiceTypesMock } = vi.hoisted(() => ({
-  getServiceTypesMock: vi.fn(),
+const { getServiceTypesCachedMock } = vi.hoisted(() => ({
+  getServiceTypesCachedMock: vi.fn(),
 }));
 
 vi.mock("@/lib/planning-center/services/catalog-service", () => ({
   planningCenterCatalogService: {
-    getServiceTypes: getServiceTypesMock,
+    getServiceTypesCached: getServiceTypesCachedMock,
   },
 }));
 
 describe("getServiceTypes", () => {
   it("filters archived service types and sorts by sequence", async () => {
-    getServiceTypesMock.mockResolvedValue([
+    getServiceTypesCachedMock.mockResolvedValue([
       {
         id: "st-excluded",
         type: "ServiceType",

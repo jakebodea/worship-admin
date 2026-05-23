@@ -1,11 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect } from "react";
 import { getJson } from "@/lib/http/client";
+import { readCachedPlansEntry, writeCachedPlans } from "@/lib/schedule-catalog-cache";
 import type { Plan } from "@/lib/types";
 import { queryKeys } from "@/lib/query-keys";
+import { useHydrateQueryFromCache } from "@/lib/query-cache-hydration";
 
 export function usePlans(serviceTypeId: string | null) {
-  return useQuery<Plan[]>({
-    queryKey: queryKeys.plans(serviceTypeId),
+  const queryKey = queryKeys.plans(serviceTypeId);
+  const readCachedPlans = useCallback(
+    () => readCachedPlansEntry(serviceTypeId),
+    [serviceTypeId]
+  );
+  useHydrateQueryFromCache(queryKey, readCachedPlans);
+
+  const query = useQuery<Plan[]>({
+    queryKey,
     queryFn: async () => {
       if (!serviceTypeId) {
         return [];
@@ -15,4 +25,11 @@ export function usePlans(serviceTypeId: string | null) {
     enabled: !!serviceTypeId,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
+
+  useEffect(() => {
+    if (!query.data || !serviceTypeId) return;
+    writeCachedPlans(serviceTypeId, query.data);
+  }, [query.data, serviceTypeId]);
+
+  return query;
 }

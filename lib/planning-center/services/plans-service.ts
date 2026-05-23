@@ -64,7 +64,7 @@ export class PlanningCenterPlansService {
       stableParams(params),
     ].join(":");
 
-    return this.cache.get(cacheKey, PLANS_RANGE_CACHE_TTL_MS, async () => {
+    const response = await this.cache.get(cacheKey, PLANS_RANGE_CACHE_TTL_MS, async () => {
       log.info(
         { serviceTypeId, after: afterDayKey, before: beforeDayKey, include: include || null },
         "Fetching plans in date range"
@@ -103,6 +103,8 @@ export class PlanningCenterPlansService {
       );
       return { data: plans, included };
     });
+
+    return cloneResourceResponse(response);
   }
 
   async getPlan(planId: string): Promise<PCResource> {
@@ -122,6 +124,16 @@ export class PlanningCenterPlansService {
       included: response.included || [],
     };
   }
+}
+
+function cloneResourceResponse(response: {
+  data: PCResource[];
+  included: PCResource[];
+}): { data: PCResource[]; included: PCResource[] } {
+  return {
+    data: structuredClone(response.data),
+    included: structuredClone(response.included),
+  };
 }
 
 export const planningCenterPlansService = new PlanningCenterPlansService(

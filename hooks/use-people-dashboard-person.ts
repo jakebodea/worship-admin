@@ -1,15 +1,55 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
 import { getJson } from "@/lib/http/client";
+import {
+  readCachedPeopleDashboardPerson,
+  writeCachedPeopleDashboardPerson,
+} from "@/lib/people-dashboard-cache";
+import { getCachedPeopleDashboardPersonDetail } from "@/lib/people-dashboard-person-placeholder";
 import { queryKeys } from "@/lib/query-keys";
-import type { PeopleDashboardPersonDetail } from "@/lib/use-cases/planning-center/people-dashboard-types";
+import { useHydrateQueryFromCache } from "@/lib/query-cache-hydration";
+import type {
+  PeopleDashboardData,
+  PeopleDashboardPersonDetail,
+} from "@/lib/use-cases/planning-center/people-dashboard-types";
 
-export function usePeopleDashboardPerson(personId: string, month: string | null) {
-  return useQuery<PeopleDashboardPersonDetail>({
+export function createPeopleDashboardPersonQueryOptions(
+  personId: string,
+  month: string | null
+) {
+  return {
     queryKey: queryKeys.peopleDashboardPerson(personId, month),
-    queryFn: () => {
+    queryFn: async () => {
       const params = month ? `?month=${encodeURIComponent(month)}` : "";
-      return getJson<PeopleDashboardPersonDetail>(`/api/people/dashboard/${personId}${params}`);
+      const detail = await getJson<PeopleDashboardPersonDetail>(
+        `/api/people/dashboard/${personId}${params}`
+      );
+      writeCachedPeopleDashboardPerson(personId, month, detail);
+      return detail;
     },
     staleTime: 2 * 60 * 1000,
+  };
+}
+
+export function usePeopleDashboardPerson(personId: string, month: string | null) {
+  const queryClient = useQueryClient();
+  const queryKey = queryKeys.peopleDashboardPerson(personId, month);
+  const readCachedPerson = useCallback(
+    () => readCachedPeopleDashboardPerson(personId, month),
+    [month, personId]
+  );
+  useHydrateQueryFromCache(queryKey, readCachedPerson);
+
+  return useQuery<PeopleDashboardPersonDetail>({
+    ...createPeopleDashboardPersonQueryOptions(personId, month),
+    queryKey,
+    placeholderData: () =>
+      getCachedPeopleDashboardPersonDetail(
+        queryClient.getQueriesData<PeopleDashboardData>({
+          queryKey: ["people-dashboard"],
+        }).map(([, dashboard]) => dashboard),
+        personId,
+        month
+      ),
   });
 }

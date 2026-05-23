@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { ApiError } from "@/lib/http/api-error";
 import { handlePlanningCenterRoute } from "@/lib/http/planning-center-route";
@@ -21,6 +21,8 @@ const bodySchema = z.object({
   planId: z.string().min(1),
   teamId: z.string().min(1),
   positionId: z.string().min(1),
+  teamName: z.string().trim().min(1).optional(),
+  positionName: z.string().trim().min(1).optional(),
   oneOff: z.boolean().optional().default(false),
 });
 
@@ -30,37 +32,39 @@ export async function POST(request: Request) {
   const log = logger.withRequest(request).child({ requestId });
 
   return handlePlanningCenterRoute(request, async (authContext) => {
-    const recordScheduleEventSafely = async (event: {
+    const recordScheduleEventSafely = (event: {
       success: boolean;
       statusCode: number;
       errorCode: string | null;
       input: z.infer<typeof bodySchema> | null;
       metadata?: Record<string, unknown>;
     }) => {
-      try {
-        await recordActivityEvent({
-          eventType: "schedule_attempt",
-          actorUserId: authContext.session.user.id,
-          actorAccountId: authContext.accountId,
-          requestId,
-          path: activityRequestContext.path,
-          method: activityRequestContext.method,
-          ipAddress: activityRequestContext.ipAddress,
-          userAgent: activityRequestContext.userAgent,
-          success: event.success,
-          statusCode: event.statusCode,
-          errorCode: event.errorCode,
-          serviceTypeId: event.input?.serviceTypeId ?? null,
-          personId: event.input?.personId ?? null,
-          planId: event.input?.planId ?? null,
-          teamId: event.input?.teamId ?? null,
-          positionId: event.input?.positionId ?? null,
-          metadata: event.metadata ?? null,
-        });
-      } catch (error) {
-        const err = error instanceof Error ? error : new Error(String(error));
-        log.warn({ err }, "Failed to record schedule activity event");
-      }
+      after(async () => {
+        try {
+          await recordActivityEvent({
+            eventType: "schedule_attempt",
+            actorUserId: authContext.session.user.id,
+            actorAccountId: authContext.accountId,
+            requestId,
+            path: activityRequestContext.path,
+            method: activityRequestContext.method,
+            ipAddress: activityRequestContext.ipAddress,
+            userAgent: activityRequestContext.userAgent,
+            success: event.success,
+            statusCode: event.statusCode,
+            errorCode: event.errorCode,
+            serviceTypeId: event.input?.serviceTypeId ?? null,
+            personId: event.input?.personId ?? null,
+            planId: event.input?.planId ?? null,
+            teamId: event.input?.teamId ?? null,
+            positionId: event.input?.positionId ?? null,
+            metadata: event.metadata ?? null,
+          });
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          log.warn({ err }, "Failed to record schedule activity event");
+        }
+      });
     };
 
     let requestBody: z.infer<typeof bodySchema> | null = null;
@@ -72,33 +76,57 @@ export async function POST(request: Request) {
         throw new ApiError(400, "INVALID_REQUEST", "Invalid request", parsed.error.issues);
       }
       requestBody = parsed.data;
-      const { serviceTypeId, personId, planId, teamId, positionId, oneOff } = requestBody;
+      const {
+        serviceTypeId,
+        personId,
+        planId,
+        teamId,
+        positionId,
+        teamName,
+        positionName,
+        oneOff,
+      } = requestBody;
 
-      const { data: teamPositions, included } =
-        await planningCenterCatalogService.getServiceTypeTeamPositionsWithTeams(serviceTypeId);
-      const selectedPosition = teamPositions.find((p) => p.id === positionId) as
-        | (RawTeamPosition & { relationships?: { team?: { data?: { id: string } } } })
-        | undefined;
-      if (!selectedPosition) {
-        throw new ApiError(400, "INVALID_REQUEST", "Selected position was not found for this service type");
-      }
-      const selectedPositionTeamId = selectedPosition.relationships?.team?.data?.id;
-      if (!selectedPositionTeamId || selectedPositionTeamId !== teamId) {
-        throw new ApiError(400, "INVALID_REQUEST", "Selected position does not belong to selected team");
-      }
+      const personAssignmentsPromise = oneOff
+        ? Promise.resolve(null)
+        : planningCenterPeopleService.getPersonTeamPositionAssignments(personId);
+      let selectedTeamName = teamName ?? "";
+      let selectedPositionName = positionName ?? "";
+      let personAssignments: Awaited<typeof personAssignmentsPromise> = null;
 
-      const selectedTeam = findIncluded(included, "Team", teamId) as RawTeam | undefined;
-      const selectedTeamName = (selectedTeam?.attributes?.name as string | undefined) || "";
-      const selectedPositionName = selectedPosition.attributes?.name || "";
+      if (selectedPositionName) {
+        personAssignments = await personAssignmentsPromise;
+      } else {
+        const teamPositionsPromise =
+          planningCenterCatalogService.getServiceTypeTeamPositionsWithTeams(serviceTypeId);
+        const [{ data: teamPositions, included }, resolvedPersonAssignments] = await Promise.all([
+          teamPositionsPromise,
+          personAssignmentsPromise,
+        ]);
+        personAssignments = resolvedPersonAssignments;
+
+        const selectedPosition = teamPositions.find((p) => p.id === positionId) as
+          | (RawTeamPosition & { relationships?: { team?: { data?: { id: string } } } })
+          | undefined;
+        if (!selectedPosition) {
+          throw new ApiError(400, "INVALID_REQUEST", "Selected position was not found for this service type");
+        }
+        const selectedPositionTeamId = selectedPosition.relationships?.team?.data?.id;
+        if (!selectedPositionTeamId || selectedPositionTeamId !== teamId) {
+          throw new ApiError(400, "INVALID_REQUEST", "Selected position does not belong to selected team");
+        }
+
+        const selectedTeam = findIncluded(included, "Team", teamId) as RawTeam | undefined;
+        selectedTeamName = (selectedTeam?.attributes?.name as string | undefined) || "";
+        selectedPositionName = selectedPosition.attributes?.name || "";
+      }
 
       if (!oneOff) {
-        const personAssignments =
-          await planningCenterPeopleService.getPersonTeamPositionAssignments(personId);
-        const hasPositionAssignment = personAssignments.data.some((assignment) => {
+        const hasPositionAssignment = personAssignments?.data.some((assignment) => {
           const rel = assignment.relationships?.team_position?.data;
           const assignmentPositionId = Array.isArray(rel) ? rel[0]?.id : rel?.id;
           return assignmentPositionId === positionId;
-        });
+        }) ?? false;
         if (!hasPositionAssignment) {
           throw new ApiError(400, "INVALID_REQUEST", "Person is not assigned to the selected team position");
         }
@@ -129,7 +157,7 @@ export async function POST(request: Request) {
           createdTeamPositionName.startsWith(`${selectedTeamName} - `);
 
         if (!teamMatches || !positionMatches) {
-          await recordScheduleEventSafely({
+          recordScheduleEventSafely({
             success: false,
             statusCode: 409,
             errorCode: "POSITION_MISMATCH",
@@ -170,7 +198,7 @@ export async function POST(request: Request) {
         "Person scheduled successfully"
       );
 
-      await recordScheduleEventSafely({
+      recordScheduleEventSafely({
         success: true,
         statusCode: 200,
         errorCode: null,
@@ -187,7 +215,16 @@ export async function POST(request: Request) {
       const errorMessage = err.message || "";
 
       if (errorMessage.includes("has already been scheduled for this position")) {
-        await recordScheduleEventSafely({
+        if (requestBody) {
+          planningCenterPeopleService.invalidateScheduleReadCaches({
+            personId: requestBody.personId,
+            serviceTypeId: requestBody.serviceTypeId,
+            planId: requestBody.planId,
+          });
+          invalidateCandidateHistoryForPerson(requestBody.personId);
+        }
+
+        recordScheduleEventSafely({
           success: false,
           statusCode: 409,
           errorCode: "ALREADY_SCHEDULED",
@@ -206,14 +243,14 @@ export async function POST(request: Request) {
       }
 
       if (error instanceof ApiError) {
-        await recordScheduleEventSafely({
+        recordScheduleEventSafely({
           success: false,
           statusCode: error.status,
           errorCode: error.code,
           input: requestBody,
         });
       } else {
-        await recordScheduleEventSafely({
+        recordScheduleEventSafely({
           success: false,
           statusCode: 500,
           errorCode: "INTERNAL_SERVER_ERROR",

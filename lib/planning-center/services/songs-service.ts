@@ -4,18 +4,21 @@ import {
   PlanningCenterApiError,
   PlanningCenterCoreClient,
 } from "@/lib/planning-center/core-client";
+import { PlanningCenterReadCache } from "@/lib/planning-center/services/read-cache";
 
 const log = logger.for("planning-center/songs");
 const DEFAULT_CATALOG_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_CATALOG_MAX_PAGES = 15;
+const SONG_DETAILS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 type CatalogCacheEntry = {
   expiresAt: number;
-  data: PCResource[];
+  promise: Promise<PCResource[]>;
 };
 
 export class PlanningCenterSongsService {
   private readonly catalogCache = new Map<string, CatalogCacheEntry>();
+  private readonly readCache = new PlanningCenterReadCache();
 
   constructor(private readonly core: PlanningCenterCoreClient) {}
 
@@ -36,38 +39,60 @@ export class PlanningCenterSongsService {
     const cached = this.catalogCache.get(cacheKey);
 
     if (cached && cached.expiresAt > now) {
-      return cached.data;
+      return structuredClone(await cached.promise);
     }
 
-    const data = await this.core.fetchAll<PCResource>(
-      "/services/v2/songs",
-      { order: "title" },
-      maxPages
-    );
+    const promise = this.core
+      .fetchAll<PCResource>("/services/v2/songs", { order: "title" }, maxPages)
+      .then((data) => {
+        log.info({ cacheKey, songCount: data.length }, "Songs catalog cached");
+        return data;
+      })
+      .catch((error: unknown) => {
+        if (this.catalogCache.get(cacheKey)?.promise === promise) {
+          this.catalogCache.delete(cacheKey);
+        }
+        throw error;
+      });
 
     this.catalogCache.set(cacheKey, {
       expiresAt: now + ttlMs,
-      data,
+      promise,
     });
 
-    log.info({ cacheKey, songCount: data.length }, "Songs catalog cached");
-    return data;
+    return structuredClone(await promise);
   }
 
   async getSong(songId: string): Promise<PCResource> {
-    const response = await this.core.fetch<PCResource>(`/services/v2/songs/${songId}`);
-    return response.data;
+    const resource = await this.readCache.get(
+      this.buildSongCacheKey("song", songId),
+      SONG_DETAILS_CACHE_TTL_MS,
+      async () => {
+        const response = await this.core.fetch<PCResource>(`/services/v2/songs/${songId}`);
+        return response.data;
+      }
+    );
+
+    return structuredClone(resource);
   }
 
   async getSongArrangementsWithKeys(
     songId: string
   ): Promise<{ data: PCResource[]; included: PCResource[] }> {
-    const response = await this.core.fetchAllWithIncluded<PCResource>(
-      `/services/v2/songs/${songId}/arrangements`,
-      { include: "keys" }
+    const response = await this.readCache.get(
+      this.buildSongCacheKey("arrangements", songId),
+      SONG_DETAILS_CACHE_TTL_MS,
+      () =>
+        this.core.fetchAllWithIncluded<PCResource>(
+          `/services/v2/songs/${songId}/arrangements`,
+          { include: "keys" }
+        )
     );
 
-    return response;
+    return {
+      data: structuredClone(response.data),
+      included: structuredClone(response.included),
+    };
   }
 
   async getSongLastScheduledItem(
@@ -92,6 +117,15 @@ export class PlanningCenterSongsService {
       }
       throw error;
     }
+  }
+
+  private buildSongCacheKey(kind: "song" | "arrangements", songId: string): string {
+    return [
+      this.core.getCacheScope(),
+      "songs",
+      kind,
+      encodeURIComponent(songId),
+    ].join(":");
   }
 }
 

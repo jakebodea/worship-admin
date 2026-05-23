@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { CalendarDays, X } from "lucide-react";
 import { ScheduleCandidateTile } from "@/components/schedule/schedule-candidate-tile";
 import { SomeoneElseRow } from "@/components/schedule/someone-else-row";
@@ -30,37 +30,44 @@ import type { PersonWithAvailability, TeamPositionGroup } from "@/lib/types";
 
 interface ScheduleViewTabProps {
   teamPositionsLoading: boolean;
+  teamPositionsPlaceholder: boolean;
   teamPositionGroups: TeamPositionGroup[] | undefined;
   collapsedTeams: Record<string, boolean>;
   selectedTeam: string | null;
   selectedPosition: string | null;
   people: PersonWithAvailability[] | undefined;
   peopleLoading: boolean;
+  peoplePlaceholder: boolean;
   selectedServiceTypeId: string | null;
   selectedPlanId: string | null;
   onToggleTeam: (teamId: string) => void;
   onSelectSlot: (slot: SlotRef) => void;
+  onPreviewSlot?: (slot: SlotRef) => void;
   onScheduleSuccess: () => void;
   onScheduleError: (message: string) => void;
 }
 
 export function ScheduleViewTab({
   teamPositionsLoading,
+  teamPositionsPlaceholder,
   teamPositionGroups,
   collapsedTeams,
   selectedTeam,
   selectedPosition,
   people,
   peopleLoading,
+  peoplePlaceholder,
   selectedServiceTypeId,
   selectedPlanId,
   onToggleTeam,
   onSelectSlot,
+  onPreviewSlot,
   onScheduleSuccess,
   onScheduleError,
 }: ScheduleViewTabProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [filter, setFilter] = useState("");
+  const deferredFilter = useDeferredValue(filter);
   /** Tailwind `lg` — sidebar visible; sheet only below this width. */
   const [isWidePickerLayout, setIsWidePickerLayout] = useState(false);
 
@@ -106,7 +113,7 @@ export function ScheduleViewTab({
     [people]
   );
 
-  const normalizedFilter = filter.trim().toLowerCase();
+  const normalizedFilter = deferredFilter.trim().toLowerCase();
   const filteredActionable = useMemo(
     () =>
       normalizedFilter
@@ -134,12 +141,14 @@ export function ScheduleViewTab({
   const positionPickerList = (
     <PositionPickerList
       teamPositionsLoading={teamPositionsLoading}
+      teamPositionsPlaceholder={teamPositionsPlaceholder}
       teamPositionGroups={teamPositionGroups}
       collapsedTeams={collapsedTeams}
       selectedTeam={selectedTeam}
       selectedPosition={selectedPosition}
       onToggleTeam={onToggleTeam}
       onSelect={handleSelectSlot}
+      onPreviewSlot={onPreviewSlot}
     />
   );
 
@@ -189,9 +198,22 @@ export function ScheduleViewTab({
                   </EmptyHeader>
                 </Empty>
               ) : (
-                <div className="flex min-h-0 flex-col gap-4 pb-4 sm:gap-5 sm:pr-2">
+                <div
+                  className="relative flex min-h-0 flex-col gap-4 pb-4 sm:gap-5 sm:pr-2"
+                  aria-busy={peoplePlaceholder}
+                >
+                  {peoplePlaceholder ? (
+                    <div className="sticky top-0 z-10 -mb-2 rounded-md border border-border/60 bg-background/95 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur">
+                      Loading selected slot...
+                    </div>
+                  ) : null}
                   <section className="flex flex-col gap-2">
-                    <div className="overflow-hidden rounded-xl border border-border/40 bg-card/30 divide-y divide-border/25">
+                    <div
+                      className={[
+                        "overflow-hidden rounded-xl border border-border/40 bg-card/30 divide-y divide-border/25",
+                        peoplePlaceholder ? "pointer-events-none opacity-60" : "",
+                      ].join(" ")}
+                    >
                       {filteredActionable.map((person) => (
                         <ScheduleCandidateTile
                           key={personTileKey(person)}
@@ -200,6 +222,8 @@ export function ScheduleViewTab({
                           planId={selectedPlanId}
                           teamId={selectedTeam}
                           positionId={selectedPosition}
+                          teamName={selectedSlotInfo?.teamName}
+                          positionName={selectedSlotInfo?.positionName}
                           onScheduleSuccess={onScheduleSuccess}
                           onScheduleError={onScheduleError}
                         />
@@ -209,6 +233,8 @@ export function ScheduleViewTab({
                         planId={selectedPlanId}
                         teamId={selectedTeam}
                         positionId={selectedPosition}
+                        teamName={selectedSlotInfo?.teamName}
+                        positionName={selectedSlotInfo?.positionName}
                         onScheduleSuccess={onScheduleSuccess}
                         onScheduleError={onScheduleError}
                       />
@@ -218,7 +244,12 @@ export function ScheduleViewTab({
                   {filteredExceptions.length > 0 ? (
                     <section className="flex flex-col gap-2">
                       <SectionLabel title="Unavailable" count={filteredExceptions.length} />
-                      <div className="overflow-hidden rounded-xl border border-border/30 bg-card/20 opacity-80 divide-y divide-border/20">
+                      <div
+                        className={[
+                          "overflow-hidden rounded-xl border border-border/30 bg-card/20 opacity-80 divide-y divide-border/20",
+                          peoplePlaceholder ? "pointer-events-none" : "",
+                        ].join(" ")}
+                      >
                         {filteredExceptions.map((person) => (
                           <ScheduleCandidateTile
                             key={personTileKey(person)}
@@ -227,6 +258,8 @@ export function ScheduleViewTab({
                             planId={selectedPlanId}
                             teamId={selectedTeam}
                             positionId={selectedPosition}
+                            teamName={selectedSlotInfo?.teamName}
+                            positionName={selectedSlotInfo?.positionName}
                             onScheduleSuccess={onScheduleSuccess}
                             onScheduleError={onScheduleError}
                           />

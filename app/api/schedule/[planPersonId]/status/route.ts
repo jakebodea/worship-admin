@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { after } from "next/server";
 import { ApiError } from "@/lib/http/api-error";
 import { handlePlanningCenterRoute } from "@/lib/http/planning-center-route";
 import { logger } from "@/lib/logger";
@@ -7,6 +8,7 @@ import {
   getActivityRequestContext,
   recordActivityEvent,
 } from "@/lib/db/activity-events";
+import { invalidateCandidateHistoryForPerson } from "@/lib/use-cases/planning-center/get-people-for-position";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +18,9 @@ const paramsSchema = z.object({
 
 const bodySchema = z.object({
   status: z.enum(["C", "U", "D"]),
+  serviceTypeId: z.string().min(1).optional(),
+  personId: z.string().min(1).optional(),
+  planId: z.string().min(1).optional(),
 });
 
 export async function PATCH(
@@ -27,7 +32,7 @@ export async function PATCH(
   const log = logger.withRequest(request).child({ requestId });
 
   return handlePlanningCenterRoute(request, async (authContext) => {
-    const recordStatusEventSafely = async (event: {
+    const recordStatusEventSafely = (event: {
       success: boolean;
       statusCode: number;
       errorCode: string | null;
@@ -35,33 +40,36 @@ export async function PATCH(
       status: "C" | "U" | "D" | null;
       metadata?: Record<string, unknown>;
     }) => {
-      try {
-        await recordActivityEvent({
-          eventType: "schedule_status_change",
-          actorUserId: authContext.session.user.id,
-          actorAccountId: authContext.accountId,
-          requestId,
-          path: activityRequestContext.path,
-          method: activityRequestContext.method,
-          ipAddress: activityRequestContext.ipAddress,
-          userAgent: activityRequestContext.userAgent,
-          success: event.success,
-          statusCode: event.statusCode,
-          errorCode: event.errorCode,
-          metadata: {
-            planPersonId: event.planPersonId,
-            status: event.status,
-            ...event.metadata,
-          },
-        });
-      } catch (error) {
-        const err = error instanceof Error ? error : new Error(String(error));
-        log.warn({ err }, "Failed to record schedule status change activity event");
-      }
+      after(async () => {
+        try {
+          await recordActivityEvent({
+            eventType: "schedule_status_change",
+            actorUserId: authContext.session.user.id,
+            actorAccountId: authContext.accountId,
+            requestId,
+            path: activityRequestContext.path,
+            method: activityRequestContext.method,
+            ipAddress: activityRequestContext.ipAddress,
+            userAgent: activityRequestContext.userAgent,
+            success: event.success,
+            statusCode: event.statusCode,
+            errorCode: event.errorCode,
+            metadata: {
+              planPersonId: event.planPersonId,
+              status: event.status,
+              ...event.metadata,
+            },
+          });
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          log.warn({ err }, "Failed to record schedule status change activity event");
+        }
+      });
     };
 
     let planPersonId: string | null = null;
     let nextStatus: "C" | "U" | "D" | null = null;
+    let requestBody: z.infer<typeof bodySchema> | null = null;
 
     try {
       const parsedParams = paramsSchema.safeParse(await params);
@@ -92,30 +100,44 @@ export async function PATCH(
           parsedBody.error.issues
         );
       }
-      nextStatus = parsedBody.data.status;
+      requestBody = parsedBody.data;
+      nextStatus = requestBody.status;
 
       await planningCenterPeopleService.updatePlanPersonStatus(
         planPersonId,
-        nextStatus
+        nextStatus,
+        {
+          personId: requestBody.personId,
+          serviceTypeId: requestBody.serviceTypeId,
+          planId: requestBody.planId,
+        }
       );
+      if (requestBody.personId) {
+        invalidateCandidateHistoryForPerson(requestBody.personId);
+      }
 
       log.info(
         { planPersonId, status: nextStatus },
         "PlanPerson status updated successfully"
       );
 
-      await recordStatusEventSafely({
+      recordStatusEventSafely({
         success: true,
         statusCode: 200,
         errorCode: null,
         planPersonId,
         status: nextStatus,
+        metadata: {
+          personId: requestBody.personId ?? null,
+          serviceTypeId: requestBody.serviceTypeId ?? null,
+          planId: requestBody.planId ?? null,
+        },
       });
 
       return { success: true };
     } catch (error) {
       if (error instanceof ApiError) {
-        await recordStatusEventSafely({
+        recordStatusEventSafely({
           success: false,
           statusCode: error.status,
           errorCode: error.code,
@@ -123,7 +145,7 @@ export async function PATCH(
           status: nextStatus,
         });
       } else {
-        await recordStatusEventSafely({
+        recordStatusEventSafely({
           success: false,
           statusCode: 500,
           errorCode: "INTERNAL_SERVER_ERROR",

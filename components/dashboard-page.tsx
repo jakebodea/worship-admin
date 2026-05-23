@@ -1,9 +1,8 @@
 "use client";
 
-import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { LoaderCircle } from "lucide-react";
 import { PlanningCenterServicesIcon } from "@/components/planning-center-services-icon";
 import { LineupTab } from "@/components/schedule/lineup-tab";
 import { PlanTab } from "@/components/schedule/plan-tab";
@@ -12,11 +11,12 @@ import { Button } from "@/components/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import type { SlotRef } from "@/components/schedule/types";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { usePeople } from "@/hooks/use-people";
+import { toast } from "@/components/ui/sonner";
+import { createPeopleQueryOptions, usePeople } from "@/hooks/use-people";
+import { createPlanItemsQueryOptions } from "@/hooks/use-plan-items";
 import { usePlans } from "@/hooks/use-plans";
 import { useServiceTypes } from "@/hooks/use-service-types";
 import { useTeamPositions } from "@/hooks/use-team-positions";
-import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 
 interface RouteSelectionIds {
@@ -30,6 +30,7 @@ interface RouteSelectionIds {
 type DashboardView = "schedule" | "lineup" | "plan";
 const COLLAPSED_TEAMS_STORAGE_KEY_PREFIX = "schedule-collapsed-teams:";
 const COLLAPSED_TEAMS_STORAGE_MAP_KEY = `${COLLAPSED_TEAMS_STORAGE_KEY_PREFIX}by-plan`;
+const SLOT_PEOPLE_PREFETCH_DELAY_MS = 180;
 type SearchParamReader = Pick<URLSearchParams, "get">;
 
 function parseDashboardView(value: string | null): DashboardView {
@@ -128,6 +129,7 @@ export function DashboardPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const slotPrefetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [collapsedTeamsByPlan, setCollapsedTeamsByPlan] = useState<
     Record<string, Record<string, boolean>>
@@ -177,15 +179,21 @@ export function DashboardPage() {
   const { data: serviceTypes, isLoading: serviceTypesLoading } = useServiceTypes();
   const selectedServiceType =
     serviceTypes?.find((serviceType) => serviceType.id === routeIds.serviceTypeId) ?? null;
+  const routeServiceTypeId = routeIds.serviceTypeId ?? null;
+  const routePlanId = routeIds.planId ?? null;
 
   const { data: plans, isLoading: plansLoading, isFetching: plansFetching } = usePlans(
-    selectedServiceType?.id ?? null
+    routeServiceTypeId
   );
   const selectedPlan = plans?.find((plan) => plan.id === routeIds.planId) ?? null;
 
-  const { data: teamPositionGroups, isLoading: teamPositionsLoading } = useTeamPositions(
-    selectedServiceType?.id ?? null,
-    selectedPlan?.id ?? null,
+  const {
+    data: teamPositionGroups,
+    isLoading: teamPositionsLoading,
+    isPlaceholderData: teamPositionsPlaceholder,
+  } = useTeamPositions(
+    routeServiceTypeId,
+    routePlanId,
     selectedPlan?.seriesId ?? null
   );
 
@@ -194,22 +202,78 @@ export function DashboardPage() {
   const selectedPositionObj =
     selectedTeamGroup?.positions.find((position) => position.id === routeIds.positionId) ?? null;
 
-  const selectedTeam = selectedTeamGroup?.teamId ?? null;
-  const selectedPosition = selectedPositionObj?.id ?? null;
-  const selectedPlanId = selectedPlan?.id ?? null;
+  const selectedTeam = routeIds.teamId ?? null;
+  const selectedPosition = routeIds.positionId ?? null;
+  const validatedTeam = selectedTeamGroup?.teamId ?? null;
+  const validatedPosition = selectedPositionObj?.id ?? null;
+  const canLoadSelectedSlotPeople = Boolean(selectedPlan?.sortDate && selectedPosition);
+  const selectedPlanId = routePlanId;
   const collapsedTeams = selectedPlanId ? (collapsedTeamsByPlan[selectedPlanId] ?? {}) : {};
-  const hasSelectedPlan = Boolean(selectedServiceType && selectedPlan);
   const hasPlanUrlSelection = Boolean(routeIds.serviceTypeId && routeIds.planId);
-  const isPlanMetadataLoading =
-    hasPlanUrlSelection && (serviceTypesLoading || plansLoading || plansFetching);
-  const activeView: DashboardView = hasSelectedPlan ? routeIds.view : "schedule";
+  const hasSelectedPlanMetadata = Boolean(selectedServiceType && selectedPlan);
+  const activeView: DashboardView = hasPlanUrlSelection ? routeIds.view : "schedule";
 
-  const { data: people, isLoading: peopleLoading } = usePeople(
-    selectedServiceType?.id ?? null,
-    selectedTeam,
-    selectedPosition,
-    selectedPlan?.id ?? null,
+  const {
+    data: people,
+    isLoading: peopleLoading,
+    isPlaceholderData: peoplePlaceholder,
+  } = usePeople(
+    routeServiceTypeId,
+    canLoadSelectedSlotPeople ? selectedTeam : null,
+    canLoadSelectedSlotPeople ? selectedPosition : null,
+    routePlanId,
     selectedPlan?.sortDate ?? null
+  );
+
+  const prefetchPlanItems = useCallback(() => {
+    if (!routeServiceTypeId || !routePlanId) return;
+    void queryClient.prefetchQuery(
+      createPlanItemsQueryOptions(routeServiceTypeId, routePlanId)
+    );
+  }, [queryClient, routePlanId, routeServiceTypeId]);
+
+  useEffect(() => {
+    if (!hasPlanUrlSelection || activeView === "plan") return;
+    prefetchPlanItems();
+  }, [activeView, hasPlanUrlSelection, prefetchPlanItems]);
+
+  const prefetchSlotPeople = useCallback(
+    (slot: SlotRef) => {
+      if (!routeServiceTypeId || !selectedPlan?.id) return;
+      void queryClient.prefetchQuery(
+        createPeopleQueryOptions(
+          routeServiceTypeId,
+          slot.teamId,
+          slot.positionId,
+          selectedPlan.id,
+          selectedPlan.sortDate ?? null
+        )
+      );
+    },
+    [queryClient, routeServiceTypeId, selectedPlan?.id, selectedPlan?.sortDate]
+  );
+
+  const handleSlotPreview = useCallback(
+    (slot: SlotRef) => {
+      if (slotPrefetchTimeoutRef.current) {
+        clearTimeout(slotPrefetchTimeoutRef.current);
+      }
+
+      slotPrefetchTimeoutRef.current = setTimeout(() => {
+        slotPrefetchTimeoutRef.current = null;
+        prefetchSlotPeople(slot);
+      }, SLOT_PEOPLE_PREFETCH_DELAY_MS);
+    },
+    [prefetchSlotPeople]
+  );
+
+  useEffect(
+    () => () => {
+      if (slotPrefetchTimeoutRef.current) {
+        clearTimeout(slotPrefetchTimeoutRef.current);
+      }
+    },
+    []
   );
 
   useEffect(() => {
@@ -224,8 +288,8 @@ export function DashboardPage() {
     const canonicalUrl = buildScheduleUrl({
       serviceTypeId: selectedServiceType?.id ?? null,
       planId: selectedPlan?.id ?? null,
-      teamId: selectedTeam,
-      positionId: selectedPosition,
+      teamId: validatedTeam,
+      positionId: validatedPosition,
       view: activeView,
     });
 
@@ -244,9 +308,9 @@ export function DashboardPage() {
     router,
     activeView,
     selectedPlan?.id,
-    selectedPosition,
+    validatedPosition,
     selectedServiceType?.id,
-    selectedTeam,
+    validatedTeam,
     serviceTypesLoading,
     teamPositionsLoading,
   ]);
@@ -263,30 +327,19 @@ export function DashboardPage() {
     }
   }, [collapsedTeamsByPlan]);
 
-  const handleScheduleSuccess = () => {
-    void queryClient.invalidateQueries({
-      queryKey: queryKeys.peopleForSlot(
-        selectedServiceType?.id ?? null,
-        selectedTeam,
-        selectedPosition,
-        selectedPlan?.id ?? null
-      ),
-    });
-
-    void queryClient.invalidateQueries({
-      queryKey: queryKeys.teamPositions(
-        selectedServiceType?.id ?? null,
-        selectedPlan?.id ?? null,
-        selectedPlan?.seriesId ?? null
-      ),
-    });
-  };
+  const handleScheduleSuccess = () => {};
 
   const handleScheduleError = (message: string) => {
-    console.error("Schedule error:", message);
+    toast.error(message);
   };
 
   const handleSlotSelect = (slot: SlotRef) => {
+    if (slotPrefetchTimeoutRef.current) {
+      clearTimeout(slotPrefetchTimeoutRef.current);
+      slotPrefetchTimeoutRef.current = null;
+    }
+    prefetchSlotPeople(slot);
+
     if (selectedPlanId) {
       setCollapsedTeamsByPlan((prev) => {
         const currentForPlan = prev[selectedPlanId] ?? {};
@@ -303,8 +356,8 @@ export function DashboardPage() {
     }
 
     navigateTo({
-      serviceTypeId: selectedServiceType?.id ?? null,
-      planId: selectedPlan?.id ?? null,
+      serviceTypeId: routeServiceTypeId,
+      planId: routePlanId,
       teamId: slot.teamId,
       positionId: slot.positionId,
       view: "schedule",
@@ -335,10 +388,10 @@ export function DashboardPage() {
       <div
         className={cn(
           "mx-auto flex w-full max-w-7xl min-h-0 flex-1 flex-col px-3 sm:px-4",
-          hasSelectedPlan ? "py-2 sm:py-3" : "py-6"
+          hasPlanUrlSelection ? "py-2 sm:py-3" : "py-6"
         )}
       >
-        {hasSelectedPlan && selectedServiceType && selectedPlan ? (
+        {hasSelectedPlanMetadata && selectedServiceType && selectedPlan ? (
           <header className="mb-3 shrink-0 sm:mb-5">
             <div className="flex min-w-0 items-start justify-between gap-3">
               <h1 className="flex min-w-0 flex-col gap-0.5 text-base font-semibold leading-tight tracking-tight sm:block sm:truncate sm:text-xl md:text-2xl">
@@ -381,16 +434,9 @@ export function DashboardPage() {
           </header>
         ) : null}
 
-        {!hasSelectedPlan ? (
+        {!hasPlanUrlSelection ? (
           <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
-            {isPlanMetadataLoading ? (
-              <>
-                <LoaderCircle className="size-4 animate-spin" />
-                Loading plan details…
-              </>
-            ) : (
-              <span>No plan selected · use the Schedule breadcrumb to choose one.</span>
-            )}
+            <span>No plan selected · use the Schedule breadcrumb to choose one.</span>
           </div>
         ) : (
           <Tabs value={activeView} className="flex min-h-0 flex-1 flex-col">
@@ -400,16 +446,19 @@ export function DashboardPage() {
             >
               <ScheduleViewTab
                 teamPositionsLoading={teamPositionsLoading}
+                teamPositionsPlaceholder={teamPositionsPlaceholder}
                 teamPositionGroups={teamPositionGroups}
                 collapsedTeams={collapsedTeams}
                 selectedTeam={selectedTeam}
                 selectedPosition={selectedPosition}
                 people={people}
                 peopleLoading={peopleLoading}
-                selectedServiceTypeId={selectedServiceType?.id ?? null}
-                selectedPlanId={selectedPlan?.id ?? null}
+                peoplePlaceholder={peoplePlaceholder}
+                selectedServiceTypeId={routeServiceTypeId}
+                selectedPlanId={routePlanId}
                 onToggleTeam={toggleTeamCollapsed}
                 onSelectSlot={handleSlotSelect}
+                onPreviewSlot={handleSlotPreview}
                 onScheduleSuccess={handleScheduleSuccess}
                 onScheduleError={handleScheduleError}
               />
@@ -419,14 +468,16 @@ export function DashboardPage() {
               <LineupTab
                 groups={teamPositionGroups ?? []}
                 isLoading={teamPositionsLoading}
+                isPlaceholderData={teamPositionsPlaceholder}
                 onSelectPosition={handleSlotSelect}
+                onPreviewPosition={handleSlotPreview}
               />
             </TabsContent>
 
             <TabsContent value="plan" className="mt-0 flex min-h-0 flex-1 flex-col">
               <PlanTab
-                serviceTypeId={selectedServiceType?.id ?? null}
-                planId={selectedPlan?.id ?? null}
+                serviceTypeId={routeServiceTypeId}
+                planId={routePlanId}
               />
             </TabsContent>
           </Tabs>

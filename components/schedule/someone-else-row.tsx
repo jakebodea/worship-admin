@@ -20,15 +20,21 @@ interface SomeoneElseRowProps {
   planId?: string | null;
   teamId?: string | null;
   positionId?: string | null;
+  teamName?: string | null;
+  positionName?: string | null;
   onScheduleSuccess?: () => void;
   onScheduleError?: (message: string) => void;
 }
+
+const PEOPLE_SEARCH_DEBOUNCE_MS = 150;
 
 export function SomeoneElseRow({
   serviceTypeId,
   planId,
   teamId,
   positionId,
+  teamName,
+  positionName,
   onScheduleSuccess,
   onScheduleError,
 }: SomeoneElseRowProps) {
@@ -38,7 +44,10 @@ export function SomeoneElseRow({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => setDebouncedQuery(query), 300);
+    const timeout = window.setTimeout(
+      () => setDebouncedQuery(query),
+      PEOPLE_SEARCH_DEBOUNCE_MS
+    );
     return () => window.clearTimeout(timeout);
   }, [query]);
 
@@ -48,11 +57,28 @@ export function SomeoneElseRow({
 
   const search = usePeopleSearch(debouncedQuery);
   const canSchedule = !!serviceTypeId && !!planId && !!teamId && !!positionId;
+  const searchResults = search.data ?? [];
+  const normalizedQuery = query.trim();
+  const normalizedDebouncedQuery = debouncedQuery.trim();
+  const searchHasQuery = normalizedQuery.length >= 2;
+  const searchInputPending =
+    searchHasQuery && normalizedDebouncedQuery !== normalizedQuery;
+  const showInitialSearchLoading =
+    searchHasQuery &&
+    (searchInputPending || (search.isLoading && searchResults.length === 0));
+  const showSearchRefreshing =
+    searchHasQuery &&
+    !searchInputPending &&
+    search.isFetching &&
+    searchResults.length > 0;
 
-  const handleSuccess = () => {
+  const closeSearch = () => {
     setOpen(false);
     setQuery("");
     setDebouncedQuery("");
+  };
+
+  const handleSuccess = () => {
     onScheduleSuccess?.();
   };
 
@@ -82,16 +108,20 @@ export function SomeoneElseRow({
           inputRef={inputRef}
           query={query}
           onQueryChange={setQuery}
-          showPrompt={query.trim().length < 2}
-          showLoading={query.trim().length >= 2 && search.isFetching}
+          showPrompt={!searchHasQuery}
+          showLoading={showInitialSearchLoading}
+          showRefreshing={showSearchRefreshing}
           isError={search.isError}
-          results={search.data ?? []}
+          results={searchResults}
           serviceTypeId={serviceTypeId}
           planId={planId}
           teamId={teamId}
           positionId={positionId}
+          teamName={teamName}
+          positionName={positionName}
           canSchedule={canSchedule}
           onScheduleSuccess={handleSuccess}
+          onOptimisticSchedule={closeSearch}
           onScheduleError={onScheduleError}
         />
       </PopoverContent>
@@ -105,14 +135,18 @@ function SomeoneElseSearchContent({
   onQueryChange,
   showPrompt,
   showLoading,
+  showRefreshing,
   isError,
   results,
   serviceTypeId,
   planId,
   teamId,
   positionId,
+  teamName,
+  positionName,
   canSchedule,
   onScheduleSuccess,
+  onOptimisticSchedule,
   onScheduleError,
 }: {
   inputRef: React.RefObject<HTMLInputElement | null>;
@@ -120,14 +154,18 @@ function SomeoneElseSearchContent({
   onQueryChange: (query: string) => void;
   showPrompt: boolean;
   showLoading: boolean;
+  showRefreshing: boolean;
   isError: boolean;
   results: PeopleSearchResult[];
   serviceTypeId?: string | null;
   planId?: string | null;
   teamId?: string | null;
   positionId?: string | null;
+  teamName?: string | null;
+  positionName?: string | null;
   canSchedule: boolean;
   onScheduleSuccess?: () => void;
+  onOptimisticSchedule?: () => void;
   onScheduleError?: (message: string) => void;
 }) {
   return (
@@ -152,6 +190,12 @@ function SomeoneElseSearchContent({
           <CommandEmpty>No people found.</CommandEmpty>
         ) : (
           <CommandGroup>
+            {showRefreshing ? (
+              <div className="text-muted-foreground flex items-center gap-2 px-2 py-1.5 text-xs" aria-live="polite">
+                <Loader2 className="size-3 animate-spin" />
+                Searching
+              </div>
+            ) : null}
             {results.map((person) => (
               <SomeoneElseResultRow
                 key={person.id}
@@ -160,8 +204,11 @@ function SomeoneElseSearchContent({
                 planId={planId}
                 teamId={teamId}
                 positionId={positionId}
+                teamName={teamName}
+                positionName={positionName}
                 canSchedule={canSchedule}
                 onScheduleSuccess={onScheduleSuccess}
+                onOptimisticSchedule={onOptimisticSchedule}
                 onScheduleError={onScheduleError}
               />
             ))}
@@ -178,8 +225,11 @@ function SomeoneElseResultRow({
   planId,
   teamId,
   positionId,
+  teamName,
+  positionName,
   canSchedule,
   onScheduleSuccess,
+  onOptimisticSchedule,
   onScheduleError,
 }: {
   person: PeopleSearchResult;
@@ -187,8 +237,11 @@ function SomeoneElseResultRow({
   planId?: string | null;
   teamId?: string | null;
   positionId?: string | null;
+  teamName?: string | null;
+  positionName?: string | null;
   canSchedule: boolean;
   onScheduleSuccess?: () => void;
+  onOptimisticSchedule?: () => void;
   onScheduleError?: (message: string) => void;
 }) {
   const { isScheduling, handleSchedule } = useSchedulePlanPerson({
@@ -196,7 +249,10 @@ function SomeoneElseResultRow({
     planId,
     teamId,
     positionId,
+    teamName,
+    positionName,
     canSchedule,
+    onOptimisticSchedule,
     onScheduleSuccess,
     onScheduleError,
     oneOff: true,
@@ -206,7 +262,7 @@ function SomeoneElseResultRow({
   return (
     <CommandItem
       value={`${person.fullName} ${person.id}`}
-      onSelect={() => void handleSchedule(person.id)}
+      onSelect={() => handleSchedule(person)}
       disabled={!canSchedule || isScheduling}
       className="py-2"
     >

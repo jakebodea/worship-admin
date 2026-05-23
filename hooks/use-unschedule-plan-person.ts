@@ -1,8 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { deleteJson, HttpClientError } from "@/lib/http/client";
+import {
+  cancelScheduleMutationQueries,
+  optimisticallyUnschedulePlanPerson,
+  restoreScheduleCaches,
+  settleScheduleMutationQueries,
+  type ScheduleMutationInvalidateContext,
+} from "@/hooks/use-schedule-cache-optimism";
 
 function formatUnscheduleError(error: unknown): string {
   if (error instanceof HttpClientError) return error.message || "Failed to unschedule";
@@ -18,37 +24,50 @@ export function useUnschedulePlanPerson({
   onError?: (message: string) => void;
 } = {}) {
   const queryClient = useQueryClient();
-  const [isUnscheduling, setIsUnscheduling] = useState(false);
 
-  const handleUnschedule = async (
-    planPersonId: string | null | undefined,
-    context?: { serviceTypeId?: string | null; personId?: string | null; planId?: string | null }
-  ) => {
-    if (!planPersonId || isUnscheduling) return;
-
-    setIsUnscheduling(true);
-    try {
-      await deleteJson<{ success: boolean }>(
+  const unscheduleMutation = useMutation({
+    mutationFn: ({
+      planPersonId,
+      context,
+    }: {
+      planPersonId: string;
+      context?: ScheduleMutationInvalidateContext & { personId?: string | null };
+    }) =>
+      deleteJson<{ success: boolean }>(
         `/api/schedule/${encodeURIComponent(planPersonId)}`,
         {
           serviceTypeId: context?.serviceTypeId ?? undefined,
           personId: context?.personId ?? undefined,
           planId: context?.planId ?? undefined,
         }
-      );
-
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["team-positions"] }),
-        queryClient.invalidateQueries({ queryKey: ["people"] }),
-      ]);
-
+      ),
+    onMutate: async ({ planPersonId, context }) => {
+      await cancelScheduleMutationQueries(queryClient, context ?? {});
+      return {
+        snapshot: optimisticallyUnschedulePlanPerson(
+          queryClient,
+          planPersonId,
+          context?.personId
+        ),
+      };
+    },
+    onSuccess: (_result, variables) => {
+      settleScheduleMutationQueries(queryClient, variables.context ?? {});
       onSuccess?.();
-    } catch (error) {
+    },
+    onError: (error, _variables, context) => {
+      restoreScheduleCaches(queryClient, context?.snapshot);
       onError?.(formatUnscheduleError(error));
-    } finally {
-      setIsUnscheduling(false);
-    }
+    },
+  });
+
+  const handleUnschedule = (
+    planPersonId: string | null | undefined,
+    context?: ScheduleMutationInvalidateContext & { personId?: string | null }
+  ) => {
+    if (!planPersonId || unscheduleMutation.isPending) return;
+    unscheduleMutation.mutate({ planPersonId, context });
   };
 
-  return { isUnscheduling, handleUnschedule };
+  return { isUnscheduling: unscheduleMutation.isPending, handleUnschedule };
 }

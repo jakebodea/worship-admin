@@ -6,6 +6,16 @@ const ASSIGNMENTS_CACHE_TTL_MS = 5 * 60 * 1000;
 const PERSON_READ_CACHE_TTL_MS = 60 * 1000;
 const PLAN_TEAM_MEMBERS_CACHE_TTL_MS = 30 * 1000;
 const PLAN_TIMES_CACHE_TTL_MS = 5 * 60 * 1000;
+const PERSON_TEAM_POSITION_ASSIGNMENTS_CACHE_TTL_MS = 5 * 60 * 1000;
+const ALL_TEAM_PEOPLE_CACHE_TTL_MS = 5 * 60 * 1000;
+const PEOPLE_SEARCH_CACHE_TTL_MS = 60 * 1000;
+const TEAM_PEOPLE_CONCURRENCY = 8;
+
+type AllTeamPeopleResponse = {
+  people: PCResource[];
+  included: PCResource[];
+  teamNamesByPersonId: Map<string, Set<string>>;
+};
 
 export class PlanningCenterPeopleService {
   private readonly cache = new PlanningCenterReadCache();
@@ -28,14 +38,29 @@ export class PlanningCenterPeopleService {
   }
 
   async searchPeopleByName(query: string, limit: number = 15): Promise<PCResource[]> {
-    const endpoint = this.core.buildUrl("/people/v2/people", {
-      "where[search_name]": query.trim(),
-      order: "last_name,first_name",
-      per_page: String(limit),
-    });
-    const response = await this.core.fetch<PCResource[] | PCResource>(endpoint);
-    const data = Array.isArray(response.data) ? response.data : [response.data];
-    return data.slice(0, limit);
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) return [];
+
+    const data = await this.cache.get(
+      this.buildCacheKey(
+        "people-search",
+        normalizedQuery.toLowerCase(),
+        String(limit)
+      ),
+      PEOPLE_SEARCH_CACHE_TTL_MS,
+      async () => {
+        const endpoint = this.core.buildUrl("/people/v2/people", {
+          "where[search_name]": normalizedQuery,
+          order: "last_name,first_name",
+          per_page: String(limit),
+        });
+        const response = await this.core.fetch<PCResource[] | PCResource>(endpoint);
+        const people = Array.isArray(response.data) ? response.data : [response.data];
+        return people.slice(0, limit);
+      }
+    );
+
+    return structuredClone(data);
   }
 
   async getPersonTeamPositions(personId: string): Promise<PCResource[]> {
@@ -44,70 +69,14 @@ export class PlanningCenterPeopleService {
     );
   }
 
-  async getAllPeopleFromTeams(): Promise<{
-    people: PCResource[];
-    included: PCResource[];
-    teamNamesByPersonId: Map<string, Set<string>>;
-  }> {
-    const teams = await this.core.fetchAll<PCResource>("/services/v2/teams");
-    const activeTeams = teams.filter(
-      (team) => !(team.attributes.archived_at as string | null | undefined)
+  async getAllPeopleFromTeams(): Promise<AllTeamPeopleResponse> {
+    const response = await this.cache.get(
+      this.buildCacheKey("all-team-people"),
+      ALL_TEAM_PEOPLE_CACHE_TTL_MS,
+      () => this.loadAllPeopleFromTeams()
     );
 
-    const allPeople: PCResource[] = [];
-    const allIncluded: PCResource[] = [];
-    const teamNamesByPersonId = new Map<string, Set<string>>();
-    const seenIds = new Set<string>();
-
-    for (const team of activeTeams) {
-      try {
-        const response = await this.core.fetch<PCResource[]>(
-          `/services/v2/teams/${team.id}/people?include=person`
-        );
-
-        const people = Array.isArray(response.data) ? response.data : [response.data];
-        const included = response.included || [];
-
-        for (const person of people) {
-          let personResource: PCResource | null = null;
-
-          if (person.type === "Person") {
-            personResource = person;
-          } else if (person.relationships?.person?.data) {
-            const personData = person.relationships.person.data;
-            const personId = Array.isArray(personData)
-              ? personData[0]?.id
-              : personData?.id;
-
-            if (personId) {
-              personResource =
-                included.find((p) => p.type === "Person" && p.id === personId) || null;
-            }
-          }
-
-          if (personResource && !seenIds.has(personResource.id)) {
-            seenIds.add(personResource.id);
-            allPeople.push(personResource);
-          }
-
-          if (personResource) {
-            const teamName = team.attributes.name;
-            if (typeof teamName === "string" && teamName.trim()) {
-              if (!teamNamesByPersonId.has(personResource.id)) {
-                teamNamesByPersonId.set(personResource.id, new Set());
-              }
-              teamNamesByPersonId.get(personResource.id)!.add(teamName);
-            }
-          }
-        }
-
-        allIncluded.push(...included);
-      } catch {
-        // Skip teams with partial-access or transient API failures.
-      }
-    }
-
-    return { people: allPeople, included: allIncluded, teamNamesByPersonId };
+    return cloneAllTeamPeopleResponse(response);
   }
 
   async getPersonBlockouts(
@@ -259,19 +228,26 @@ export class PlanningCenterPeopleService {
   async getPersonTeamPositionAssignments(
     personId: string
   ): Promise<{ data: PCResource[]; included: PCResource[] }> {
-    const response = await this.core.fetch<PCResource[]>(
-      `/services/v2/people/${personId}/person_team_position_assignments?include=team_position,team_position.team`
-    );
+    return this.cache.get(
+      this.buildCacheKey("person-team-position-assignments", personId),
+      PERSON_TEAM_POSITION_ASSIGNMENTS_CACHE_TTL_MS,
+      async () => {
+        const response = await this.core.fetch<PCResource[]>(
+          `/services/v2/people/${personId}/person_team_position_assignments?include=team_position,team_position.team`
+        );
 
-    return {
-      data: Array.isArray(response.data) ? response.data : [response.data],
-      included: response.included || [],
-    };
+        return {
+          data: Array.isArray(response.data) ? response.data : [response.data],
+          included: response.included || [],
+        };
+      }
+    );
   }
 
   async updatePlanPersonStatus(
     planPersonId: string,
-    status: "C" | "U" | "D"
+    status: "C" | "U" | "D",
+    context?: { personId?: string; serviceTypeId?: string; planId?: string }
   ): Promise<PCResource> {
     const response = await this.core.fetch<PCResource>(
       `/services/v2/plan_people/${planPersonId}`,
@@ -291,6 +267,13 @@ export class PlanningCenterPeopleService {
         }),
       }
     );
+    if (context?.serviceTypeId && context.planId) {
+      this.invalidateScheduleReadCaches({
+        personId: context.personId,
+        serviceTypeId: context.serviceTypeId,
+        planId: context.planId,
+      });
+    }
     return response.data;
   }
 
@@ -309,7 +292,7 @@ export class PlanningCenterPeopleService {
       method: "DELETE",
     });
     if (context?.serviceTypeId && context.planId) {
-      this.invalidateScheduleCaches({
+      this.invalidateScheduleReadCaches({
         personId: context.personId,
         serviceTypeId: context.serviceTypeId,
         planId: context.planId,
@@ -347,23 +330,11 @@ export class PlanningCenterPeopleService {
         }),
       }
     );
-    this.invalidateScheduleCaches({ personId, serviceTypeId, planId });
+    this.invalidateScheduleReadCaches({ personId, serviceTypeId, planId });
     return response.data;
   }
 
-  private buildCacheKey(namespace: string, ...parts: string[]): string {
-    return [
-      this.core.getCacheScope(),
-      namespace,
-      ...parts.map((part) => encodeURIComponent(part)),
-    ].join(":");
-  }
-
-  getCacheScope(): string {
-    return this.core.getCacheScope();
-  }
-
-  private invalidateScheduleCaches({
+  invalidateScheduleReadCaches({
     personId,
     serviceTypeId,
     planId,
@@ -394,6 +365,129 @@ export class PlanningCenterPeopleService {
       );
     });
   }
+
+  private buildCacheKey(namespace: string, ...parts: string[]): string {
+    return [
+      this.core.getCacheScope(),
+      namespace,
+      ...parts.map((part) => encodeURIComponent(part)),
+    ].join(":");
+  }
+
+  private async loadAllPeopleFromTeams(): Promise<AllTeamPeopleResponse> {
+    const teams = await this.core.fetchAll<PCResource>("/services/v2/teams");
+    const activeTeams = teams.filter(
+      (team) => !(team.attributes.archived_at as string | null | undefined)
+    );
+
+    const teamResponses = await mapWithConcurrency(
+      activeTeams,
+      TEAM_PEOPLE_CONCURRENCY,
+      async (team) => {
+        try {
+          const response = await this.core.fetch<PCResource[]>(
+            `/services/v2/teams/${team.id}/people?include=person`
+          );
+          return { team, response };
+        } catch {
+          // Skip teams with partial-access or transient API failures.
+          return null;
+        }
+      }
+    );
+
+    const allPeople: PCResource[] = [];
+    const allIncluded: PCResource[] = [];
+    const teamNamesByPersonId = new Map<string, Set<string>>();
+    const seenIds = new Set<string>();
+
+    for (const result of teamResponses) {
+      if (!result) continue;
+
+      const { team, response } = result;
+      const people = Array.isArray(response.data) ? response.data : [response.data];
+      const included = response.included || [];
+
+      for (const person of people) {
+        let personResource: PCResource | null = null;
+
+        if (person.type === "Person") {
+          personResource = person;
+        } else if (person.relationships?.person?.data) {
+          const personData = person.relationships.person.data;
+          const personId = Array.isArray(personData)
+            ? personData[0]?.id
+            : personData?.id;
+
+          if (personId) {
+            personResource =
+              included.find((p) => p.type === "Person" && p.id === personId) || null;
+          }
+        }
+
+        if (personResource && !seenIds.has(personResource.id)) {
+          seenIds.add(personResource.id);
+          allPeople.push(personResource);
+        }
+
+        if (personResource) {
+          const teamName = team.attributes.name;
+          if (typeof teamName === "string" && teamName.trim()) {
+            if (!teamNamesByPersonId.has(personResource.id)) {
+              teamNamesByPersonId.set(personResource.id, new Set());
+            }
+            teamNamesByPersonId.get(personResource.id)!.add(teamName);
+          }
+        }
+      }
+
+      allIncluded.push(...included);
+    }
+
+    return { people: allPeople, included: allIncluded, teamNamesByPersonId };
+  }
+
+  getCacheScope(): string {
+    return this.core.getCacheScope();
+  }
+
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  if (items.length === 0) return [];
+
+  const safeConcurrency = Math.max(1, Math.min(concurrency, items.length));
+  const results = Array.from({ length: items.length }, () => undefined as R);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const current = nextIndex;
+      nextIndex += 1;
+      results[current] = await mapper(items[current], current);
+    }
+  }
+
+  const workers = Array.from({ length: safeConcurrency }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
+function cloneAllTeamPeopleResponse(response: AllTeamPeopleResponse): AllTeamPeopleResponse {
+  return {
+    people: structuredClone(response.people),
+    included: structuredClone(response.included),
+    teamNamesByPersonId: new Map(
+      [...response.teamNamesByPersonId.entries()].map(([personId, teamNames]) => [
+        personId,
+        new Set(teamNames),
+      ])
+    ),
+  };
 }
 
 export const planningCenterPeopleService = new PlanningCenterPeopleService(
