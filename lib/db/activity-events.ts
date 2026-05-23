@@ -1,4 +1,5 @@
-import { pool } from "@/lib/db/pool";
+import { db } from "@/lib/db";
+import { activityEvents } from "@/lib/db/schema";
 
 export type ActivityEventType =
   | "schedule_attempt"
@@ -93,58 +94,35 @@ export function getActivityRequestContext(source: RequestContextSource): Activit
   };
 }
 
-function stringifyMetadata(metadata: ActivityEventInput["metadata"]): string {
-  if (!metadata) return "{}";
+function normalizeMetadata(
+  metadata: ActivityEventInput["metadata"]
+): Record<string, unknown> {
+  if (!metadata) return {};
   try {
-    return JSON.stringify(metadata);
+    return JSON.parse(JSON.stringify(metadata)) as Record<string, unknown>;
   } catch {
-    return "{}";
+    return {};
   }
 }
 
 export async function recordActivityEvent(input: ActivityEventInput): Promise<void> {
-  await pool.query(
-    `
-      insert into activity_events (
-        event_type,
-        actor_user_id,
-        actor_account_id,
-        request_id,
-        path,
-        method,
-        ip_address,
-        user_agent,
-        success,
-        status_code,
-        error_code,
-        service_type_id,
-        person_id,
-        plan_id,
-        team_id,
-        position_id,
-        metadata
-      ) values (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb
-      )
-    `,
-    [
-      input.eventType,
-      toNullableString(input.actorUserId),
-      toNullableString(input.actorAccountId),
-      toNullableString(input.requestId),
-      toNullableString(input.path),
-      toNullableString(input.method),
-      toNullableString(input.ipAddress),
-      toNullableString(input.userAgent),
-      typeof input.success === "boolean" ? input.success : null,
-      toNullableNumber(input.statusCode),
-      toNullableString(input.errorCode),
-      toNullableString(input.serviceTypeId),
-      toNullableString(input.personId),
-      toNullableString(input.planId),
-      toNullableString(input.teamId),
-      toNullableString(input.positionId),
-      stringifyMetadata(input.metadata),
-    ]
-  );
+  await db.insert(activityEvents).values({
+    eventType: input.eventType,
+    actorUserId: toNullableString(input.actorUserId),
+    actorAccountId: toNullableString(input.actorAccountId),
+    requestId: toNullableString(input.requestId),
+    path: toNullableString(input.path),
+    method: toNullableString(input.method),
+    ipAddress: toNullableString(input.ipAddress),
+    userAgent: toNullableString(input.userAgent),
+    success: typeof input.success === "boolean" ? input.success : null,
+    statusCode: toNullableNumber(input.statusCode),
+    errorCode: toNullableString(input.errorCode),
+    serviceTypeId: toNullableString(input.serviceTypeId),
+    personId: toNullableString(input.personId),
+    planId: toNullableString(input.planId),
+    teamId: toNullableString(input.teamId),
+    positionId: toNullableString(input.positionId),
+    metadata: normalizeMetadata(input.metadata),
+  });
 }

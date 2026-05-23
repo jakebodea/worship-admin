@@ -11,10 +11,13 @@
 - `lib/use-cases/planning-center/`: business logic and data transforms (preferred home for app behavior).
 - `lib/planning-center/services/`: Planning Center API service wrappers (raw API access only).
 - `lib/http/`: shared route/error handling and client fetch helpers.
+- `lib/db/`: Drizzle schema, shared database client, and PostgreSQL pool setup.
+- `db/migrations/`: Drizzle-generated database migrations.
 - `lib/use-cases/planning-center/*.test.ts`: Vitest unit tests for use-cases.
 - `public/`: static assets. `docs/`: local Planning Center API docs reference.
 
 ## Build, Test, and Development Commands
+- Use Bun for dependency management and scripts. `bun.lock` is the only committed lockfile; do not add `package-lock.json` or run npm-based install workflows for this repo.
 - `bun run dev`: start local Next.js dev server.
 - `bun run build`: production build.
 - `bun run start`: run built app.
@@ -25,7 +28,10 @@
 - `bun run test`: run Vitest test suite once.
 - `bun run test:watch`: run Vitest in watch mode.
 - `bun run auth:generate`: generate Better Auth artifacts.
-- `bun run auth:migrate`: run Better Auth migrations.
+- `bun run db:generate`: generate Drizzle migrations from `lib/db/schema.ts`.
+- `bun run db:migrate`: apply Drizzle migrations.
+- `bun run db:push`: push schema changes directly for local experiments.
+- `bun run db:seed`: run the idempotent seed entrypoint.
 
 ## Coding Style & Naming Conventions
 - TypeScript throughout; prefer explicit types at module boundaries.
@@ -48,6 +54,7 @@
 
 ## Architecture Notes
 - Preferred flow: `app/api` route -> `lib/use-cases/*` -> `lib/planning-center/services/*`.
+- Database access uses Drizzle through `lib/db`; migrations are owned by Drizzle, including Better Auth tables.
 - React Query keys are centralized in `lib/query-keys.ts`; use them for hooks/invalidation.
 - Use `lib/http/client.ts` (`getJson`, `postJson`) for client-side API calls instead of ad hoc `fetch` code.
 - Backward compatibility is not a priority during the current dev phase; prefer cleaner APIs/URLs/UX over temporary compatibility shims unless explicitly requested.

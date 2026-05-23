@@ -16,6 +16,8 @@ The root route (`/`) redirects to `/schedule`.
 
 ## Setup
 
+This repo uses Bun for dependency management and scripts. Use `bun.lock` as the only lockfile; do not use npm or commit `package-lock.json`.
+
 ### 1. Install dependencies
 
 ```bash
@@ -45,10 +47,11 @@ In your Planning Center OAuth app settings, add:
 - Local: `http://localhost:3000/api/auth/oauth2/callback/planning-center`
 - Production: `https://worshipadmin.com/api/auth/oauth2/callback/planning-center`
 
-### 4. Run auth migrations
+### 4. Run database migrations and seeds
 
 ```bash
-bun run auth:migrate
+bun run db:migrate
+bun run db:seed
 ```
 
 ### 5. Start the app

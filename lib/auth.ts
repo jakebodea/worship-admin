@@ -1,13 +1,14 @@
 import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
 import { nextCookies } from "better-auth/next-js";
-import { PostgresDialect } from "kysely";
 import { getPlanningCenterIdentityFromAccessToken } from "@/lib/auth/planning-center-identity";
 import {
   getActivityRequestContext,
   recordActivityEvent,
 } from "@/lib/db/activity-events";
-import { pool } from "@/lib/db/pool";
+import { db } from "@/lib/db";
+import * as schema from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { upsertPlanningCenterAccountIdentity } from "@/lib/use-cases/admin/planning-center-account-identities";
 
@@ -109,12 +110,12 @@ async function getPlanningCenterIdentitySafely(account: {
 export const auth = betterAuth({
   baseURL: baseUrl,
   secret,
-  database: {
-    type: "postgres",
-    dialect: new PostgresDialect({
-      pool,
-    }),
-  },
+  database: drizzleAdapter(db, {
+    provider: "pg",
+    schema,
+    camelCase: true,
+    transaction: true,
+  }),
   account: {
     accountLinking: {
       enabled: true,
