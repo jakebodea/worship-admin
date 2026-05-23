@@ -433,8 +433,7 @@ export function usePlanTabController({
         return Promise.resolve();
       }
 
-      updateItemMutation.mutate(input);
-      return Promise.resolve();
+      return updateItemMutation.mutateAsync(input);
     },
   };
 }
