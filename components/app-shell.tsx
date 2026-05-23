@@ -287,13 +287,20 @@ function parseTopBarView(value: string | null): TopBarView {
   return "schedule";
 }
 
+function getTopLevelPageLabel(pathname: string) {
+  if (pathname.startsWith("/admin")) return "Admin";
+  if (pathname.startsWith("/people")) return "People";
+  return "Schedule";
+}
+
 function AppTopBar() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const hasPlan = pathname === "/schedule/plan";
-  const isPeople = pathname.startsWith("/people");
   const isPersonDetail = /^\/people\/[^/]+/.test(pathname);
+  const isAdminUserDetail = /^\/admin\/users\/[^/]+/.test(pathname);
+  const pageLabel = getTopLevelPageLabel(pathname);
   const view = parseTopBarView(searchParams.get("view"));
 
   const handleViewChange = useCallback(
@@ -316,28 +323,32 @@ function AppTopBar() {
     <div className="flex w-full min-w-0 items-center gap-2 sm:gap-3">
       <Breadcrumb className="shrink-0">
         <BreadcrumbList>
-          {isPersonDetail ? (
+          {isPersonDetail || isAdminUserDetail ? (
             <>
               <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                  <Link href="/people">People</Link>
-                </BreadcrumbLink>
+                {isPersonDetail ? (
+                  <BreadcrumbLink asChild>
+                    <Link href="/people">People</Link>
+                  </BreadcrumbLink>
+                ) : (
+                  <BreadcrumbLink asChild>
+                    <Link href="/admin">Admin</Link>
+                  </BreadcrumbLink>
+                )}
               </BreadcrumbItem>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
-                <BreadcrumbPage>Person</BreadcrumbPage>
+                <BreadcrumbPage>{isPersonDetail ? "Person" : "User"}</BreadcrumbPage>
               </BreadcrumbItem>
             </>
           ) : (
             <BreadcrumbItem>
-              {isPeople ? (
-                <BreadcrumbPage>People</BreadcrumbPage>
-              ) : hasPlan ? (
+              {hasPlan ? (
                 <BreadcrumbLink asChild>
                   <Link href="/schedule">Schedule</Link>
                 </BreadcrumbLink>
               ) : (
-                <BreadcrumbPage>Schedule</BreadcrumbPage>
+                <BreadcrumbPage>{pageLabel}</BreadcrumbPage>
               )}
             </BreadcrumbItem>
           )}
@@ -364,26 +375,27 @@ function AppTopBar() {
 
 function AppTopBarFallback({ pathname }: { pathname: string }) {
   const hasPlan = pathname === "/schedule/plan";
-  const isPeople = pathname.startsWith("/people");
   const isPersonDetail = /^\/people\/[^/]+/.test(pathname);
+  const isAdminUserDetail = /^\/admin\/users\/[^/]+/.test(pathname);
+  const pageLabel = getTopLevelPageLabel(pathname);
 
   return (
     <div className="flex w-full min-w-0 items-center gap-2 sm:gap-3">
       <Breadcrumb className="shrink-0">
         <BreadcrumbList>
-          {isPersonDetail ? (
+          {isPersonDetail || isAdminUserDetail ? (
             <>
               <BreadcrumbItem>
-                <BreadcrumbPage>People</BreadcrumbPage>
+                <BreadcrumbPage>{isPersonDetail ? "People" : "Admin"}</BreadcrumbPage>
               </BreadcrumbItem>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
-                <BreadcrumbPage>Person</BreadcrumbPage>
+                <BreadcrumbPage>{isPersonDetail ? "Person" : "User"}</BreadcrumbPage>
               </BreadcrumbItem>
             </>
           ) : (
             <BreadcrumbItem>
-              <BreadcrumbPage>{isPeople ? "People" : "Schedule"}</BreadcrumbPage>
+              <BreadcrumbPage>{pageLabel}</BreadcrumbPage>
             </BreadcrumbItem>
           )}
         </BreadcrumbList>
