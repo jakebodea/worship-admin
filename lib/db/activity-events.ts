@@ -3,6 +3,7 @@ import { pool } from "@/lib/db/pool";
 export type ActivityEventType =
   | "schedule_attempt"
   | "schedule_status_change"
+  | "schedule_remove"
   | "auth_session_created"
   | "auth_session_deleted"
   | "auth_account_linked";

@@ -312,6 +312,9 @@ export function ScheduleCandidateTile({
         ) : (
           <PlanPersonStatusMenu
             planPersonId={person.scheduledPlanPersonId}
+            serviceTypeId={serviceTypeId}
+            personId={person.id}
+            planId={planId}
             currentStatus={
               (isConfirmed
                 ? "confirmed"
@@ -319,6 +322,7 @@ export function ScheduleCandidateTile({
                   ? "declined"
                   : "scheduled") satisfies PlanPersonStatusValue
             }
+            onSuccess={onScheduleSuccess}
             onError={onScheduleError}
           />
         )}

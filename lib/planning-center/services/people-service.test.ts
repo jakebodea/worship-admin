@@ -40,3 +40,43 @@ describe("PlanningCenterPeopleService.getPlanPlanTimes", () => {
     );
   });
 });
+
+describe("PlanningCenterPeopleService.deletePlanPerson", () => {
+  it("uses the plan team_members endpoint when plan context is available", async () => {
+    const request = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const core = {
+      request,
+      getCacheScope: () => "test-scope",
+    } as unknown as PlanningCenterCoreClient;
+    const service = new PlanningCenterPeopleService(core);
+
+    await service.deletePlanPerson("pp-123", {
+      personId: "person-456",
+      serviceTypeId: "st-789",
+      planId: "plan-101",
+    });
+
+    expect(request).toHaveBeenCalledWith(
+      "/services/v2/service_types/st-789/plans/plan-101/team_members/pp-123",
+      { method: "DELETE" }
+    );
+  });
+
+  it("falls back to the person-scoped plan_people endpoint without plan context", async () => {
+    const request = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const core = {
+      request,
+      getCacheScope: () => "test-scope",
+    } as unknown as PlanningCenterCoreClient;
+    const service = new PlanningCenterPeopleService(core);
+
+    await service.deletePlanPerson("pp-123", {
+      personId: "person-456",
+    });
+
+    expect(request).toHaveBeenCalledWith(
+      "/services/v2/people/person-456/plan_people/pp-123",
+      { method: "DELETE" }
+    );
+  });
+});
