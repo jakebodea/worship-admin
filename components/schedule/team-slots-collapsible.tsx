@@ -22,6 +22,7 @@ export function TeamSlotsCollapsible({
   selectedPosition,
   onToggle,
   onSelect,
+  onPreview,
 }: {
   group: TeamPositionGroup;
   isCollapsed: boolean;
@@ -29,6 +30,7 @@ export function TeamSlotsCollapsible({
   selectedPosition: string | null;
   onToggle: (teamId: string) => void;
   onSelect: (slot: SlotRef) => void;
+  onPreview?: (slot: SlotRef) => void;
 }) {
   const openNeededCount = group.positions.reduce(
     (sum, position) => sum + (position.neededCount ?? 1),
@@ -42,18 +44,19 @@ export function TeamSlotsCollapsible({
 
   const renderPositionRow = (position: TeamPosition) => {
     const active = group.teamId === selectedTeam && position.id === selectedPosition;
+    const slot = {
+      teamId: group.teamId,
+      teamName: group.teamName,
+      positionId: position.id,
+      positionName: position.name,
+    };
     return (
       <SidebarMenuItem key={position.id}>
         <SidebarMenuButton
           isActive={active}
-          onClick={() =>
-            onSelect({
-              teamId: group.teamId,
-              teamName: group.teamName,
-              positionId: position.id,
-              positionName: position.name,
-            })
-          }
+          onClick={() => onSelect(slot)}
+          onMouseEnter={() => onPreview?.(slot)}
+          onFocus={() => onPreview?.(slot)}
           className="h-8 rounded-none pl-5 pr-2 transition-none"
         >
           <span className="flex-1 truncate">{position.name}</span>

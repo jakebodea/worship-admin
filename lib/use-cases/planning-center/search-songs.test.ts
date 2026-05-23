@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { searchSongs } from "@/lib/use-cases/planning-center/search-songs";
 
 const { getSongsCatalogCachedMock } = vi.hoisted(() => ({
@@ -12,6 +12,10 @@ vi.mock("@/lib/planning-center/services/songs-service", () => ({
 }));
 
 describe("searchSongs", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("keeps fuzzy relevance first and orders ties by title", async () => {
     getSongsCatalogCachedMock.mockResolvedValue([
       {
@@ -59,5 +63,30 @@ describe("searchSongs", () => {
     expect(songs.map((song) => song.id)).toEqual(["song-4", "song-2", "song-1"]);
     expect(songs.some((song) => song.id === "song-3")).toBe(false);
     expect(getSongsCatalogCachedMock).toHaveBeenCalledWith("account-1:service-1");
+  });
+
+  it("caches normalized result sets and returns mutation-safe copies", async () => {
+    getSongsCatalogCachedMock.mockResolvedValue([
+      {
+        id: "song-1",
+        type: "Song",
+        attributes: {
+          title: "Build My Life",
+          hidden: false,
+        },
+      },
+    ]);
+
+    const first = await searchSongs("account-2", "service-1", "  BUILD  ");
+    first[0].title = "Changed locally";
+    const second = await searchSongs("account-2", "service-1", "build");
+
+    expect(getSongsCatalogCachedMock).toHaveBeenCalledTimes(1);
+    expect(second).toEqual([
+      expect.objectContaining({
+        id: "song-1",
+        title: "Build My Life",
+      }),
+    ]);
   });
 });

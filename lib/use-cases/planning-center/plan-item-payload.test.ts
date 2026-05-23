@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildPlanItemAttributes,
   resolvePlanItemSongDefaults,
@@ -13,6 +13,10 @@ vi.mock("@/lib/use-cases/planning-center/get-song-options", () => ({
 }));
 
 describe("plan item payload helpers", () => {
+  beforeEach(() => {
+    getSongOptionsMock.mockReset();
+  });
+
   it("backfills song defaults and builds a trimmed payload", async () => {
     getSongOptionsMock.mockResolvedValue({
       song: {
@@ -59,6 +63,25 @@ describe("plan item payload helpers", () => {
       arrangement_id: "arr-1",
       key_id: "key-1",
       selected_layout_id: "layout-1",
+    });
+  });
+
+  it("does not fetch song defaults when the client already supplied them", async () => {
+    const resolved = await resolvePlanItemSongDefaults({
+      serviceTypeId: "service-1",
+      songId: "song-1",
+      title: "Build My Life",
+      arrangementId: "arr-1",
+      keyId: "key-1",
+      selectedLayoutId: "layout-1",
+    });
+
+    expect(getSongOptionsMock).not.toHaveBeenCalled();
+    expect(resolved).toMatchObject({
+      title: "Build My Life",
+      arrangementId: "arr-1",
+      keyId: "key-1",
+      selectedLayoutId: "layout-1",
     });
   });
 

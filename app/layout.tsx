@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { Providers } from "@/components/providers";
-import { peoplePageFlag } from "@/flags";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -35,7 +34,8 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const peoplePageEnabled = await peoplePageFlag();
+  const peoplePageEnabled =
+    process.env.NODE_ENV !== "production" && !process.env.VERCEL;
 
   return (
     <html lang="en" suppressHydrationWarning>

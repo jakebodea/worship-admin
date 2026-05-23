@@ -9,6 +9,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useState } from "react";
 
+const QUERY_GC_TIME_MS = 30 * 60 * 1000;
+
 export function Providers({
   children,
   peoplePageEnabled,
@@ -22,6 +24,7 @@ export function Providers({
       new QueryClient({
         defaultOptions: {
           queries: {
+            gcTime: QUERY_GC_TIME_MS,
             refetchOnWindowFocus: false,
             retry: 1,
           },

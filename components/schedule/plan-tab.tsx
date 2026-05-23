@@ -15,17 +15,20 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
   const {
     items,
     isLoading,
+    isPlaceholderData,
     editingItemId,
     editingItem,
     songPickerOpen,
     pendingItemId,
     pendingSongId,
+    isCreatingBasicItem,
     setEditingItemId,
     setSongPickerOpen,
     createBasicItem,
     addSongToPlan,
     deleteItem,
     reorderItems,
+    prefetchItemSongOptions,
     saveItem,
   } = usePlanTabController({
     serviceTypeId,
@@ -61,6 +64,8 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
       <div className="flex h-full min-h-0 flex-col gap-3">
         <PlanTabToolbar
           pendingItemId={pendingItemId}
+          isCreatingBasicItem={isCreatingBasicItem}
+          disabled={isPlaceholderData}
           onAddSong={() => setSongPickerOpen(true)}
           onAddHeader={() => void createBasicItem("header")}
           onAddItem={() => void createBasicItem("item")}
@@ -69,11 +74,13 @@ export function PlanTab({ serviceTypeId, planId }: PlanTabProps) {
         <PlanItemList
           items={items}
           isLoading={isLoading}
+          isPlaceholderData={isPlaceholderData}
           pendingItemId={pendingItemId}
           onAddSong={() => setSongPickerOpen(true)}
           onAddHeader={() => void createBasicItem("header")}
           onAddItem={() => void createBasicItem("item")}
           onEditItem={setEditingItemId}
+          onPreviewItem={prefetchItemSongOptions}
           onDeleteItem={deleteItem}
           onReorderItems={reorderItems}
         />

@@ -24,7 +24,7 @@ export function SelectedPositionHeader({
     <div className="flex shrink-0 flex-col gap-2 px-1 sm:gap-3">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
         <p className="min-w-0 truncate text-xl font-semibold leading-tight tracking-tight sm:text-2xl">
-          {info?.positionName}
+          {info?.positionName ?? "Position"}
         </p>
         <Button
           type="button"

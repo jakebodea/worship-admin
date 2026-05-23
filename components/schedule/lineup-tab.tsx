@@ -21,13 +21,17 @@ import { cn } from "@/lib/utils";
 interface LineupTabProps {
   groups: TeamPositionGroup[];
   isLoading: boolean;
+  isPlaceholderData: boolean;
   onSelectPosition: (slot: SlotRef) => void;
+  onPreviewPosition?: (slot: SlotRef) => void;
 }
 
 export function LineupTab({
   groups,
   isLoading,
+  isPlaceholderData,
   onSelectPosition,
+  onPreviewPosition,
 }: LineupTabProps) {
   if (isLoading) {
     return (
@@ -51,10 +55,27 @@ export function LineupTab({
 
   return (
     <ScrollArea className="max-h-[70vh] w-full xl:h-full xl:max-h-none">
-      <div className="flex min-w-max items-start gap-6 pb-3 pr-4">
-        {groups.map((group) => (
-          <TeamColumn key={group.teamId} group={group} onSelectPosition={onSelectPosition} />
-        ))}
+      <div className="relative" aria-busy={isPlaceholderData}>
+        {isPlaceholderData ? (
+          <div className="sticky left-0 top-0 z-10 mb-2 w-fit rounded-md border border-border/60 bg-background/95 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur">
+            Loading selected plan...
+          </div>
+        ) : null}
+        <div
+          className={cn(
+            "flex min-w-max items-start gap-6 pb-3 pr-4",
+            isPlaceholderData && "pointer-events-none opacity-60"
+          )}
+        >
+          {groups.map((group) => (
+            <TeamColumn
+              key={group.teamId}
+              group={group}
+              onSelectPosition={onSelectPosition}
+              onPreviewPosition={onPreviewPosition}
+            />
+          ))}
+        </div>
       </div>
     </ScrollArea>
   );
@@ -63,9 +84,11 @@ export function LineupTab({
 function TeamColumn({
   group,
   onSelectPosition,
+  onPreviewPosition,
 }: {
   group: TeamPositionGroup;
   onSelectPosition: (slot: SlotRef) => void;
+  onPreviewPosition?: (slot: SlotRef) => void;
 }) {
   const totalScheduled = group.positions.reduce(
     (sum, position) => sum + (position.filledConfirmedCount ?? 0) + (position.filledPendingCount ?? 0),
@@ -95,6 +118,7 @@ function TeamColumn({
                 teamName={group.teamName}
                 position={position}
                 onSelectPosition={onSelectPosition}
+                onPreviewPosition={onPreviewPosition}
               />
               {index < group.positions.length - 1 ? <Separator className="opacity-30" /> : null}
             </div>
@@ -110,11 +134,13 @@ function PositionAccordionItem({
   teamName,
   position,
   onSelectPosition,
+  onPreviewPosition,
 }: {
   teamId: string;
   teamName: string;
   position: TeamPosition;
   onSelectPosition: (slot: SlotRef) => void;
+  onPreviewPosition?: (slot: SlotRef) => void;
 }) {
   const confirmed = position.filledConfirmedCount ?? 0;
   const pending = position.filledPendingCount ?? 0;
@@ -122,6 +148,12 @@ function PositionAccordionItem({
   const needed = position.neededCount ?? 0;
   const total = scheduledCount + needed;
   const people = position.filledPeople ?? [];
+  const slot = {
+    teamId,
+    teamName,
+    positionId: position.id,
+    positionName: position.name,
+  };
 
   return (
     <AccordionItem value={position.id} className="rounded-sm border-b-0 transition-colors hover:bg-muted/40">
@@ -147,15 +179,13 @@ function PositionAccordionItem({
           )}
           title={`Open ${position.name} in scheduler`}
           aria-label={`Open ${position.name} in scheduler`}
+          onPointerEnter={() => onPreviewPosition?.(slot)}
+          onFocus={() => onPreviewPosition?.(slot)}
+          onTouchStart={() => onPreviewPosition?.(slot)}
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            onSelectPosition({
-              teamId,
-              teamName,
-              positionId: position.id,
-              positionName: position.name,
-            });
+            onSelectPosition(slot);
           }}
         >
           <CalendarDays className="size-3.5" />

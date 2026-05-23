@@ -1,22 +1,30 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { ApiError } from "@/lib/http/api-error";
+import {
+  elapsedMs,
+  setRouteTimingHeaders,
+  nowMs,
+} from "@/lib/http/timing";
 import { logger } from "@/lib/logger";
 import { PlanningCenterApiError } from "@/lib/planning-center/core-client";
 
 const log = logger.for("http/route-handler");
 
 export async function handleRoute<T>(handler: () => Promise<T>) {
+  const startedAtMs = nowMs();
+
   try {
     const data = await handler();
     if (data instanceof Response) {
-      return data;
+      return withRouteTiming(data, startedAtMs);
     }
-    return NextResponse.json(data);
+    return withRouteTiming(NextResponse.json(data), startedAtMs);
   } catch (error) {
     if (error instanceof ApiError) {
       log.warn({ err: error, code: error.code, status: error.status }, "API route error");
-      return NextResponse.json(
+      return jsonWithRouteTiming(
+        startedAtMs,
         {
           error: error.message,
           code: error.code,
@@ -28,7 +36,8 @@ export async function handleRoute<T>(handler: () => Promise<T>) {
 
     if (error instanceof ZodError) {
       log.warn({ err: error }, "API route validation error");
-      return NextResponse.json(
+      return jsonWithRouteTiming(
+        startedAtMs,
         {
           error: "Invalid request",
           code: "INVALID_REQUEST",
@@ -62,7 +71,8 @@ export async function handleRoute<T>(handler: () => Promise<T>) {
         "Planning Center route error"
       );
 
-      return NextResponse.json(
+      return jsonWithRouteTiming(
+        startedAtMs,
         {
           error: message,
           code,
@@ -76,7 +86,8 @@ export async function handleRoute<T>(handler: () => Promise<T>) {
 
     const message = error instanceof Error ? error.message : "Unknown error";
     log.error({ err: error instanceof Error ? error : new Error(String(error)) }, "Unhandled route error");
-    return NextResponse.json(
+    return jsonWithRouteTiming(
+      startedAtMs,
       {
         error: "Internal server error",
         code: "INTERNAL_SERVER_ERROR",
@@ -84,5 +95,30 @@ export async function handleRoute<T>(handler: () => Promise<T>) {
       },
       { status: 500 }
     );
+  }
+}
+
+function jsonWithRouteTiming(
+  startedAtMs: number,
+  body: unknown,
+  init?: ResponseInit
+) {
+  return withRouteTiming(NextResponse.json(body, init), startedAtMs);
+}
+
+function withRouteTiming(response: Response, startedAtMs: number): Response {
+  const durationMs = elapsedMs(startedAtMs);
+
+  try {
+    setRouteTimingHeaders(response.headers, durationMs);
+    return response;
+  } catch {
+    const headers = new Headers(response.headers);
+    setRouteTimingHeaders(headers, durationMs);
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
   }
 }

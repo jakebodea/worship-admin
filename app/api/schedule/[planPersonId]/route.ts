@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { after } from "next/server";
 import { ApiError } from "@/lib/http/api-error";
 import { handlePlanningCenterRoute } from "@/lib/http/planning-center-route";
 import { logger } from "@/lib/logger";
@@ -32,34 +33,36 @@ export async function DELETE(
   return handlePlanningCenterRoute(request, async (authContext) => {
     let planPersonId: string | null = null;
 
-    const recordRemoveEventSafely = async (event: {
+    const recordRemoveEventSafely = (event: {
       success: boolean;
       statusCode: number;
       errorCode: string | null;
       metadata?: Record<string, unknown>;
     }) => {
-      try {
-        await recordActivityEvent({
-          eventType: "schedule_remove",
-          actorUserId: authContext.session.user.id,
-          actorAccountId: authContext.accountId,
-          requestId,
-          path: activityRequestContext.path,
-          method: activityRequestContext.method,
-          ipAddress: activityRequestContext.ipAddress,
-          userAgent: activityRequestContext.userAgent,
-          success: event.success,
-          statusCode: event.statusCode,
-          errorCode: event.errorCode,
-          metadata: {
-            planPersonId,
-            ...event.metadata,
-          },
-        });
-      } catch (error) {
-        const err = error instanceof Error ? error : new Error(String(error));
-        log.warn({ err }, "Failed to record schedule remove activity event");
-      }
+      after(async () => {
+        try {
+          await recordActivityEvent({
+            eventType: "schedule_remove",
+            actorUserId: authContext.session.user.id,
+            actorAccountId: authContext.accountId,
+            requestId,
+            path: activityRequestContext.path,
+            method: activityRequestContext.method,
+            ipAddress: activityRequestContext.ipAddress,
+            userAgent: activityRequestContext.userAgent,
+            success: event.success,
+            statusCode: event.statusCode,
+            errorCode: event.errorCode,
+            metadata: {
+              planPersonId,
+              ...event.metadata,
+            },
+          });
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          log.warn({ err }, "Failed to record schedule remove activity event");
+        }
+      });
     };
 
     try {
@@ -84,7 +87,7 @@ export async function DELETE(
       }
 
       log.info({ planPersonId }, "PlanPerson removed successfully");
-      await recordRemoveEventSafely({
+      recordRemoveEventSafely({
         success: true,
         statusCode: 200,
         errorCode: null,
@@ -94,13 +97,13 @@ export async function DELETE(
       return { success: true };
     } catch (error) {
       if (error instanceof ApiError) {
-        await recordRemoveEventSafely({
+        recordRemoveEventSafely({
           success: false,
           statusCode: error.status,
           errorCode: error.code,
         });
       } else {
-        await recordRemoveEventSafely({
+        recordRemoveEventSafely({
           success: false,
           statusCode: 500,
           errorCode: "INTERNAL_SERVER_ERROR",

@@ -5,8 +5,8 @@ export const queryKeys = {
   teamPositions: (
     serviceTypeId: string | null,
     planId: string | null,
-    seriesId: string | null
-  ) => ["team-positions", serviceTypeId, planId, seriesId] as const,
+    _seriesId: string | null
+  ) => ["team-positions", serviceTypeId, planId] as const,
   people: (
     serviceTypeId: string | null,
     teamId: string | null,

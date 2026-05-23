@@ -1,6 +1,7 @@
 import type { PCApiResponse, PCResource } from "@/lib/types";
 import { createHash } from "node:crypto";
 import { mergeHeaders } from "@/lib/http/merge-headers";
+import { elapsedMs, formatDurationMs, nowMs } from "@/lib/http/timing";
 import { logger } from "@/lib/logger";
 import { getPlanningCenterRequestAccessToken } from "@/lib/planning-center/request-auth-context";
 
@@ -11,6 +12,7 @@ const MAX_RETRIES = 2;
 const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 const PROACTIVE_RATE_LIMIT_THRESHOLD = 0.8;
 const PROACTIVE_RATE_LIMIT_DELAY_MS = 1000;
+const inFlightJsonFetches = new Map<string, Promise<unknown>>();
 
 export interface PlanningCenterRateLimitInfo {
   limit?: number;
@@ -116,6 +118,7 @@ export class PlanningCenterCoreClient {
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+      const attemptStartedAtMs = nowMs();
 
       try {
         const response = await fetch(url, {
@@ -130,6 +133,14 @@ export class PlanningCenterCoreClient {
           ),
         });
         clearTimeout(timeout);
+        logPlanningCenterTiming({
+          url,
+          method,
+          attempt,
+          status: response.status,
+          durationMs: elapsedMs(attemptStartedAtMs),
+          rateLimit: readRateLimitInfo(response.headers),
+        });
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -163,6 +174,13 @@ export class PlanningCenterCoreClient {
       } catch (error) {
         clearTimeout(timeout);
         lastError = error instanceof Error ? error : new Error(String(error));
+        logPlanningCenterTiming({
+          url,
+          method,
+          attempt,
+          durationMs: elapsedMs(attemptStartedAtMs),
+          error: lastError,
+        });
         if (lastError instanceof PlanningCenterApiError) {
           break;
         }
@@ -189,8 +207,37 @@ export class PlanningCenterCoreClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<PCApiResponse<T>> {
-    const response = await this.request(endpoint, options);
-    return response.json();
+    const method = (options.method ?? "GET").toUpperCase();
+    if (method !== "GET" || options.body) {
+      const response = await this.request(endpoint, options);
+      return response.json();
+    }
+
+    const key = buildJsonFetchDedupeKey({
+      authScope: this.getCacheScope(),
+      endpoint,
+      headers: options.headers,
+      method,
+    });
+    const existingRequest = inFlightJsonFetches.get(key) as
+      | Promise<PCApiResponse<T>>
+      | undefined;
+    if (existingRequest) {
+      return cloneJson(await existingRequest);
+    }
+
+    const request = this.request(endpoint, options).then(
+      async (response) => response.json() as Promise<PCApiResponse<T>>
+    );
+    inFlightJsonFetches.set(key, request);
+
+    try {
+      return cloneJson(await request);
+    } finally {
+      if (inFlightJsonFetches.get(key) === request) {
+        inFlightJsonFetches.delete(key);
+      }
+    }
   }
 
   buildUrl(endpoint: string, params: Record<string, string> = {}): string {
@@ -322,6 +369,41 @@ function sleep(ms: number): Promise<void> {
   });
 }
 
+function cloneJson<T>(value: T): T {
+  return structuredClone(value);
+}
+
+function buildJsonFetchDedupeKey({
+  authScope,
+  endpoint,
+  headers,
+  method,
+}: {
+  authScope: string;
+  endpoint: string;
+  headers: HeadersInit | undefined;
+  method: string;
+}): string {
+  const url = endpoint.startsWith("http")
+    ? endpoint
+    : `${PC_BASE_URL}${endpoint}`;
+
+  return JSON.stringify({
+    authScope,
+    headers: normalizeHeaders(headers),
+    method,
+    url,
+  });
+}
+
+function normalizeHeaders(headers: HeadersInit | undefined): [string, string][] {
+  if (!headers) return [];
+
+  return Array.from(new Headers(headers).entries()).sort(([left], [right]) =>
+    left.localeCompare(right)
+  );
+}
+
 function isSafeToRetry(method: string): boolean {
   return method === "GET" || method === "HEAD";
 }
@@ -375,4 +457,48 @@ function readIntegerHeader(headers: Headers, name: string): number | undefined {
 
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function logPlanningCenterTiming({
+  url,
+  method,
+  attempt,
+  status,
+  durationMs,
+  rateLimit,
+  error,
+}: {
+  url: string;
+  method: string;
+  attempt: number;
+  status?: number;
+  durationMs: number;
+  rateLimit?: PlanningCenterRateLimitInfo;
+  error?: Error;
+}) {
+  if (process.env.LOG_PLANNING_CENTER_TIMINGS !== "1") return;
+
+  log.debug(
+    {
+      method,
+      status,
+      attempt: attempt + 1,
+      durationMs: formatDurationMs(durationMs),
+      endpoint: describePlanningCenterEndpoint(url),
+      rateLimit,
+      error: error?.message.slice(0, 100),
+    },
+    "Planning Center API timing"
+  );
+}
+
+function describePlanningCenterEndpoint(value: string): {
+  path: string;
+  queryKeys: string[];
+} {
+  const url = new URL(value, PC_BASE_URL);
+  return {
+    path: url.pathname,
+    queryKeys: Array.from(url.searchParams.keys()).sort(),
+  };
 }

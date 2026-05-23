@@ -25,14 +25,20 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import type { PlanItem } from "@/lib/types";
+import type { PlanItem, PlanItemArrangement, PlanItemKey } from "@/lib/types";
 
 interface PlanItemEditDialogProps {
   item: PlanItem | null;
   open: boolean;
   serviceTypeId: string | null;
   onOpenChange: (open: boolean) => void;
-  onSave: (input: { item: PlanItem; draft: DraftState; length: number | null }) => Promise<void>;
+  onSave: (input: {
+    item: PlanItem;
+    draft: DraftState;
+    length: number | null;
+    optimisticArrangement: PlanItemArrangement | null;
+    optimisticKey: PlanItemKey | null;
+  }) => Promise<void>;
 }
 
 export function PlanItemEditDialog({
@@ -94,6 +100,16 @@ export function PlanItemEditDialog({
         item,
         draft,
         length: parsed.length,
+        optimisticArrangement: selectedArrangement
+          ? {
+              id: selectedArrangement.id,
+              name: selectedArrangement.name,
+              sequence: selectedArrangement.sequence,
+              length: selectedArrangement.length,
+              archivedAt: null,
+            }
+          : null,
+        optimisticKey: keyOptions.find((key) => key.id === draft.keyId) ?? null,
       });
       onOpenChange(false);
     } catch (error) {

@@ -1,8 +1,10 @@
 import type { PCResource } from "@/lib/types";
 import { logger } from "@/lib/logger";
 import { PlanningCenterCoreClient } from "@/lib/planning-center/core-client";
+import { PlanningCenterReadCache } from "@/lib/planning-center/services/read-cache";
 
 const log = logger.for("planning-center/plan-items");
+const PLAN_ITEMS_CACHE_TTL_MS = 30 * 1000;
 
 function buildItemPayload(attributes: Record<string, unknown>, id?: string) {
   return {
@@ -15,25 +17,35 @@ function buildItemPayload(attributes: Record<string, unknown>, id?: string) {
 }
 
 export class PlanningCenterPlanItemsService {
+  private readonly cache = new PlanningCenterReadCache();
+
   constructor(private readonly core: PlanningCenterCoreClient) {}
 
   async getPlanItems(
     serviceTypeId: string,
     planId: string
   ): Promise<{ data: PCResource[]; included: PCResource[] }> {
-    const response = await this.core.fetchAllWithIncluded<PCResource>(
-      `/services/v2/service_types/${serviceTypeId}/plans/${planId}/items`,
-      {
-        include: "song,arrangement,key,item_notes,item_times",
+    const response = await this.cache.get(
+      this.buildPlanItemsCacheKey(serviceTypeId, planId),
+      PLAN_ITEMS_CACHE_TTL_MS,
+      async () => {
+        const result = await this.core.fetchAllWithIncluded<PCResource>(
+          `/services/v2/service_types/${serviceTypeId}/plans/${planId}/items`,
+          {
+            include: "song,arrangement,key,item_notes,item_times",
+          }
+        );
+
+        log.info(
+          { serviceTypeId, planId, itemCount: result.data.length },
+          "Plan items fetched"
+        );
+
+        return result;
       }
     );
 
-    log.info(
-      { serviceTypeId, planId, itemCount: response.data.length },
-      "Plan items fetched"
-    );
-
-    return response;
+    return clonePlanItemsResponse(response);
   }
 
   async getPlanItem(
@@ -66,6 +78,7 @@ export class PlanningCenterPlanItemsService {
         body: JSON.stringify(buildItemPayload(attributes)),
       }
     );
+    this.invalidatePlanItemsCache(serviceTypeId, planId);
 
     return {
       data: response.data,
@@ -89,6 +102,7 @@ export class PlanningCenterPlanItemsService {
         body: JSON.stringify(buildItemPayload(attributes, itemId)),
       }
     );
+    this.invalidatePlanItemsCache(serviceTypeId, planId);
 
     return {
       data: response.data,
@@ -107,6 +121,7 @@ export class PlanningCenterPlanItemsService {
         method: "DELETE",
       }
     );
+    this.invalidatePlanItemsCache(serviceTypeId, planId);
   }
 
   async reorderPlanItems(
@@ -131,7 +146,32 @@ export class PlanningCenterPlanItemsService {
         }),
       }
     );
+    this.invalidatePlanItemsCache(serviceTypeId, planId);
   }
+
+  private buildPlanItemsCacheKey(serviceTypeId: string, planId: string): string {
+    return [
+      this.core.getCacheScope(),
+      "plan-items",
+      encodeURIComponent(serviceTypeId),
+      encodeURIComponent(planId),
+    ].join(":");
+  }
+
+  private invalidatePlanItemsCache(serviceTypeId: string, planId: string) {
+    const cacheKey = this.buildPlanItemsCacheKey(serviceTypeId, planId);
+    this.cache.deleteWhere((key) => key === cacheKey);
+  }
+}
+
+function clonePlanItemsResponse(response: {
+  data: PCResource[];
+  included: PCResource[];
+}): { data: PCResource[]; included: PCResource[] } {
+  return {
+    data: structuredClone(response.data),
+    included: structuredClone(response.included),
+  };
 }
 
 export const planningCenterPlanItemsService = new PlanningCenterPlanItemsService(

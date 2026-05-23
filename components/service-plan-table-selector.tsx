@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { ServiceTypeMultiSelect } from "@/components/service-type-multi-select";
@@ -25,10 +25,12 @@ import {
 } from "@/components/ui/table";
 import { useMyScheduledPlans } from "@/hooks/use-my-scheduled-plans";
 import { useOrganizationTimeZone } from "@/hooks/use-organization-timezone";
+import { createPlanItemsQueryOptions } from "@/hooks/use-plan-items";
 import { useServiceTypes } from "@/hooks/use-service-types";
 import { createTeamPositionsQueryOptions } from "@/hooks/use-team-positions";
 import { getJson } from "@/lib/http/client";
 import { queryKeys } from "@/lib/query-keys";
+import { readCachedPlansEntry, writeCachedPlans } from "@/lib/schedule-catalog-cache";
 import {
   addCalendarDaysToDayKey,
   formatCalendarDayInTimeZone,
@@ -117,24 +119,22 @@ export function ServicePlanTableSelector({
 }: ServicePlanTableSelectorProps) {
   const queryClient = useQueryClient();
   const prefetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cachedPlanWritesRef = useRef<Map<string, number>>(new Map());
   const orgTimeZone = useOrganizationTimeZone();
   const { data: serviceTypes, isLoading: serviceTypesLoading } = useServiceTypes();
-
-  const planQueries = useQueries({
-    queries: (serviceTypes ?? []).map((serviceType) => ({
-      queryKey: queryKeys.plans(serviceType.id),
-      queryFn: () => getJson<Plan[]>(`/api/plans?service_type_id=${serviceType.id}`),
-      staleTime: 5 * 60 * 1000,
-      enabled: !!serviceTypes,
-    })),
-  });
-
   const [searchValue, setSearchValue] = useState("");
+  const deferredSearchValue = useDeferredValue(searchValue);
   const [selectedServiceTypeIds, setSelectedServiceTypeIds] = useState<string[] | null>(
-    () => (selectedServiceTypeId ? [selectedServiceTypeId] : readStoredServiceTypeIds())
+    () => (selectedServiceTypeId ? [selectedServiceTypeId] : null)
   );
   const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>("60");
   const [showMineOnly, setShowMineOnly] = useState(false);
+
+  useEffect(() => {
+    setSelectedServiceTypeIds(
+      selectedServiceTypeId ? [selectedServiceTypeId] : readStoredServiceTypeIds()
+    );
+  }, [selectedServiceTypeId]);
 
   const allServiceTypeIds = useMemo(
     () => (serviceTypes ?? []).map((serviceType) => serviceType.id),
@@ -182,12 +182,47 @@ export function ServicePlanTableSelector({
     [effectiveSelectedServiceTypeIds]
   );
 
+  const planQueryOptions = useMemo(
+    () => (serviceTypes ?? []).map((serviceType) => ({
+        queryKey: queryKeys.plans(serviceType.id),
+        queryFn: () => getJson<Plan[]>(`/api/plans?service_type_id=${serviceType.id}`),
+        staleTime: 5 * 60 * 1000,
+        enabled: !!serviceTypes && selectedServiceTypeIdSet.has(serviceType.id),
+      })),
+    [selectedServiceTypeIdSet, serviceTypes]
+  );
+
+  const planQueries = useQueries({
+    queries: planQueryOptions,
+  });
+
+  useEffect(() => {
+    if (!serviceTypes) return;
+
+    for (const serviceType of serviceTypes) {
+      if (!selectedServiceTypeIdSet.has(serviceType.id)) continue;
+
+      const cachedPlans = readCachedPlansEntry(serviceType.id);
+      if (!cachedPlans) continue;
+
+      const queryKey = queryKeys.plans(serviceType.id);
+      const state = queryClient.getQueryState<Plan[]>(queryKey);
+      if (state?.data !== undefined && state.dataUpdatedAt >= cachedPlans.savedAt) continue;
+
+      queryClient.setQueryData<Plan[]>(queryKey, cachedPlans.data, {
+        updatedAt: cachedPlans.savedAt,
+      });
+    }
+  }, [queryClient, selectedServiceTypeIdSet, serviceTypes]);
+
   const rows = useMemo(() => {
     if (!serviceTypes) return [];
 
     const flattened: ServicePlanRow[] = [];
 
     for (const [index, serviceType] of serviceTypes.entries()) {
+      if (!selectedServiceTypeIdSet.has(serviceType.id)) continue;
+
       const plans = planQueries[index]?.data ?? [];
       for (const plan of plans) {
         const sortDate = parsePlanDate(plan.sortDate);
@@ -218,7 +253,7 @@ export function ServicePlanTableSelector({
 
       return a.planTitle.localeCompare(b.planTitle);
     });
-  }, [planQueries, serviceTypes]);
+  }, [planQueries, selectedServiceTypeIdSet, serviceTypes]);
 
   const planIdsForLookup = useMemo(
     () => [...new Set(rows.map((row) => row.planId))],
@@ -235,7 +270,7 @@ export function ServicePlanTableSelector({
   );
 
   const visibleRows = useMemo(() => {
-    const normalizedSearch = searchValue.trim().toLowerCase();
+    const normalizedSearch = deferredSearchValue.trim().toLowerCase();
 
     return rows.filter((row) => {
       if (selectedServiceTypeIdSet.size === 0) return false;
@@ -268,25 +303,44 @@ export function ServicePlanTableSelector({
     });
   }, [
     dateRangeFilter,
+    deferredSearchValue,
     myScheduledPlanIdSet,
     orgTimeZone,
     rows,
-    searchValue,
     selectedServiceTypeIdSet,
     showMineOnly,
   ]);
 
   const plansLoading = planQueries.some((query) => query.isLoading);
   const errorMessage = planQueries.find((query) => query.isError)?.error;
-  // Hold the table until we know which rows belong to the current user — avoids the
-  // "scheduled" markers popping in after rows render.
-  const awaitingMyScheduled =
-    planIdsForLookup.length > 0 && (myScheduledPlansLoading || (!myScheduledPlans && myScheduledPlansFetching));
-  const isLoading = serviceTypesLoading || plansLoading || awaitingMyScheduled;
+  const isInitialLoading = serviceTypesLoading || (plansLoading && rows.length === 0);
+  useEffect(() => {
+    if (!serviceTypes) return;
+    for (const [index, serviceType] of serviceTypes.entries()) {
+      const query = planQueries[index];
+      const plans = query?.data;
+      if (!plans) continue;
+      const dataUpdatedAt = query.dataUpdatedAt;
+      if (cachedPlanWritesRef.current.get(serviceType.id) === dataUpdatedAt) {
+        continue;
+      }
+      writeCachedPlans(serviceType.id, plans);
+      cachedPlanWritesRef.current.set(serviceType.id, dataUpdatedAt);
+    }
+  }, [planQueries, serviceTypes]);
+
   const prefetchTeamPositions = useCallback(
     (row: ServicePlanRow) => {
       void queryClient.prefetchQuery(
         createTeamPositionsQueryOptions(row.serviceTypeId, row.planId, row.seriesId)
+      );
+    },
+    [queryClient]
+  );
+  const prefetchPlanItems = useCallback(
+    (row: ServicePlanRow) => {
+      void queryClient.prefetchQuery(
+        createPlanItemsQueryOptions(row.serviceTypeId, row.planId)
       );
     },
     [queryClient]
@@ -310,9 +364,10 @@ export function ServicePlanTableSelector({
   const prefetchPlanData = useCallback(
     (row: ServicePlanRow) => {
       prefetchTeamPositions(row);
+      prefetchPlanItems(row);
       warmPeopleHistory(row);
     },
-    [prefetchTeamPositions, warmPeopleHistory]
+    [prefetchPlanItems, prefetchTeamPositions, warmPeopleHistory]
   );
   const cancelDelayedPrefetch = useCallback(() => {
     if (!prefetchTimeoutRef.current) return;
@@ -330,19 +385,35 @@ export function ServicePlanTableSelector({
     [cancelDelayedPrefetch, prefetchPlanData]
   );
 
+  const handleSelectRow = useCallback(
+    (row: ServicePlanRow) => {
+      cancelDelayedPrefetch();
+      prefetchPlanData(row);
+      onSelect({
+        serviceTypeId: row.serviceTypeId,
+        planId: row.planId,
+      });
+    },
+    [cancelDelayedPrefetch, onSelect, prefetchPlanData]
+  );
+
   useEffect(() => cancelDelayedPrefetch, [cancelDelayedPrefetch]);
 
   const firstVisibleRow = visibleRows[0] ?? null;
   useEffect(() => {
-    if (isLoading || !firstVisibleRow) return;
+    if (!firstVisibleRow) return;
     warmPeopleHistory(firstVisibleRow);
-  }, [firstVisibleRow, isLoading, warmPeopleHistory]);
+  }, [firstVisibleRow, warmPeopleHistory]);
 
   const myScheduledCount = useMemo(
     () => rows.filter((row) => myScheduledPlanIdSet.has(row.planId)).length,
     [rows, myScheduledPlanIdSet]
   );
-  const mineTabDisabled = !isLoading && myScheduledCount === 0;
+  const mineTabDisabled =
+    isInitialLoading ||
+    myScheduledPlansLoading ||
+    (!myScheduledPlans && myScheduledPlansFetching) ||
+    myScheduledCount === 0;
 
   // If "mine only" was selected and no rows match, fall back to "all".
   useEffect(() => {
@@ -423,7 +494,7 @@ export function ServicePlanTableSelector({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading ? (
+            {isInitialLoading ? (
               Array.from({ length: 8 }).map((_, index) => (
                 <TableRow key={`loading-${index}`} className="[&>td]:h-10">
                   <TableCell className="pl-5 pr-3">
@@ -440,7 +511,7 @@ export function ServicePlanTableSelector({
                   </TableCell>
                 </TableRow>
               ))
-            ) : errorMessage ? (
+            ) : errorMessage && visibleRows.length === 0 ? (
               <TableRow>
                 <TableCell className="px-4 py-10" colSpan={4}>
                   <Empty>
@@ -489,21 +560,13 @@ export function ServicePlanTableSelector({
                         ? `${row.serviceTypeName} — you are scheduled`
                         : undefined
                     }
-                    onClick={() =>
-                      onSelect({
-                        serviceTypeId: row.serviceTypeId,
-                        planId: row.planId,
-                      })
-                    }
+                    onClick={() => handleSelectRow(row)}
                     onMouseEnter={() => scheduleDelayedPrefetch(row)}
                     onMouseLeave={cancelDelayedPrefetch}
                     onKeyDown={(event) => {
                       if (event.key !== "Enter" && event.key !== " ") return;
                       event.preventDefault();
-                      onSelect({
-                        serviceTypeId: row.serviceTypeId,
-                        planId: row.planId,
-                      });
+                      handleSelectRow(row);
                     }}
                   >
                     <TableCell
@@ -535,7 +598,7 @@ export function ServicePlanTableSelector({
         </Table>
 
         <div className="flex flex-col md:hidden">
-          {isLoading ? (
+          {isInitialLoading ? (
             Array.from({ length: 8 }).map((_, index) => (
               <div key={`mobile-loading-${index}`} className="border-b border-border/35 px-4 py-3 last:border-b-0">
                 <div className="flex items-start justify-between gap-3">
@@ -547,7 +610,7 @@ export function ServicePlanTableSelector({
                 </div>
               </div>
             ))
-          ) : errorMessage ? (
+          ) : errorMessage && visibleRows.length === 0 ? (
             <div className="px-4 py-10">
               <Empty>
                 <EmptyHeader>
@@ -592,12 +655,7 @@ export function ServicePlanTableSelector({
                       ? `${row.serviceTypeName} — you are scheduled`
                       : undefined
                   }
-                  onClick={() =>
-                    onSelect({
-                      serviceTypeId: row.serviceTypeId,
-                      planId: row.planId,
-                    })
-                  }
+                  onClick={() => handleSelectRow(row)}
                   onTouchStart={() => prefetchPlanData(row)}
                 >
                   <div className="flex min-w-0 items-start justify-between gap-3">

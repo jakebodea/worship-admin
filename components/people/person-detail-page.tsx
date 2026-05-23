@@ -31,7 +31,7 @@ import type { PeopleDashboardPerson } from "@/lib/use-cases/planning-center/peop
 export function PersonDetailPage({ personId }: { personId: string }) {
   const searchParams = useSearchParams();
   const month = searchParams.get("month");
-  const { data, isError, isLoading } = usePeopleDashboardPerson(personId, month);
+  const { data, isError, isLoading, isPlaceholderData } = usePeopleDashboardPerson(personId, month);
   const person = data?.person ?? null;
   const monthLabel = data?.month.label ?? "Month";
   const calendarCells = data ? buildCalendarCells(data.month.startsOnWeekday, data.month.daysInMonth) : [];
@@ -90,8 +90,13 @@ export function PersonDetailPage({ personId }: { personId: string }) {
             <Skeleton className="h-64 rounded-lg" />
           </div>
         ) : (
-          <div className="grid gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_20rem]">
+          <div className="grid gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_20rem]" aria-busy={isPlaceholderData}>
             <section className="flex flex-col gap-3">
+              {isPlaceholderData ? (
+                <div className="w-fit rounded-md border border-border/60 bg-background/95 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur">
+                  Refreshing detail...
+                </div>
+              ) : null}
               <div className="grid gap-2 sm:grid-cols-3">
                 <Metric label="Month" value={String(person.monthCount)} />
                 <Metric label="30 days" value={String(person.thirtyDayCount)} />

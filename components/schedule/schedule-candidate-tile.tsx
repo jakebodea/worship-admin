@@ -42,6 +42,8 @@ export interface ScheduleCandidateTileProps {
   planId?: string | null;
   teamId?: string | null;
   positionId?: string | null;
+  teamName?: string | null;
+  positionName?: string | null;
   onScheduleSuccess?: () => void;
   onScheduleError?: (message: string) => void;
 }
@@ -52,6 +54,8 @@ export function ScheduleCandidateTile({
   planId,
   teamId,
   positionId,
+  teamName,
+  positionName,
   onScheduleSuccess,
   onScheduleError,
 }: ScheduleCandidateTileProps) {
@@ -69,6 +73,8 @@ export function ScheduleCandidateTile({
     planId,
     teamId,
     positionId,
+    teamName,
+    positionName,
     canSchedule: canScheduleForHook,
     onScheduleSuccess,
     onScheduleError,
@@ -294,7 +300,7 @@ export function ScheduleCandidateTile({
             size="sm"
             className="h-8 w-8 gap-1.5 px-0 sm:w-full sm:px-3"
             disabled={!canSchedule || isScheduling}
-            onClick={() => void handleSchedule(person.id)}
+            onClick={() => handleSchedule(person)}
             title={disableReason}
           >
             {isScheduling ? (
@@ -315,6 +321,8 @@ export function ScheduleCandidateTile({
             serviceTypeId={serviceTypeId}
             personId={person.id}
             planId={planId}
+            teamId={teamId}
+            positionId={positionId}
             currentStatus={
               (isConfirmed
                 ? "confirmed"

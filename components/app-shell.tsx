@@ -28,7 +28,29 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTheme } from "next-themes";
 import { authClient } from "@/lib/auth-client";
+import {
+  ACCOUNT_PANEL_CACHE_KEY,
+  parseCachedAccountPanel,
+  serializeAccountPanel,
+  summarizeAccountPanel,
+  type AccountPanelSummary,
+} from "@/lib/account-panel-cache";
 import { getJson, postJson } from "@/lib/http/client";
+import {
+  PEOPLE_PAGE_NAV_CACHE_KEY,
+  parsePeoplePageNavState,
+  serializePeoplePageNavState,
+} from "@/lib/people-page-nav-cache";
+import { clearCachedPeople } from "@/lib/people-cache";
+import { clearCachedPeopleDashboards } from "@/lib/people-dashboard-cache";
+import { clearCachedPeopleSearch } from "@/lib/people-search-cache";
+import { clearCachedMyScheduledPlans } from "@/lib/my-scheduled-plans-cache";
+import { clearCachedOrganizationTimeZone } from "@/lib/organization-time-zone-cache";
+import { clearCachedPlanItems } from "@/lib/plan-items-cache";
+import { clearCachedScheduleCatalog } from "@/lib/schedule-catalog-cache";
+import { clearCachedSongOptions } from "@/lib/song-options-cache";
+import { clearCachedSongSearch } from "@/lib/song-search-cache";
+import { clearCachedTeamPositions } from "@/lib/team-positions-cache";
 import { APP_SHORTCUTS, SHORTCUTS_PALETTE_HOTKEY } from "@/lib/app-hotkeys";
 import { cn } from "@/lib/utils";
 import { HotkeyChord } from "@/components/hotkey-chord";
@@ -127,6 +149,37 @@ function readStoredSidebarOpen(): boolean {
   if (stored === "false") return false;
   if (stored === "true") return true;
   return true;
+}
+
+function readCachedAccountPanelSummary(): AccountPanelSummary | null {
+  if (typeof window === "undefined") return null;
+  return parseCachedAccountPanel(window.localStorage.getItem(ACCOUNT_PANEL_CACHE_KEY));
+}
+
+function writeCachedAccountPanelSummary(summary: AccountPanelSummary) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(ACCOUNT_PANEL_CACHE_KEY, serializeAccountPanel(summary));
+  } catch {
+    // Ignore storage write failures (private mode/quota).
+  }
+}
+
+function readCachedPeoplePageEnabled(fallback: boolean): boolean {
+  if (typeof window === "undefined") return fallback;
+  return parsePeoplePageNavState(window.localStorage.getItem(PEOPLE_PAGE_NAV_CACHE_KEY))?.enabled ?? fallback;
+}
+
+function writeCachedPeoplePageEnabled(enabled: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      PEOPLE_PAGE_NAV_CACHE_KEY,
+      serializePeoplePageNavState({ enabled })
+    );
+  } catch {
+    // Ignore storage write failures (private mode/quota).
+  }
 }
 
 function SidebarResizeRail({
@@ -308,6 +361,51 @@ function AppTopBar() {
   );
 }
 
+function AppTopBarFallback({ pathname }: { pathname: string }) {
+  const hasPlan = pathname === "/schedule/plan";
+  const isPeople = pathname.startsWith("/people");
+  const isPersonDetail = /^\/people\/[^/]+/.test(pathname);
+
+  return (
+    <div className="flex w-full min-w-0 items-center gap-2 sm:gap-3">
+      <Breadcrumb className="shrink-0">
+        <BreadcrumbList>
+          {isPersonDetail ? (
+            <>
+              <BreadcrumbItem>
+                <BreadcrumbPage>People</BreadcrumbPage>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>Person</BreadcrumbPage>
+              </BreadcrumbItem>
+            </>
+          ) : (
+            <BreadcrumbItem>
+              <BreadcrumbPage>{isPeople ? "People" : "Schedule"}</BreadcrumbPage>
+            </BreadcrumbItem>
+          )}
+        </BreadcrumbList>
+      </Breadcrumb>
+      {hasPlan ? (
+        <Tabs value="schedule" className="ml-auto min-w-0 overflow-x-auto">
+          <TabsList className="h-8 opacity-60">
+            <TabsTrigger value="schedule" className="px-2 text-xs sm:px-3">
+              Schedule
+            </TabsTrigger>
+            <TabsTrigger value="lineup" className="px-2 text-xs sm:px-3">
+              Lineup
+            </TabsTrigger>
+            <TabsTrigger value="plan" className="px-2 text-xs sm:px-3">
+              Plan
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      ) : null}
+    </div>
+  );
+}
+
 function SidebarAccountPanel({
   onOpenShortcuts,
   onPeekLockChange,
@@ -321,26 +419,23 @@ function SidebarAccountPanel({
   const { setTheme, theme } = useTheme();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [data, setData] = useState<PlanningCenterAccountsResponse | null>(null);
+  const [cachedSummary, setCachedSummary] = useState<AccountPanelSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [switchingAccountId, setSwitchingAccountId] = useState<string | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [error, setError] = useState("");
 
-  const selectedAccount = useMemo(() => {
-    if (!data) return null;
-    if (!data.selectedAccountId) return data.accounts[0] ?? null;
-    return data.accounts.find((account) => account.id === data.selectedAccountId) ?? null;
-  }, [data]);
-
-  const avatarName =
-    selectedAccount?.identity?.name || data?.session.name || data?.session.email || null;
-  const organizationName = selectedAccount?.identity?.organizationName ?? "worshipadmin.com";
+  const liveSummary = useMemo(() => summarizeAccountPanel(data), [data]);
+  const triggerSummary = data ? liveSummary : cachedSummary ?? liveSummary;
 
   const loadAccounts = useCallback(async () => {
     setLoading(true);
     try {
       const response = await getJson<PlanningCenterAccountsResponse>("/api/planning-center/accounts");
       setData(response);
+      const summary = summarizeAccountPanel(response);
+      setCachedSummary(summary);
+      writeCachedAccountPanelSummary(summary);
       setError("");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load account details";
@@ -348,6 +443,10 @@ function SidebarAccountPanel({
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    setCachedSummary(readCachedAccountPanelSummary());
   }, []);
 
   useEffect(() => {
@@ -362,6 +461,16 @@ function SidebarAccountPanel({
         "/api/planning-center/accounts",
         { accountId }
       );
+      clearCachedPeople();
+      clearCachedPeopleDashboards();
+      clearCachedPeopleSearch();
+      clearCachedMyScheduledPlans();
+      clearCachedOrganizationTimeZone();
+      clearCachedPlanItems();
+      clearCachedScheduleCatalog();
+      clearCachedSongOptions();
+      clearCachedSongSearch();
+      clearCachedTeamPositions();
       await loadAccounts();
       await queryClient.invalidateQueries();
       router.refresh();
@@ -407,12 +516,12 @@ function SidebarAccountPanel({
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
               <Avatar className="size-6 rounded-md">
-                {data?.session.image ? <AvatarImage src={data.session.image} alt={avatarName ?? "User"} /> : null}
+                {triggerSummary.image ? <AvatarImage src={triggerSummary.image} alt={triggerSummary.avatarName ?? "User"} /> : null}
                 <AvatarFallback className="rounded-md bg-primary text-[10px] font-medium text-primary-foreground">
-                  {initialsFromName(avatarName)}
+                  {initialsFromName(triggerSummary.avatarName)}
                 </AvatarFallback>
               </Avatar>
-              <span className="flex-1 truncate text-left text-sm font-medium">{organizationName}</span>
+              <span className="flex-1 truncate text-left text-sm font-medium">{triggerSummary.organizationName}</span>
               <ChevronDown
                 className={cn(
                   "ml-auto size-3.5 text-muted-foreground transition-transform group-data-[collapsible=icon]:hidden",
@@ -533,10 +642,31 @@ function AppSidebar({
   peoplePageEnabled: boolean;
 }) {
   const pathname = usePathname();
+  const [peopleNavEnabled, setPeopleNavEnabled] = useState(peoplePageEnabled);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [sidebarPeekLocked, setSidebarPeekLocked] = useState(false);
 
   useHotkey(SHORTCUTS_PALETTE_HOTKEY, () => setShortcutsOpen(true), { ignoreInputs: true });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setPeopleNavEnabled(readCachedPeoplePageEnabled(peoplePageEnabled));
+
+    void getJson<{ enabled: boolean }>("/api/people/feature")
+      .then(({ enabled }) => {
+        if (cancelled) return;
+        setPeopleNavEnabled(enabled);
+        writeCachedPeoplePageEnabled(enabled);
+      })
+      .catch(() => {
+        // Keep the initial/cached value if the feature check fails.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [peoplePageEnabled]);
 
   return (
     <>
@@ -569,7 +699,7 @@ function AppSidebar({
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-                {peoplePageEnabled ? (
+                {peopleNavEnabled ? (
                   <SidebarMenuItem>
                     <SidebarMenuButton
                       asChild
@@ -691,7 +821,7 @@ export function AppShell({
       <SidebarInset className="min-h-0 overflow-hidden">
         <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/50 px-3">
           <SidebarTrigger />
-          <Suspense fallback={null}>
+          <Suspense fallback={<AppTopBarFallback pathname={pathname} />}>
             <AppTopBar />
           </Suspense>
         </header>

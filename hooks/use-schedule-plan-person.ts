@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { HttpClientError, postJson } from "@/lib/http/client";
+import {
+  cancelScheduleMutationQueries,
+  optimisticallySchedulePerson,
+  reconcileOptimisticPlanPersonId,
+  restoreScheduleCaches,
+  settleScheduleMutationQueries,
+  type OptimisticSchedulePerson,
+} from "@/hooks/use-schedule-cache-optimism";
 
 function formatSchedulePayloadError(json: unknown): string {
   if (!json || typeof json !== "object") return "Failed to schedule";
@@ -44,7 +53,10 @@ export function useSchedulePlanPerson({
   planId,
   teamId,
   positionId,
+  teamName,
+  positionName,
   canSchedule,
+  onOptimisticSchedule,
   onScheduleSuccess,
   onScheduleError,
   oneOff = false,
@@ -53,45 +65,89 @@ export function useSchedulePlanPerson({
   planId: string | null | undefined;
   teamId: string | null | undefined;
   positionId: string | null | undefined;
+  teamName?: string | null | undefined;
+  positionName?: string | null | undefined;
   canSchedule: boolean;
+  onOptimisticSchedule?: () => void;
   onScheduleSuccess?: () => void;
   onScheduleError?: (message: string) => void;
   oneOff?: boolean;
 }) {
-  const [isScheduling, setIsScheduling] = useState(false);
+  const queryClient = useQueryClient();
   const [scheduleSuccess, setScheduleSuccess] = useState(false);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
 
   useEffect(() => {
-    setIsScheduling(false);
     setScheduleSuccess(false);
     setScheduleError(null);
   }, [serviceTypeId, planId, teamId, positionId]);
 
-  const handleSchedule = async (personId: string) => {
-    if (!serviceTypeId || !planId || !teamId || !positionId || isScheduling || !canSchedule) return;
-
-    setIsScheduling(true);
-    setScheduleError(null);
-
-    try {
-      await postJson<{ success: boolean }>("/api/schedule", {
+  const scheduleMutation = useMutation({
+    mutationFn: async ({ person }: { person: OptimisticSchedulePerson }) =>
+      postJson<{ success: boolean; data?: { id?: string } }>("/api/schedule", {
         serviceTypeId,
-        personId,
+        personId: person.id,
         planId,
         teamId,
         positionId,
+        teamName: teamName || undefined,
+        positionName: positionName || undefined,
         oneOff,
+      }),
+    onMutate: async ({ person }) => {
+      if (!serviceTypeId || !planId || !teamId || !positionId) return {};
+
+      const optimisticPlanPersonId = `optimistic:${planId}:${teamId}:${positionId}:${person.id}`;
+      await cancelScheduleMutationQueries(queryClient, {
+        serviceTypeId,
+        planId,
+        teamId,
+        positionId,
       });
+
       setScheduleSuccess(true);
+      const snapshot = optimisticallySchedulePerson(
+        queryClient,
+        { serviceTypeId, planId, teamId, positionId },
+        person,
+        optimisticPlanPersonId
+      );
+      onOptimisticSchedule?.();
+
+      return { optimisticPlanPersonId, snapshot };
+    },
+    onSuccess: (result, _variables, context) => {
+      const planPersonId = result.data?.id;
+      if (planPersonId && context.optimisticPlanPersonId) {
+        reconcileOptimisticPlanPersonId(
+          queryClient,
+          context.optimisticPlanPersonId,
+          planPersonId
+        );
+      }
+      settleScheduleMutationQueries(queryClient, {
+        serviceTypeId,
+        planId,
+        teamId,
+        positionId,
+      });
       onScheduleSuccess?.();
-    } catch (err) {
+    },
+    onError: (err, _variables, context) => {
       if (err instanceof HttpClientError && err.code === "ALREADY_SCHEDULED") {
         setScheduleSuccess(true);
+        settleScheduleMutationQueries(queryClient, {
+          serviceTypeId,
+          planId,
+          teamId,
+          positionId,
+        });
         onScheduleSuccess?.();
         return;
       }
 
+      restoreScheduleCaches(queryClient, context?.snapshot);
+      setScheduleSuccess(false);
       const message =
         err instanceof HttpClientError
           ? formatScheduleClientError(err)
@@ -100,10 +156,32 @@ export function useSchedulePlanPerson({
             : "Failed to schedule";
       setScheduleError(message);
       onScheduleError?.(message);
-    } finally {
-      setIsScheduling(false);
-    }
+    },
+  });
+
+  const handleSchedule = (input: string | OptimisticSchedulePerson) => {
+    if (!serviceTypeId || !planId || !teamId || !positionId || scheduleMutation.isPending || !canSchedule) return;
+
+    setScheduleError(null);
+    const person =
+      typeof input === "string"
+        ? { id: input, fullName: "Unknown person", photoThumbnailUrl: null }
+        : {
+            id: input.id,
+            firstName: "firstName" in input ? input.firstName : undefined,
+            lastName: "lastName" in input ? input.lastName : undefined,
+            fullName: input.fullName,
+            photoUrl: "photoUrl" in input ? input.photoUrl : undefined,
+            photoThumbnailUrl: input.photoThumbnailUrl,
+          };
+
+    scheduleMutation.mutate({ person });
   };
 
-  return { isScheduling, scheduleSuccess, scheduleError, handleSchedule };
+  return {
+    isScheduling: scheduleMutation.isPending,
+    scheduleSuccess,
+    scheduleError,
+    handleSchedule,
+  };
 }

@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   CalendarDays,
   ChevronRight,
@@ -13,6 +14,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { usePeopleDashboard } from "@/hooks/use-people-dashboard";
+import { createPeopleDashboardPersonQueryOptions } from "@/hooks/use-people-dashboard-person";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -124,11 +126,18 @@ export function PersonAvatar({ person }: { person: PeopleDashboardPerson }) {
 
 export function PeoplePage() {
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [activeView, setActiveView] = useState<"health" | "month">("health");
   const [range, setRange] = useState<PeopleDashboardRange>("month");
   const [selectedTeam, setSelectedTeam] = useState("all");
-  const { data: dashboard, isLoading, isError } = usePeopleDashboard(range);
+  const {
+    data: dashboard,
+    isLoading,
+    isError,
+    isPlaceholderData,
+  } = usePeopleDashboard(range);
   const people = dashboard?.people ?? EMPTY_PEOPLE;
   const rhythmCalendarCells = dashboard
     ? buildCalendarCells(dashboard.month.startsOnWeekday, dashboard.month.daysInMonth)
@@ -139,18 +148,33 @@ export function PeoplePage() {
   );
 
   const visiblePeople = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
+    const normalized = deferredQuery.trim().toLowerCase();
     return people.filter((person) =>
       (selectedTeam === "all" || person.teams.includes(selectedTeam)) &&
       (!normalized ||
         [person.name, person.roles, ...person.teams].join(" ").toLowerCase().includes(normalized))
     );
-  }, [people, query, selectedTeam]);
+  }, [deferredQuery, people, selectedTeam]);
 
   const mvp = people[0] ?? null;
   const needsRest = people.filter((person) => person.load === "rest" || person.load === "high");
   const underused = people.filter((person) => person.load === "low");
-  const openPerson = (person: PeopleDashboardPerson) => router.push(`/people/${person.id}`);
+  const prefetchPersonDetail = useCallback(
+    (person: PeopleDashboardPerson) => {
+      router.prefetch(`/people/${person.id}`);
+      void queryClient.prefetchQuery(
+        createPeopleDashboardPersonQueryOptions(person.id, null)
+      );
+    },
+    [queryClient, router]
+  );
+  const openPerson = useCallback(
+    (person: PeopleDashboardPerson) => {
+      prefetchPersonDetail(person);
+      router.push(`/people/${person.id}`);
+    },
+    [prefetchPersonDetail, router]
+  );
 
   return (
     <main className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
@@ -211,12 +235,18 @@ export function PeoplePage() {
           </div>
         </header>
 
+        {isPlaceholderData && !isError ? (
+          <div className="-mb-1 w-fit rounded-md border border-border/60 bg-background/95 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur">
+            Loading selected range...
+          </div>
+        ) : null}
+
         {isError ? (
           <div className="rounded-lg border border-border/40 px-4 py-8 text-sm text-muted-foreground">
             People dashboard failed to load. Refresh and try again.
           </div>
         ) : activeView === "health" ? (
-        <div className="grid gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="grid gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_20rem]" aria-busy={isPlaceholderData}>
           <section className="flex flex-col gap-3 lg:min-h-0">
             <div className="grid shrink-0 gap-2 sm:grid-cols-3">
               <Card className="gap-3 rounded-lg border-border/40 py-3 shadow-none">
@@ -290,6 +320,7 @@ export function PeoplePage() {
                         <TableRow
                           key={person.id}
                           className="group/row cursor-pointer transition-none hover:bg-muted/60 [&>td]:h-12 [&>td]:py-0"
+                          onPointerEnter={() => prefetchPersonDetail(person)}
                           onClick={() => openPerson(person)}
                         >
                           <TableCell className="pl-4 pr-3">
@@ -349,6 +380,9 @@ export function PeoplePage() {
                       key={`mobile-${person.id}`}
                       type="button"
                       className="flex w-full flex-col gap-2 border-b border-border/35 px-4 py-3 text-left last:border-b-0 hover:bg-muted/50"
+                      onFocus={() => prefetchPersonDetail(person)}
+                      onPointerEnter={() => prefetchPersonDetail(person)}
+                      onTouchStart={() => prefetchPersonDetail(person)}
                       onClick={() => openPerson(person)}
                     >
                       <div className="flex min-w-0 items-start gap-3">
@@ -391,6 +425,9 @@ export function PeoplePage() {
                       key={`queue-${person.id}`}
                       type="button"
                       className="flex items-center gap-3 rounded-md px-2 py-1.5 text-left hover:bg-muted/50"
+                      onFocus={() => prefetchPersonDetail(person)}
+                      onPointerEnter={() => prefetchPersonDetail(person)}
+                      onTouchStart={() => prefetchPersonDetail(person)}
                       onClick={() => openPerson(person)}
                     >
                       <PersonAvatar person={person} />
@@ -419,6 +456,9 @@ export function PeoplePage() {
                       key={`cadence-${person.id}`}
                       type="button"
                       className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left hover:bg-muted/50"
+                      onFocus={() => prefetchPersonDetail(person)}
+                      onPointerEnter={() => prefetchPersonDetail(person)}
+                      onTouchStart={() => prefetchPersonDetail(person)}
                       onClick={() => openPerson(person)}
                     >
                       <span className="min-w-0">
@@ -449,6 +489,9 @@ export function PeoplePage() {
                   <button
                     type="button"
                     className="flex w-full items-center gap-3 rounded-md border border-border/40 bg-card/40 px-3 py-2 text-left hover:bg-muted/50"
+                    onFocus={() => prefetchPersonDetail(mvp)}
+                    onPointerEnter={() => prefetchPersonDetail(mvp)}
+                    onTouchStart={() => prefetchPersonDetail(mvp)}
                     onClick={() => openPerson(mvp)}
                   >
                     <PersonAvatar person={mvp} />
@@ -480,6 +523,9 @@ export function PeoplePage() {
                     key={person.id}
                     type="button"
                     className="flex items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-muted/50"
+                    onFocus={() => prefetchPersonDetail(person)}
+                    onPointerEnter={() => prefetchPersonDetail(person)}
+                    onTouchStart={() => prefetchPersonDetail(person)}
                     onClick={() => openPerson(person)}
                   >
                     <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground" />
@@ -592,6 +638,7 @@ export function PeoplePage() {
             monthDays={dashboard.monthDays}
             matrixDays={dashboard.matrixDays}
             onSelectPerson={openPerson}
+            onPreviewPerson={prefetchPersonDetail}
           />
         ) : (
           <div className="rounded-lg border border-border/40 px-4 py-8 text-sm text-muted-foreground">
@@ -610,6 +657,7 @@ function MonthView({
   monthDays,
   matrixDays,
   onSelectPerson,
+  onPreviewPerson,
 }: {
   people: PeopleDashboardPerson[];
   month: {
@@ -629,6 +677,7 @@ function MonthView({
   }>;
   matrixDays: number[];
   onSelectPerson: (person: PeopleDashboardPerson) => void;
+  onPreviewPerson: (person: PeopleDashboardPerson) => void;
 }) {
   const [selectedDay, setSelectedDay] = useState(
     monthDays.find((day) => day.serviceCount > 0)?.day ?? 1
@@ -753,6 +802,9 @@ function MonthView({
                 <button
                   type="button"
                   className="flex min-w-0 items-center gap-3 px-4 py-2.5 text-left"
+                  onFocus={() => onPreviewPerson(person)}
+                  onPointerEnter={() => onPreviewPerson(person)}
+                  onTouchStart={() => onPreviewPerson(person)}
                   onClick={() => onSelectPerson(person)}
                 >
                   <PersonAvatar person={person} />
@@ -829,6 +881,9 @@ function MonthView({
                 key={`day-${person.id}`}
                 type="button"
                 className="flex items-center gap-3 rounded-md px-2 py-1.5 text-left hover:bg-muted/50"
+                onFocus={() => onPreviewPerson(person)}
+                onPointerEnter={() => onPreviewPerson(person)}
+                onTouchStart={() => onPreviewPerson(person)}
                 onClick={() => onSelectPerson(person)}
               >
                 <PersonAvatar person={person} />

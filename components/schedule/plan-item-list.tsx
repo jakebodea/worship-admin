@@ -17,7 +17,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { FileMusic, Music4, Trash2 } from "lucide-react";
+import { FileMusic, GripVertical, Music4, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { formatLength, getItemTone } from "@/components/schedule/plan-tab-helpers";
 import { Badge } from "@/components/ui/badge";
@@ -33,11 +33,13 @@ import { cn } from "@/lib/utils";
 interface PlanItemListProps {
   items: PlanItem[];
   isLoading: boolean;
+  isPlaceholderData: boolean;
   pendingItemId: string | null;
   onAddSong: () => void;
   onAddHeader: () => void;
   onAddItem: () => void;
   onEditItem: (itemId: string) => void;
+  onPreviewItem?: (itemId: string) => void;
   onDeleteItem: (itemId: string) => Promise<void> | void;
   onReorderItems: (items: PlanItem[]) => Promise<void> | void;
 }
@@ -45,11 +47,13 @@ interface PlanItemListProps {
 export function PlanItemList({
   items,
   isLoading,
+  isPlaceholderData,
   pendingItemId,
   onAddSong,
   onAddHeader,
   onAddItem,
   onEditItem,
+  onPreviewItem,
   onDeleteItem,
   onReorderItems,
 }: PlanItemListProps) {
@@ -87,12 +91,13 @@ export function PlanItemList({
 
   const handleConfirmDelete = async () => {
     if (!itemIdPendingDelete) return;
+    const itemId = itemIdPendingDelete;
+    setItemIdPendingDelete(null);
 
     try {
-      await onDeleteItem(itemIdPendingDelete);
-      setItemIdPendingDelete(null);
+      await onDeleteItem(itemId);
     } catch {
-      // Errors are handled by the mutation toast; keep the dialog open.
+      // Errors are handled by the mutation toast; the optimistic cache restores the row.
     }
   };
 
@@ -133,61 +138,84 @@ export function PlanItemList({
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-2">
-                <Button type="button" size="sm" onClick={onAddSong}>
+                <Button type="button" size="sm" onClick={onAddSong} disabled={isPlaceholderData}>
                   <Music4 className="size-4" />
                   Add Song
                 </Button>
-                <Button type="button" variant="outline" size="sm" onClick={onAddHeader}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onAddHeader}
+                  disabled={isPlaceholderData}
+                >
                   Add Header
                 </Button>
-                <Button type="button" variant="outline" size="sm" onClick={onAddItem}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onAddItem}
+                  disabled={isPlaceholderData}
+                >
                   Add Item
                 </Button>
               </div>
             </div>
           </Card>
         ) : (
-          <DndContext
-            collisionDetection={closestCenter}
-            sensors={sensors}
-            onDragStart={handleDragStart}
-            onDragCancel={() => setActiveItemId(null)}
-            onDragEnd={(event) => void handleDragEnd(event)}
-          >
-            <SortableContext
-              items={items.map((item) => item.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              <div className="pb-4 sm:pr-3">
-                <div className="overflow-hidden rounded-lg border border-border/50 bg-background">
-                  {items.map((item) => (
-                    <SortablePlanItem
-                      key={item.id}
-                      item={item}
-                      isBusy={pendingItemId === item.id}
-                      isDragging={activeItemId === item.id}
-                      reorderDisabled={reorderDisabled}
-                      onEdit={() => onEditItem(item.id)}
-                      onDelete={() => setItemIdPendingDelete(item.id)}
-                    />
-                  ))}
-                </div>
+          <div className="relative" aria-busy={isPlaceholderData}>
+            {isPlaceholderData ? (
+              <div className="sticky top-0 z-10 mb-2 rounded-md border border-border/60 bg-background/95 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur">
+                Loading selected plan...
               </div>
-            </SortableContext>
-            <DragOverlay zIndex={60}>
-              {activeItem ? (
-                <div className="overflow-hidden rounded-lg border bg-background rotate-[0.2deg] shadow-2xl">
-                  <PlanItemCard
-                    item={activeItem}
-                    isBusy={pendingItemId === activeItem.id}
-                    isDragged
-                    onEdit={() => onEditItem(activeItem.id)}
-                    onDelete={() => setItemIdPendingDelete(activeItem.id)}
-                  />
-                </div>
-              ) : null}
-            </DragOverlay>
-          </DndContext>
+            ) : null}
+            <div className={cn(isPlaceholderData && "pointer-events-none opacity-60")}>
+              <DndContext
+                collisionDetection={closestCenter}
+                sensors={sensors}
+                onDragStart={handleDragStart}
+                onDragCancel={() => setActiveItemId(null)}
+                onDragEnd={(event) => void handleDragEnd(event)}
+              >
+                <SortableContext
+                  items={items.map((item) => item.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="pb-4 sm:pr-3">
+                    <div className="overflow-hidden rounded-lg border border-border/50 bg-background">
+                      {items.map((item) => (
+                        <SortablePlanItem
+                          key={item.id}
+                          item={item}
+                          isBusy={pendingItemId === item.id}
+                          isDragging={activeItemId === item.id}
+                          reorderDisabled={reorderDisabled}
+                          onEdit={() => onEditItem(item.id)}
+                          onPreview={() => onPreviewItem?.(item.id)}
+                          onDelete={() => setItemIdPendingDelete(item.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </SortableContext>
+                <DragOverlay zIndex={60}>
+                  {activeItem ? (
+                    <div className="overflow-hidden rounded-lg border bg-background rotate-[0.2deg] shadow-2xl">
+                      <PlanItemCard
+                        item={activeItem}
+                        isBusy={pendingItemId === activeItem.id}
+                        isDragged
+                        onEdit={() => onEditItem(activeItem.id)}
+                        onPreview={() => onPreviewItem?.(activeItem.id)}
+                        onDelete={() => setItemIdPendingDelete(activeItem.id)}
+                      />
+                    </div>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
+            </div>
+          </div>
         )}
       </ScrollArea>
     </>
@@ -200,6 +228,7 @@ interface SortablePlanItemProps {
   isDragging: boolean;
   reorderDisabled: boolean;
   onEdit: () => void;
+  onPreview: () => void;
   onDelete: () => Promise<void> | void;
 }
 
@@ -209,6 +238,7 @@ function SortablePlanItem({
   isDragging,
   reorderDisabled,
   onEdit,
+  onPreview,
   onDelete,
 }: SortablePlanItemProps) {
   const {
@@ -252,6 +282,7 @@ function SortablePlanItem({
         dragAttributes={attributes}
         dragListeners={listeners}
         onEdit={onEdit}
+        onPreview={onPreview}
         onDelete={onDelete}
       />
     </div>
@@ -265,6 +296,7 @@ interface PlanItemCardProps {
   dragAttributes?: ReturnType<typeof useSortable>["attributes"];
   dragListeners?: ReturnType<typeof useSortable>["listeners"];
   onEdit: () => void;
+  onPreview: () => void;
   onDelete: () => Promise<void> | void;
 }
 
@@ -275,37 +307,46 @@ function PlanItemCard({
   dragAttributes,
   dragListeners,
   onEdit,
+  onPreview,
   onDelete,
 }: PlanItemCardProps) {
   const tone = getItemTone(item);
   const lengthLabel = formatLength(item.length);
-  const handleCardKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    onEdit();
-  };
+  const rowHoverClassName = item.itemType === "header"
+    ? "hover:ring-border/80 hover:ring-1 hover:ring-inset"
+    : "hover:bg-accent/45";
+  const dragHandleClassName =
+    "flex w-9 shrink-0 touch-manipulation items-center justify-center self-stretch border-0 bg-transparent text-muted-foreground/55 outline-none transition-colors hover:text-foreground focus-visible:ring-ring/50 focus-visible:ring-[3px] active:cursor-grabbing disabled:pointer-events-none disabled:opacity-50";
+  const editButtonClassName =
+    "min-w-0 flex-1 border-0 bg-transparent text-left font-inherit outline-none transition-colors focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 
   return (
     <div
       className={cn(
-        "transition-[background-color,box-shadow] duration-200",
+        "group/plan-item transition-[background-color,box-shadow] duration-200",
         tone.row,
+        !isDragged && rowHoverClassName,
         isDragged && "bg-muted/80 shadow-lg"
       )}
     >
-      <button
-        type="button"
-        {...dragAttributes}
-        {...dragListeners}
-        onClick={onEdit}
-        onKeyDown={handleCardKeyDown}
-        className={cn(
-          "w-full cursor-grab touch-manipulation select-none border-0 bg-transparent p-0 text-left font-inherit transition-colors active:cursor-grabbing",
-          tone.header,
-          !isDragged && tone.hover
-        )}
-      >
-        <div className="hidden items-center gap-3 px-3 py-2 sm:flex">
+      <div className="hidden min-h-11 items-stretch sm:flex">
+        <button
+          type="button"
+          {...dragAttributes}
+          {...dragListeners}
+          disabled={isBusy}
+          aria-label={`Reorder ${item.title || "plan item"}`}
+          className={cn(dragHandleClassName, "cursor-grab")}
+        >
+          <GripVertical className="size-4" />
+        </button>
+        <button
+          type="button"
+          onFocus={onPreview}
+          onPointerEnter={onPreview}
+          onClick={onEdit}
+          className={cn("flex items-center gap-3 px-2 py-2", editButtonClassName)}
+        >
           <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -333,26 +374,44 @@ function PlanItemCard({
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="group"
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                event.stopPropagation();
-                void onDelete();
-              }}
-              disabled={isBusy}
-              aria-label={`Delete ${item.title || "plan item"}`}
-            >
-              <Trash2 className="size-4 transition-colors group-hover:text-destructive" />
-            </Button>
-          </div>
+        </button>
+        <div className="flex items-center border-l border-border/0 px-2 py-1.5 transition-colors group-hover/plan-item:border-border/50 group-focus-within/plan-item:border-border/50">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="group/delete size-8 text-muted-foreground hover:text-destructive"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              void onDelete();
+            }}
+            disabled={isBusy}
+            aria-label={`Delete ${item.title || "plan item"}`}
+          >
+            <Trash2 className="size-4" />
+          </Button>
         </div>
+      </div>
 
-        <div className="flex items-start gap-3 px-3 py-2.5 sm:hidden">
+      <div className="flex min-h-12 items-stretch sm:hidden">
+        <button
+          type="button"
+          {...dragAttributes}
+          {...dragListeners}
+          disabled={isBusy}
+          aria-label={`Reorder ${item.title || "plan item"}`}
+          className={cn(dragHandleClassName, "cursor-grab")}
+        >
+          <GripVertical className="size-4" />
+        </button>
+        <button
+          type="button"
+          onFocus={onPreview}
+          onPointerEnter={onPreview}
+          onClick={onEdit}
+          className={cn("px-2 py-2.5", editButtonClassName)}
+        >
           <div className="min-w-0 flex-1 text-left">
             <div className="flex flex-wrap items-center gap-2">
               <p className="min-w-0 break-words font-semibold">{item.title || "Untitled item"}</p>
@@ -380,11 +439,13 @@ function PlanItemCard({
               </div>
             ) : null}
           </div>
+        </button>
+        <div className="flex items-start border-l border-border/0 px-2 py-2 transition-colors group-hover/plan-item:border-border/50 group-focus-within/plan-item:border-border/50">
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="group shrink-0"
+            className="group/delete size-8 shrink-0 text-muted-foreground hover:text-destructive"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();
@@ -393,10 +454,10 @@ function PlanItemCard({
             disabled={isBusy}
             aria-label={`Delete ${item.title || "plan item"}`}
           >
-            <Trash2 className="size-4 transition-colors group-hover:text-destructive" />
+            <Trash2 className="size-4" />
           </Button>
         </div>
-      </button>
+      </div>
     </div>
   );
 }

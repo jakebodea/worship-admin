@@ -1,7 +1,10 @@
+import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getJson } from "@/lib/http/client";
 import type { TeamPositionGroup } from "@/lib/types";
 import { queryKeys } from "@/lib/query-keys";
+import { useHydrateQueryFromCache } from "@/lib/query-cache-hydration";
+import { readCachedTeamPositions, writeCachedTeamPositions } from "@/lib/team-positions-cache";
 
 const TEAM_POSITIONS_STALE_TIME_MS = 10 * 60 * 1000;
 
@@ -31,9 +34,11 @@ export function createTeamPositionsQueryOptions(
       if (!serviceTypeId || !planId) {
         return [];
       }
-      return getJson<TeamPositionGroup[]>(
+      const groups = await getJson<TeamPositionGroup[]>(
         buildTeamPositionsUrl(serviceTypeId, planId, seriesId)
       );
+      writeCachedTeamPositions(serviceTypeId, planId, seriesId, groups);
+      return groups;
     },
     staleTime: TEAM_POSITIONS_STALE_TIME_MS,
   };
@@ -44,8 +49,17 @@ export function useTeamPositions(
   planId: string | null,
   seriesId: string | null
 ) {
+  const queryKey = queryKeys.teamPositions(serviceTypeId, planId, seriesId);
+  const readCachedGroups = useCallback(
+    () => readCachedTeamPositions(serviceTypeId, planId, seriesId),
+    [planId, seriesId, serviceTypeId]
+  );
+  useHydrateQueryFromCache(queryKey, readCachedGroups);
+
   return useQuery<TeamPositionGroup[]>({
     ...createTeamPositionsQueryOptions(serviceTypeId, planId, seriesId),
+    queryKey,
     enabled: !!serviceTypeId && !!planId,
+    placeholderData: (previousGroups) => previousGroups,
   });
 }

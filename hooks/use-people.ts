@@ -1,26 +1,32 @@
+import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getJson } from "@/lib/http/client";
+import { readCachedPeople, writeCachedPeople } from "@/lib/people-cache";
 import type { PersonWithAvailability } from "@/lib/types";
 import { queryKeys } from "@/lib/query-keys";
+import { useHydrateQueryFromCache } from "@/lib/query-cache-hydration";
 
-export function usePeople(
+function normalizePeopleDateKey(date: Date | string | null): string | null {
+  if (!date) return null;
+  return typeof date === "string" ? date : date.toISOString();
+}
+
+function normalizePeopleDate(date: Date | string | null): Date | null {
+  if (!date) return null;
+  return typeof date === "string" ? new Date(date) : date;
+}
+
+export function createPeopleQueryOptions(
   serviceTypeId: string | null,
   teamId: string | null,
   positionId: string | null,
   planId: string | null = null,
   date: Date | string | null = null
 ) {
-  // Convert date to string for query key (handle both Date and string)
-  const dateKey = date 
-    ? (typeof date === "string" ? date : date.toISOString())
-    : null;
+  const dateKey = normalizePeopleDateKey(date);
+  const dateObj = normalizePeopleDate(date);
 
-  // Convert date to Date object if it's a string
-  const dateObj = date 
-    ? (typeof date === "string" ? new Date(date) : date)
-    : null;
-
-  return useQuery<PersonWithAvailability[]>({
+  return {
     queryKey: queryKeys.people(
       serviceTypeId,
       teamId,
@@ -50,9 +56,33 @@ export function usePeople(
         params.append("date", dateObj.toISOString());
       }
 
-      return getJson<PersonWithAvailability[]>(`/api/people?${params.toString()}`);
+      const people = await getJson<PersonWithAvailability[]>(`/api/people?${params.toString()}`);
+      writeCachedPeople(serviceTypeId, teamId, positionId, planId, dateKey, people);
+      return people;
     },
-    enabled: !!positionId && !!serviceTypeId,
     staleTime: 5 * 60 * 1000, // 5 minutes
+  };
+}
+
+export function usePeople(
+  serviceTypeId: string | null,
+  teamId: string | null,
+  positionId: string | null,
+  planId: string | null = null,
+  date: Date | string | null = null
+) {
+  const dateKey = normalizePeopleDateKey(date);
+  const queryKey = queryKeys.people(serviceTypeId, teamId, positionId, planId, dateKey);
+  const readCachedPeopleForQuery = useCallback(
+    () => readCachedPeople(serviceTypeId, teamId, positionId, planId, dateKey),
+    [dateKey, planId, positionId, serviceTypeId, teamId]
+  );
+  useHydrateQueryFromCache(queryKey, readCachedPeopleForQuery);
+
+  return useQuery<PersonWithAvailability[]>({
+    ...createPeopleQueryOptions(serviceTypeId, teamId, positionId, planId, date),
+    queryKey,
+    enabled: !!positionId && !!serviceTypeId,
+    placeholderData: (previousPeople) => previousPeople,
   });
 }

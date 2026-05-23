@@ -18,8 +18,9 @@ import { mapWithConcurrency } from "@/lib/use-cases/planning-center/shared";
 
 const SCHEDULE_CONCURRENCY = 4;
 const SCHEDULE_MAX_PAGES = 6;
+const PEOPLE_DASHBOARD_HYDRATION_LIMIT = 48;
 const PEOPLE_DASHBOARD_CACHE_TTL_MS = 2 * 60 * 1000;
-const PEOPLE_DASHBOARD_CACHE_VERSION = "v4";
+const PEOPLE_DASHBOARD_CACHE_VERSION = "v5";
 const peopleDashboardCache = new PlanningCenterReadCache();
 
 interface RosterPerson {
@@ -48,30 +49,40 @@ export interface ScheduleItem {
 export async function getPeopleDashboard({
   range = "month",
   peopleService = planningCenterPeopleService,
+  maxHydratedPeople = PEOPLE_DASHBOARD_HYDRATION_LIMIT,
 }: {
   range?: PeopleDashboardRange;
   peopleService?: Pick<
     PlanningCenterPeopleService,
     "getAllPeopleFromTeams" | "getPersonSchedules"
   >;
+  maxHydratedPeople?: number;
 } = {}): Promise<PeopleDashboardData> {
   if (peopleService === planningCenterPeopleService) {
     return peopleDashboardCache.get(
-      `${PEOPLE_DASHBOARD_CACHE_VERSION}:people-dashboard:${range}`,
+      [
+        planningCenterPeopleService.getCacheScope(),
+        PEOPLE_DASHBOARD_CACHE_VERSION,
+        "people-dashboard",
+        range,
+        `limit:${normalizeHydrationLimit(maxHydratedPeople)}`,
+      ].join(":"),
       PEOPLE_DASHBOARD_CACHE_TTL_MS,
-      () => buildPeopleDashboard({ range, peopleService })
+      () => buildPeopleDashboard({ range, peopleService, maxHydratedPeople })
     );
   }
 
-  return buildPeopleDashboard({ range, peopleService });
+  return buildPeopleDashboard({ range, peopleService, maxHydratedPeople });
 }
 
 async function buildPeopleDashboard({
   range,
   peopleService,
+  maxHydratedPeople,
 }: {
   range: PeopleDashboardRange;
   peopleService: Pick<PlanningCenterPeopleService, "getAllPeopleFromTeams" | "getPersonSchedules">;
+  maxHydratedPeople: number;
 }): Promise<PeopleDashboardData> {
   const orgTimeZone = await resolveOrganizationTimeZone();
   const now = new Date();
@@ -82,7 +93,8 @@ async function buildPeopleDashboard({
     rosterResponse.included,
     rosterResponse.teamNamesByPersonId
   );
-  const hydratedRoster = rosterPeople;
+  const hydrationLimit = normalizeHydrationLimit(maxHydratedPeople);
+  const hydratedRoster = rosterPeople.slice(0, hydrationLimit);
 
   const hydratedPeople = await mapWithConcurrency(
     hydratedRoster,
@@ -121,9 +133,14 @@ async function buildPeopleDashboard({
       blockoutRequests: 0,
       rosterPeopleCount: rosterPeople.length,
       hydratedPeopleCount: hydratedPeople.length,
-      sampled: false,
+      sampled: hydratedPeople.length < rosterPeople.length,
     },
   };
+}
+
+function normalizeHydrationLimit(limit: number) {
+  if (!Number.isFinite(limit)) return PEOPLE_DASHBOARD_HYDRATION_LIMIT;
+  return Math.max(0, Math.floor(limit));
 }
 
 function buildRosterPeople(

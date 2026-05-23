@@ -1,11 +1,13 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { postJson } from "@/lib/http/client";
+import {
+  readCachedMyScheduledPlans,
+  writeCachedMyScheduledPlans,
+  type MyScheduledPlansData,
+} from "@/lib/my-scheduled-plans-cache";
 import { queryKeys } from "@/lib/query-keys";
-
-interface MyScheduledPlansResponse {
-  planIds: string[];
-}
+import { useHydrateQueryFromCache } from "@/lib/query-cache-hydration";
 
 export function useMyScheduledPlans(planIds: string[]) {
   const normalizedPlanIds = useMemo(
@@ -13,19 +15,28 @@ export function useMyScheduledPlans(planIds: string[]) {
     [planIds]
   );
   const planIdsKey = normalizedPlanIds.join(",");
+  const queryKey = queryKeys.myScheduledPlans(planIdsKey);
+  const readCachedPlans = useCallback(
+    () => readCachedMyScheduledPlans(planIdsKey),
+    [planIdsKey]
+  );
+  useHydrateQueryFromCache(queryKey, readCachedPlans);
 
-  return useQuery<MyScheduledPlansResponse>({
-    queryKey: queryKeys.myScheduledPlans(planIdsKey),
+  return useQuery<MyScheduledPlansData>({
+    queryKey,
     queryFn: async () => {
       if (normalizedPlanIds.length === 0) {
         return { planIds: [] };
       }
 
-      return postJson<MyScheduledPlansResponse>("/api/my-scheduled-plans", {
+      const scheduledPlans = await postJson<MyScheduledPlansData>("/api/my-scheduled-plans", {
         planIds: normalizedPlanIds,
       });
+      writeCachedMyScheduledPlans(planIdsKey, scheduledPlans);
+      return scheduledPlans;
     },
     enabled: normalizedPlanIds.length > 0,
+    placeholderData: (previousPlans) => previousPlans,
     staleTime: 60 * 1000,
   });
 }

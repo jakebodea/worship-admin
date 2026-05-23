@@ -1,8 +1,15 @@
 "use client";
 
+import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getJson } from "@/lib/http/client";
+import {
+  normalizePeopleSearchQuery,
+  readCachedPeopleSearch,
+  writeCachedPeopleSearch,
+} from "@/lib/people-search-cache";
 import { queryKeys } from "@/lib/query-keys";
+import { useHydrateQueryFromCache } from "@/lib/query-cache-hydration";
 
 export interface PeopleSearchResult {
   id: string;
@@ -13,15 +20,25 @@ export interface PeopleSearchResult {
 }
 
 export function usePeopleSearch(query: string) {
-  const normalizedQuery = query.trim();
+  const normalizedQuery = normalizePeopleSearchQuery(query);
+  const queryKey = queryKeys.peopleSearch(normalizedQuery);
+  const readCachedResults = useCallback(
+    () => readCachedPeopleSearch(normalizedQuery),
+    [normalizedQuery]
+  );
+  useHydrateQueryFromCache(queryKey, readCachedResults);
 
   return useQuery<PeopleSearchResult[]>({
-    queryKey: queryKeys.peopleSearch(normalizedQuery),
-    queryFn: () =>
-      getJson<PeopleSearchResult[]>(
+    queryKey,
+    queryFn: async () => {
+      const results = await getJson<PeopleSearchResult[]>(
         `/api/people/search?q=${encodeURIComponent(normalizedQuery)}`
-      ),
+      );
+      writeCachedPeopleSearch(normalizedQuery, results);
+      return results;
+    },
     enabled: normalizedQuery.length >= 2,
+    placeholderData: (previousPeople) => previousPeople,
     staleTime: 30_000,
   });
 }
