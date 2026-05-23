@@ -146,7 +146,7 @@ export function ScheduleViewTab({
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col gap-3 sm:gap-4 lg:h-full lg:flex-row">
       <aside
-        className="hidden min-h-0 w-[min(18rem,28vw)] shrink-0 flex-col overflow-hidden rounded-xl border border-sidebar-border/40 bg-sidebar/60 text-sidebar-foreground lg:flex lg:max-h-full lg:self-start"
+        className="hidden min-h-0 w-[min(18rem,28vw)] shrink-0 flex-col overflow-hidden rounded-xl border border-sidebar-border/40 bg-sidebar/60 text-sidebar-foreground lg:flex lg:h-full lg:max-h-full lg:self-stretch"
         aria-label="Positions"
       >
         {positionPickerList}

@@ -180,12 +180,12 @@ describe("selected plan roster overlay", () => {
     ]);
   });
 
-  it("dedupes unprefixed and team-prefixed labels for the same slot", () => {
+  it("only dedupes exact labels so hyphenated position names stay intact", () => {
     const labels = mergeAssignmentLabels(
       ["Band - Bass Guitar"],
-      ["Bass Guitar"]
+      ["Bass Guitar", "Band - Bass Guitar"]
     );
 
-    expect(labels).toEqual(["Band - Bass Guitar"]);
+    expect(labels).toEqual(["Band - Bass Guitar", "Bass Guitar"]);
   });
 });
