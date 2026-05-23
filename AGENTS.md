@@ -38,6 +38,7 @@
 - Framework: Vitest (`*.test.ts` colocated in `lib/use-cases/planning-center/`).
 - Prioritize tests for transforms/matching/sorting logic and Planning Center edge cases.
 - Mock service modules (`lib/planning-center/services/*`) in use-case tests.
+- Prefer test-driven fixes for regressions: reproduce the bug or edge case with a focused failing test, then implement the smallest code change that makes it pass.
 - Run `bun run typecheck && bun run test` before opening a PR.
 
 ## Commit & Pull Request Guidelines

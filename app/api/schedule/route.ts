@@ -112,19 +112,18 @@ export async function POST(request: Request) {
 
       const createdTeamPositionName = (data.attributes.team_position_name as string | undefined) || "";
       if (selectedPositionName && createdTeamPositionName) {
-        // Planning Center may return either "Team - Position" or just "Position".
-        // Treat either as valid as long as the selected position name matches.
-        const parts = createdTeamPositionName.split(" - ");
-        const createdPositionName = parts.length > 1 ? parts.slice(1).join(" - ") : parts[0];
+        const selectedWithTeam = selectedTeamName
+          ? `${selectedTeamName} - ${selectedPositionName}`
+          : "";
         const positionMatches =
-          createdPositionName === selectedPositionName ||
-          createdTeamPositionName === selectedPositionName;
-
-        const createdTeamName = parts.length > 1 ? parts[0] : "";
+          createdTeamPositionName === selectedPositionName ||
+          createdTeamPositionName === selectedWithTeam ||
+          createdTeamPositionName.endsWith(` - ${selectedPositionName}`);
         const teamMatches =
           !selectedTeamName ||
-          !createdTeamName ||
-          createdTeamName === selectedTeamName;
+          createdTeamPositionName === selectedPositionName ||
+          createdTeamPositionName === selectedWithTeam ||
+          createdTeamPositionName.startsWith(`${selectedTeamName} - `);
 
         if (!teamMatches || !positionMatches) {
           await recordScheduleEventSafely({

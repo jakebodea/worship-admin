@@ -155,14 +155,10 @@ function normalizeRosterEntry(
   if (!rawPositionName) return null;
 
   const status = classifyRosterStatus(member.attributes.status);
-  const parsed = parseTeamAndPosition(rawPositionName);
   const relationshipTeamId = getRelationshipId(member.relationships?.team?.data);
-  const parsedTeamId = parsed?.teamName
-    ? findTeamIdByName(included, parsed.teamName)
-    : null;
-  const teamId = relationshipTeamId || parsedTeamId;
-  const teamName = getTeamName(included, teamId) || parsed?.teamName || null;
-  const positionName = parsed?.positionName || rawPositionName;
+  const teamId = relationshipTeamId;
+  const teamName = getTeamName(included, teamId);
+  const positionName = removeKnownTeamPrefix(rawPositionName, teamName);
   const personId = getRelationshipId(member.relationships?.person?.data);
   const rawPerson = personId ? peopleById.get(personId) : undefined;
   const person = personId
@@ -181,7 +177,7 @@ function normalizeRosterEntry(
     teamId,
     teamName,
     positionName,
-    label: teamName ? `${teamName} - ${positionName}` : positionName,
+    label: buildRosterLabel(rawPositionName, positionName, teamName),
     status,
     rawStatus: (member.attributes.status || "").toString(),
     declineReason: normalizeDeclineReason(member.attributes.decline_reason),
@@ -229,28 +225,24 @@ function getTeamName(included: PCResource[], teamId: string | null): string | nu
   return ((team?.attributes.name as string | undefined) || "").trim() || null;
 }
 
-function findTeamIdByName(included: PCResource[], teamName: string): string | null {
-  const normalized = teamName.trim().toLowerCase();
-  if (!normalized) return null;
-
-  const team = included.find((resource) => {
-    if (resource.type !== "Team") return false;
-    const rawTeam = resource as RawTeam;
-    return ((rawTeam.attributes.name as string | undefined) || "").trim().toLowerCase() === normalized;
-  });
-
-  return team?.id || null;
+function removeKnownTeamPrefix(positionName: string, teamName: string | null): string {
+  if (!teamName) return positionName;
+  const prefix = `${teamName} - `;
+  return positionName.startsWith(prefix)
+    ? positionName.slice(prefix.length).trim() || positionName
+    : positionName;
 }
 
-function parseTeamAndPosition(
-  teamPositionName: string
-): { teamName: string; positionName: string } | null {
-  if (!teamPositionName.includes(" - ")) return null;
-  const parts = teamPositionName.split(" - ");
-  const teamName = (parts[0] || "").trim();
-  const positionName = parts.slice(1).join(" - ").trim();
-  if (!teamName || !positionName) return null;
-  return { teamName, positionName };
+function buildRosterLabel(
+  rawPositionName: string,
+  positionName: string,
+  teamName: string | null
+): string {
+  if (!teamName) return rawPositionName;
+  const prefix = `${teamName} - `;
+  return rawPositionName.startsWith(prefix)
+    ? rawPositionName
+    : `${teamName} - ${positionName}`;
 }
 
 function getRelationshipId(
