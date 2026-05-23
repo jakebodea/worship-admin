@@ -27,6 +27,24 @@ export function normalizePlanningCenterIdentity(user: unknown): PlanningCenterId
   };
 }
 
+export async function getPlanningCenterIdentityFromAccessToken(
+  accessToken: string | null | undefined
+): Promise<PlanningCenterIdentity | null> {
+  if (!accessToken) return null;
+
+  const response = await fetch(PLANNING_CENTER_USERINFO_URL, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) return null;
+  const payload = (await response.json()) as unknown;
+  return normalizePlanningCenterIdentity(payload);
+}
+
 export async function getPlanningCenterIdentityForAccount(
   request: Request,
   accountId: string
@@ -40,19 +58,8 @@ export async function getPlanningCenterIdentityForAccount(
       },
     });
 
-    const response = await fetch(PLANNING_CENTER_USERINFO_URL, {
-      headers: {
-        Authorization: `Bearer ${token.accessToken}`,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    });
-
-    if (!response.ok) return null;
-    const payload = (await response.json()) as unknown;
-    return normalizePlanningCenterIdentity(payload);
+    return getPlanningCenterIdentityFromAccessToken(token.accessToken);
   } catch {
     return null;
   }
 }
-

@@ -22,6 +22,7 @@ import {
   LogOut,
   Moon,
   Settings2,
+  Shield,
   Sun,
   Users,
 } from "lucide-react";
@@ -643,6 +644,7 @@ function AppSidebar({
 }) {
   const pathname = usePathname();
   const [peopleNavEnabled, setPeopleNavEnabled] = useState(peoplePageEnabled);
+  const [adminNavEnabled, setAdminNavEnabled] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [sidebarPeekLocked, setSidebarPeekLocked] = useState(false);
 
@@ -667,6 +669,24 @@ function AppSidebar({
       cancelled = true;
     };
   }, [peoplePageEnabled]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void getJson<{ enabled: boolean }>("/api/admin/feature")
+      .then(({ enabled }) => {
+        if (cancelled) return;
+        setAdminNavEnabled(enabled);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAdminNavEnabled(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <>
@@ -709,6 +729,20 @@ function AppSidebar({
                       <Link href="/people">
                         <Users />
                         <span>People</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ) : null}
+                {adminNavEnabled ? (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={pathname.startsWith("/admin")}
+                      hoverCard="Admin"
+                    >
+                      <Link href="/admin">
+                        <Shield />
+                        <span>Admin</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

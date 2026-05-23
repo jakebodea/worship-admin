@@ -1,0 +1,164 @@
+import Link from "next/link";
+import { Activity, CalendarClock, ChevronRight, LogIn, UserRoundCheck, Users } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { requireAdminSession } from "@/lib/use-cases/admin/auth";
+import {
+  getAccountActivity,
+  type AdminAccountActivity,
+} from "@/lib/use-cases/admin/get-account-activity";
+
+export const dynamic = "force-dynamic";
+
+function formatDateTime(value: string | null): string {
+  if (!value) return "Never";
+
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function formatDate(value: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+  }).format(new Date(value));
+}
+
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: string | number;
+  icon: typeof Users;
+}) {
+  return (
+    <div className="rounded-md border border-border/70 bg-card px-4 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <Icon className="size-4 text-muted-foreground" />
+      </div>
+      <p className="mt-2 text-2xl font-semibold tracking-normal">{value}</p>
+    </div>
+  );
+}
+
+function getTotals(accounts: AdminAccountActivity[]) {
+  return accounts.reduce(
+    (totals, account) => ({
+      users: totals.users + 1,
+      activeSessions: totals.activeSessions + account.activeSessions,
+      loginEvents30d: totals.loginEvents30d + account.loginEvents30d,
+      loginEvents: totals.loginEvents + account.loginEvents,
+    }),
+    {
+      users: 0,
+      activeSessions: 0,
+      loginEvents30d: 0,
+      loginEvents: 0,
+    }
+  );
+}
+
+export default async function AdminPage() {
+  const session = await requireAdminSession();
+  const accounts = await getAccountActivity();
+  const totals = getTotals(accounts);
+
+  return (
+    <main className="min-h-0 flex-1 overflow-auto bg-background">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-normal">Admin</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Accounts, active sessions, and login frequency from worshipadmin.com auth activity.
+            </p>
+          </div>
+          <Badge variant="outline">Only visible to {session.user.email}</Badge>
+        </div>
+
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Accounts" value={totals.users} icon={Users} />
+          <StatCard label="Active sessions" value={totals.activeSessions} icon={UserRoundCheck} />
+          <StatCard label="Logins in 30 days" value={totals.loginEvents30d} icon={CalendarClock} />
+          <StatCard label="Total login events" value={totals.loginEvents} icon={LogIn} />
+        </section>
+
+        <section className="rounded-md border border-border/70 bg-card">
+          <div className="flex items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
+            <div>
+              <h2 className="text-sm font-medium">Accounts</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Login counts start when auth activity logging was added.
+              </p>
+            </div>
+            <Activity className="size-4 text-muted-foreground" />
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>User</TableHead>
+                <TableHead>Linked</TableHead>
+                <TableHead className="text-right">Sessions</TableHead>
+                <TableHead className="text-right">7d</TableHead>
+                <TableHead className="text-right">30d</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+                <TableHead>Last login</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead>
+                  <span className="sr-only">Details</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {accounts.map((account) => (
+                <TableRow key={account.userId}>
+                  <TableCell>
+                    <div className="flex min-w-52 flex-col">
+                      <span className="font-medium">{account.name}</span>
+                      <span className="text-xs text-muted-foreground">{account.email}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      <Badge variant="secondary">{account.linkedAccounts}</Badge>
+                      {account.providers.map((provider) => (
+                        <Badge key={provider} variant="outline">
+                          {provider}
+                        </Badge>
+                      ))}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{account.activeSessions}</TableCell>
+                  <TableCell className="text-right tabular-nums">{account.loginEvents7d}</TableCell>
+                  <TableCell className="text-right tabular-nums">{account.loginEvents30d}</TableCell>
+                  <TableCell className="text-right tabular-nums">{account.loginEvents}</TableCell>
+                  <TableCell>{formatDateTime(account.lastLoginAt)}</TableCell>
+                  <TableCell>{formatDate(account.createdAt)}</TableCell>
+                  <TableCell className="text-right">
+                    <Button asChild variant="ghost" size="icon-sm" aria-label={`Open ${account.name}`}>
+                      <Link href={`/admin/users/${account.userId}`}>
+                        <ChevronRight />
+                      </Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </section>
+      </div>
+    </main>
+  );
+}
