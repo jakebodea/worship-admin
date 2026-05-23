@@ -98,6 +98,7 @@ type PlanningCenterAccountsResponse = {
 };
 
 const SIDEBAR_WIDTH_STORAGE_KEY = "worshipadmin:sidebar-width";
+const SIDEBAR_OPEN_STORAGE_KEY = "worshipadmin:sidebar-open";
 const DEFAULT_SIDEBAR_WIDTH = 288;
 const MIN_SIDEBAR_WIDTH = 232;
 const MAX_SIDEBAR_WIDTH = 380;
@@ -118,6 +119,14 @@ function readStoredSidebarWidth(): number {
   if (typeof window === "undefined") return DEFAULT_SIDEBAR_WIDTH;
   const stored = Number(window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY));
   return Number.isFinite(stored) ? clampSidebarWidth(stored) : DEFAULT_SIDEBAR_WIDTH;
+}
+
+function readStoredSidebarOpen(): boolean {
+  if (typeof window === "undefined") return true;
+  const stored = window.localStorage.getItem(SIDEBAR_OPEN_STORAGE_KEY);
+  if (stored === "false") return false;
+  if (stored === "true") return true;
+  return true;
 }
 
 function SidebarResizeRail({
@@ -635,10 +644,12 @@ export function AppShell({
   const pathname = usePathname();
   const isAuthRoute = pathname.startsWith("/auth");
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarCollapsePreview, setSidebarCollapsePreview] = useState(false);
 
   useEffect(() => {
     setSidebarWidth(readStoredSidebarWidth());
+    setSidebarOpen(readStoredSidebarOpen());
   }, []);
 
   const handleSidebarWidthChange = useCallback((nextWidth: number) => {
@@ -647,10 +658,17 @@ export function AppShell({
     window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(clamped));
   }, []);
 
+  const handleSidebarOpenChange = useCallback((nextOpen: boolean) => {
+    setSidebarOpen(nextOpen);
+    window.localStorage.setItem(SIDEBAR_OPEN_STORAGE_KEY, String(nextOpen));
+  }, []);
+
   if (isAuthRoute) return <>{children}</>;
 
   return (
     <SidebarProvider
+      open={sidebarOpen}
+      onOpenChange={handleSidebarOpenChange}
       className="h-svh min-h-0 overflow-hidden"
       style={
         {
