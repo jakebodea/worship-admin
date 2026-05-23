@@ -1,11 +1,9 @@
-import Link from "next/link";
-import { Activity, CalendarClock, ChevronRight, LogIn, UserRoundCheck, Users } from "lucide-react";
+import { Activity, CalendarClock, LogIn, UserRoundCheck, Users } from "lucide-react";
+import { AdminAccountRow } from "@/app/admin/admin-account-row";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableHeader,
   TableRow,
@@ -123,37 +121,12 @@ export default async function AdminPage() {
             </TableHeader>
             <TableBody>
               {accounts.map((account) => (
-                <TableRow key={account.userId}>
-                  <TableCell>
-                    <div className="flex min-w-52 flex-col">
-                      <span className="font-medium">{account.name}</span>
-                      <span className="text-xs text-muted-foreground">{account.email}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      <Badge variant="secondary">{account.linkedAccounts}</Badge>
-                      {account.providers.map((provider) => (
-                        <Badge key={provider} variant="outline">
-                          {provider}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{account.activeSessions}</TableCell>
-                  <TableCell className="text-right tabular-nums">{account.loginEvents7d}</TableCell>
-                  <TableCell className="text-right tabular-nums">{account.loginEvents30d}</TableCell>
-                  <TableCell className="text-right tabular-nums">{account.loginEvents}</TableCell>
-                  <TableCell>{formatDateTime(account.lastLoginAt)}</TableCell>
-                  <TableCell>{formatDate(account.createdAt)}</TableCell>
-                  <TableCell className="text-right">
-                    <Button asChild variant="ghost" size="icon-sm" aria-label={`Open ${account.name}`}>
-                      <Link href={`/admin/users/${account.userId}`}>
-                        <ChevronRight />
-                      </Link>
-                    </Button>
-                  </TableCell>
-                </TableRow>
+                <AdminAccountRow
+                  key={account.userId}
+                  account={account}
+                  lastLoginLabel={formatDateTime(account.lastLoginAt)}
+                  createdLabel={formatDate(account.createdAt)}
+                />
               ))}
             </TableBody>
           </Table>
