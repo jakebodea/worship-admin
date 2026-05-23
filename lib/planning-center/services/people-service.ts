@@ -27,6 +27,17 @@ export class PlanningCenterPeopleService {
     );
   }
 
+  async searchPeopleByName(query: string, limit: number = 15): Promise<PCResource[]> {
+    const endpoint = this.core.buildUrl("/people/v2/people", {
+      "where[search_name]": query.trim(),
+      order: "last_name,first_name",
+      per_page: String(limit),
+    });
+    const response = await this.core.fetch<PCResource[] | PCResource>(endpoint);
+    const data = Array.isArray(response.data) ? response.data : [response.data];
+    return data.slice(0, limit);
+  }
+
   async getPersonTeamPositions(personId: string): Promise<PCResource[]> {
     return this.core.fetchAll<PCResource>(
       `/services/v2/people/${personId}/person_team_position_assignments?include=team_position`

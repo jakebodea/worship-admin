@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, Search, X } from "lucide-react";
+import { CalendarDays, X } from "lucide-react";
 import { ScheduleCandidateTile } from "@/components/schedule/schedule-candidate-tile";
+import { SomeoneElseRow } from "@/components/schedule/someone-else-row";
 import { PositionPickerList } from "@/components/schedule/position-picker-list";
 import { SectionLabel } from "@/components/schedule/section-label";
 import { SelectedPositionHeader } from "@/components/schedule/selected-position-header";
@@ -120,7 +121,6 @@ export function ScheduleViewTab({
         : exceptions,
     [exceptions, normalizedFilter]
   );
-  const totalShown = filteredActionable.length + filteredExceptions.length;
 
   const personTileKey = (person: PersonWithAvailability) =>
     [
@@ -188,35 +188,32 @@ export function ScheduleViewTab({
                     <EmptyTitle>No one assigned</EmptyTitle>
                   </EmptyHeader>
                 </Empty>
-              ) : totalShown === 0 ? (
-                <Empty className="mx-2 py-10">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <Search />
-                    </EmptyMedia>
-                    <EmptyTitle>No matches</EmptyTitle>
-                  </EmptyHeader>
-                </Empty>
               ) : (
                 <div className="flex min-h-0 flex-col gap-4 pb-4 sm:gap-5 sm:pr-2">
-                  {filteredActionable.length > 0 ? (
-                    <section className="flex flex-col gap-2">
-                      <div className="overflow-hidden rounded-xl border border-border/40 bg-card/30 divide-y divide-border/25">
-                        {filteredActionable.map((person) => (
-                          <ScheduleCandidateTile
-                            key={personTileKey(person)}
-                            person={person}
-                            serviceTypeId={selectedServiceTypeId}
-                            planId={selectedPlanId}
-                            teamId={selectedTeam}
-                            positionId={selectedPosition}
-                            onScheduleSuccess={onScheduleSuccess}
-                            onScheduleError={onScheduleError}
-                          />
-                        ))}
-                      </div>
-                    </section>
-                  ) : null}
+                  <section className="flex flex-col gap-2">
+                    <div className="overflow-hidden rounded-xl border border-border/40 bg-card/30 divide-y divide-border/25">
+                      {filteredActionable.map((person) => (
+                        <ScheduleCandidateTile
+                          key={personTileKey(person)}
+                          person={person}
+                          serviceTypeId={selectedServiceTypeId}
+                          planId={selectedPlanId}
+                          teamId={selectedTeam}
+                          positionId={selectedPosition}
+                          onScheduleSuccess={onScheduleSuccess}
+                          onScheduleError={onScheduleError}
+                        />
+                      ))}
+                      <SomeoneElseRow
+                        serviceTypeId={selectedServiceTypeId}
+                        planId={selectedPlanId}
+                        teamId={selectedTeam}
+                        positionId={selectedPosition}
+                        onScheduleSuccess={onScheduleSuccess}
+                        onScheduleError={onScheduleError}
+                      />
+                    </div>
+                  </section>
 
                   {filteredExceptions.length > 0 ? (
                     <section className="flex flex-col gap-2">
