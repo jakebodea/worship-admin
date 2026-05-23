@@ -21,6 +21,7 @@ const bodySchema = z.object({
   planId: z.string().min(1),
   teamId: z.string().min(1),
   positionId: z.string().min(1),
+  oneOff: z.boolean().optional().default(false),
 });
 
 export async function POST(request: Request) {
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
         throw new ApiError(400, "INVALID_REQUEST", "Invalid request", parsed.error.issues);
       }
       requestBody = parsed.data;
-      const { serviceTypeId, personId, planId, teamId, positionId } = requestBody;
+      const { serviceTypeId, personId, planId, teamId, positionId, oneOff } = requestBody;
 
       const { data: teamPositions, included } =
         await planningCenterCatalogService.getServiceTypeTeamPositionsWithTeams(serviceTypeId);
@@ -90,15 +91,17 @@ export async function POST(request: Request) {
       const selectedTeamName = (selectedTeam?.attributes?.name as string | undefined) || "";
       const selectedPositionName = selectedPosition.attributes?.name || "";
 
-      const personAssignments =
-        await planningCenterPeopleService.getPersonTeamPositionAssignments(personId);
-      const hasPositionAssignment = personAssignments.data.some((assignment) => {
-        const rel = assignment.relationships?.team_position?.data;
-        const assignmentPositionId = Array.isArray(rel) ? rel[0]?.id : rel?.id;
-        return assignmentPositionId === positionId;
-      });
-      if (!hasPositionAssignment) {
-        throw new ApiError(400, "INVALID_REQUEST", "Person is not assigned to the selected team position");
+      if (!oneOff) {
+        const personAssignments =
+          await planningCenterPeopleService.getPersonTeamPositionAssignments(personId);
+        const hasPositionAssignment = personAssignments.data.some((assignment) => {
+          const rel = assignment.relationships?.team_position?.data;
+          const assignmentPositionId = Array.isArray(rel) ? rel[0]?.id : rel?.id;
+          return assignmentPositionId === positionId;
+        });
+        if (!hasPositionAssignment) {
+          throw new ApiError(400, "INVALID_REQUEST", "Person is not assigned to the selected team position");
+        }
       }
 
       const data = await planningCenterPeopleService.createPlanPerson(
@@ -163,7 +166,7 @@ export async function POST(request: Request) {
       }
 
       log.info(
-        { serviceTypeId, personId, planId, teamId, positionId, planPersonId: data.id },
+        { serviceTypeId, personId, planId, teamId, positionId, planPersonId: data.id, oneOff },
         "Person scheduled successfully"
       );
 
@@ -174,6 +177,7 @@ export async function POST(request: Request) {
         input: requestBody,
         metadata: {
           planPersonId: data.id,
+          oneOff,
         },
       });
 

@@ -47,6 +47,7 @@ export function useSchedulePlanPerson({
   canSchedule,
   onScheduleSuccess,
   onScheduleError,
+  oneOff = false,
 }: {
   serviceTypeId: string | null | undefined;
   planId: string | null | undefined;
@@ -55,6 +56,7 @@ export function useSchedulePlanPerson({
   canSchedule: boolean;
   onScheduleSuccess?: () => void;
   onScheduleError?: (message: string) => void;
+  oneOff?: boolean;
 }) {
   const [isScheduling, setIsScheduling] = useState(false);
   const [scheduleSuccess, setScheduleSuccess] = useState(false);
@@ -79,6 +81,7 @@ export function useSchedulePlanPerson({
         planId,
         teamId,
         positionId,
+        oneOff,
       });
       setScheduleSuccess(true);
       onScheduleSuccess?.();
