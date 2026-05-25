@@ -2,6 +2,8 @@
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { CalendarDays, X } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { PlanPersonStatusMenu, type PlanPersonStatusValue } from "@/components/schedule/plan-person-status-menu";
 import { ScheduleCandidateTile } from "@/components/schedule/schedule-candidate-tile";
 import { SomeoneElseRow } from "@/components/schedule/someone-else-row";
 import { PositionPickerList } from "@/components/schedule/position-picker-list";
@@ -26,7 +28,9 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { partitionPeopleForRecommendationStrip } from "@/lib/use-cases/planning-center/people/recommendation-strip-order";
 import type { SlotRef } from "@/components/schedule/types";
-import type { PersonWithAvailability, TeamPositionGroup } from "@/lib/types";
+import { getInitials } from "@/lib/format/initials";
+import type { FilledPositionPerson, PersonWithAvailability, TeamPositionGroup } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 interface ScheduleViewTabProps {
   teamPositionsLoading: boolean;
@@ -43,6 +47,7 @@ interface ScheduleViewTabProps {
   onToggleTeam: (teamId: string) => void;
   onSelectSlot: (slot: SlotRef) => void;
   onPreviewSlot?: (slot: SlotRef) => void;
+  onAddPosition?: (team: { teamId: string; teamName: string }, positionName: string) => SlotRef | null;
   onScheduleSuccess: () => void;
   onScheduleError: (message: string) => void;
 }
@@ -62,6 +67,7 @@ export function ScheduleViewTab({
   onToggleTeam,
   onSelectSlot,
   onPreviewSlot,
+  onAddPosition,
   onScheduleSuccess,
   onScheduleError,
 }: ScheduleViewTabProps) {
@@ -102,6 +108,10 @@ export function ScheduleViewTab({
   }, [selectedTeam, selectedPosition, teamPositionGroups]);
 
   const hasSlots = !!teamPositionGroups && teamPositionGroups.length > 0;
+  const selectedSlotUsesCustomPosition =
+    selectedSlotInfo?.position.source === "plan_member" ||
+    selectedSlotInfo?.position.source === "custom";
+  const selectedFilledPeople = selectedSlotInfo?.position.filledPeople ?? [];
 
   const handleSelectSlot = (slot: SlotRef) => {
     onSelectSlot(slot);
@@ -149,6 +159,7 @@ export function ScheduleViewTab({
       onToggleTeam={onToggleTeam}
       onSelect={handleSelectSlot}
       onPreviewSlot={onPreviewSlot}
+      onAddPosition={onAddPosition}
     />
   );
 
@@ -189,14 +200,43 @@ export function ScheduleViewTab({
                   ))}
                 </div>
               ) : !people || people.length === 0 ? (
-                <Empty className="mx-2 py-10">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <CalendarDays />
-                    </EmptyMedia>
-                    <EmptyTitle>No one assigned</EmptyTitle>
-                  </EmptyHeader>
-                </Empty>
+                <div className="overflow-hidden rounded-xl border border-border/40 bg-card/30 divide-y divide-border/25">
+                  {selectedSlotUsesCustomPosition && selectedFilledPeople.length > 0 ? (
+                    selectedFilledPeople.map((person) => (
+                      <TemporaryFilledPersonRow
+                        key={`${selectedPosition}:${person.planPersonId}`}
+                        person={person}
+                        serviceTypeId={selectedServiceTypeId}
+                        planId={selectedPlanId}
+                        teamId={selectedTeam}
+                        positionId={selectedPosition}
+                        onSuccess={onScheduleSuccess}
+                        onError={onScheduleError}
+                      />
+                    ))
+                  ) : (
+                    <Empty className="mx-2 py-8">
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <CalendarDays />
+                        </EmptyMedia>
+                        <EmptyTitle>
+                          {selectedSlotUsesCustomPosition ? "No one scheduled" : "No roster candidates"}
+                        </EmptyTitle>
+                      </EmptyHeader>
+                    </Empty>
+                  )}
+                  <SomeoneElseRow
+                    serviceTypeId={selectedServiceTypeId}
+                    planId={selectedPlanId}
+                    teamId={selectedTeam}
+                    positionId={selectedPosition}
+                    teamName={selectedSlotInfo?.teamName}
+                    positionName={selectedSlotInfo?.positionName}
+                    onScheduleSuccess={onScheduleSuccess}
+                    onScheduleError={onScheduleError}
+                  />
+                </div>
               ) : (
                 <div
                   className="relative flex min-h-0 flex-col gap-4 pb-4 sm:gap-5 sm:pr-2"
@@ -224,6 +264,7 @@ export function ScheduleViewTab({
                           positionId={selectedPosition}
                           teamName={selectedSlotInfo?.teamName}
                           positionName={selectedSlotInfo?.positionName}
+                          oneOff={selectedSlotUsesCustomPosition}
                           onScheduleSuccess={onScheduleSuccess}
                           onScheduleError={onScheduleError}
                         />
@@ -260,6 +301,7 @@ export function ScheduleViewTab({
                             positionId={selectedPosition}
                             teamName={selectedSlotInfo?.teamName}
                             positionName={selectedSlotInfo?.positionName}
+                            oneOff={selectedSlotUsesCustomPosition}
                             onScheduleSuccess={onScheduleSuccess}
                             onScheduleError={onScheduleError}
                           />
@@ -309,5 +351,64 @@ export function ScheduleViewTab({
         </Dialog>
       </div>
     </div>
+  );
+}
+
+function TemporaryFilledPersonRow({
+  person,
+  serviceTypeId,
+  planId,
+  teamId,
+  positionId,
+  onSuccess,
+  onError,
+}: {
+  person: FilledPositionPerson;
+  serviceTypeId?: string | null;
+  planId?: string | null;
+  teamId?: string | null;
+  positionId?: string | null;
+  onSuccess?: () => void;
+  onError?: (message: string) => void;
+}) {
+  const currentStatus: PlanPersonStatusValue =
+    person.status === "confirmed" ? "confirmed" : "scheduled";
+
+  return (
+    <article className="group/row grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/30 sm:py-3">
+      <Avatar
+        className={cn(
+          "size-8 sm:size-9",
+          person.status === "confirmed" &&
+            "ring-2 ring-emerald-500/80 ring-offset-2 ring-offset-background"
+        )}
+      >
+        <AvatarImage src={person.photoThumbnailUrl || undefined} alt={person.name} />
+        <AvatarFallback className="bg-muted text-xs font-medium">
+          {getInitials(person.name)}
+        </AvatarFallback>
+      </Avatar>
+
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium leading-tight text-foreground sm:text-base">
+          {person.name}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {person.status === "confirmed" ? "Confirmed" : "Pending"}
+        </p>
+      </div>
+
+      <PlanPersonStatusMenu
+        planPersonId={person.planPersonId}
+        serviceTypeId={serviceTypeId}
+        personId={person.id}
+        planId={planId}
+        teamId={teamId}
+        positionId={positionId}
+        currentStatus={currentStatus}
+        onSuccess={onSuccess}
+        onError={onError}
+      />
+    </article>
   );
 }

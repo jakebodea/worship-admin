@@ -17,6 +17,7 @@ import { createPlanItemsQueryOptions } from "@/hooks/use-plan-items";
 import { usePlans } from "@/hooks/use-plans";
 import { useServiceTypes } from "@/hooks/use-service-types";
 import { useTeamPositions } from "@/hooks/use-team-positions";
+import type { TeamPosition, TeamPositionGroup } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface RouteSelectionIds {
@@ -35,6 +36,10 @@ const COLLAPSED_TEAMS_STORAGE_KEY_PREFIX = "schedule-collapsed-teams:";
 const COLLAPSED_TEAMS_STORAGE_MAP_KEY = `${COLLAPSED_TEAMS_STORAGE_KEY_PREFIX}by-plan`;
 const SLOT_PEOPLE_PREFETCH_DELAY_MS = 180;
 type SearchParamReader = Pick<URLSearchParams, "get">;
+
+function buildPlanMemberPositionId(teamId: string, positionName: string): string {
+  return `plan-member-position:${teamId}:${encodeURIComponent(positionName.trim().toLowerCase())}`;
+}
 
 function parseSearchSelection(searchParams: SearchParamReader, view: DashboardView): RouteSelectionIds {
   const teamId = searchParams.get("teamId");
@@ -206,7 +211,8 @@ export function DashboardPage({
   const selectedPosition = routeIds.positionId ?? null;
   const validatedTeam = selectedTeamGroup?.teamId ?? null;
   const validatedPosition = selectedPositionObj?.id ?? null;
-  const canLoadSelectedSlotPeople = Boolean(selectedPlan?.sortDate && selectedPosition);
+  const selectedPositionUsesRoster = !selectedPositionObj?.source || selectedPositionObj.source === "team_position";
+  const canLoadSelectedSlotPeople = Boolean(selectedPlan?.sortDate && selectedPosition && selectedPositionUsesRoster);
   const selectedPlanId = routePlanId;
   const collapsedTeams = selectedPlanId ? (collapsedTeamsByPlan[selectedPlanId] ?? {}) : {};
   const hasPlanUrlSelection = Boolean(routeServiceTypeId && routePlanId);
@@ -240,6 +246,10 @@ export function DashboardPage({
   const prefetchSlotPeople = useCallback(
     (slot: SlotRef) => {
       if (!routeServiceTypeId || !selectedPlan?.id) return;
+      const slotPosition = teamPositionGroups
+        ?.find((group) => group.teamId === slot.teamId)
+        ?.positions.find((position) => position.id === slot.positionId);
+      if (slotPosition?.source && slotPosition.source !== "team_position") return;
       void queryClient.prefetchQuery(
         createPeopleQueryOptions(
           routeServiceTypeId,
@@ -250,7 +260,7 @@ export function DashboardPage({
         )
       );
     },
-    [queryClient, routeServiceTypeId, selectedPlan?.id, selectedPlan?.sortDate]
+    [queryClient, routeServiceTypeId, selectedPlan?.id, selectedPlan?.sortDate, teamPositionGroups]
   );
 
   const handleSlotPreview = useCallback(
@@ -366,6 +376,69 @@ export function DashboardPage({
     });
   };
 
+  const handleAddCustomPosition = (
+    team: { teamId: string; teamName: string },
+    positionName: string
+  ): SlotRef | null => {
+    if (!routeServiceTypeId || !routePlanId) return null;
+    const trimmedName = positionName.trim();
+    if (!trimmedName) return null;
+
+    const existingPosition = teamPositionGroups
+      ?.find((group) => group.teamId === team.teamId)
+      ?.positions.find(
+        (position) => position.name.trim().toLowerCase() === trimmedName.toLowerCase()
+      );
+    if (existingPosition) {
+      return {
+        teamId: team.teamId,
+        teamName: team.teamName,
+        positionId: existingPosition.id,
+        positionName: existingPosition.name,
+        source: existingPosition.source,
+      };
+    }
+
+    const positionId = buildPlanMemberPositionId(team.teamId, trimmedName);
+    const slot: SlotRef = {
+      teamId: team.teamId,
+      teamName: team.teamName,
+      positionId,
+      positionName: trimmedName,
+      source: "custom",
+    };
+
+    queryClient.setQueryData<TeamPositionGroup[]>(
+      ["team-positions", routeServiceTypeId, routePlanId],
+      (groups) => {
+        if (!groups) return groups;
+        return groups.map((group) => {
+          if (group.teamId !== team.teamId) return group;
+          const duplicate = group.positions.some(
+            (position) => position.name.trim().toLowerCase() === trimmedName.toLowerCase()
+          );
+          if (duplicate) return group;
+
+          const position: TeamPosition = {
+            id: positionId,
+            name: trimmedName,
+            teamId: team.teamId,
+            teamName: team.teamName,
+            source: "custom",
+            neededCount: 0,
+          };
+
+          return {
+            ...group,
+            positions: [...group.positions, position].sort((a, b) => a.name.localeCompare(b.name)),
+          };
+        });
+      }
+    );
+
+    return slot;
+  };
+
   const toggleTeamCollapsed = (teamId: string) => {
     if (!selectedPlanId) return;
     setCollapsedTeamsByPlan((prev) => {
@@ -453,14 +526,15 @@ export function DashboardPage({
                 collapsedTeams={collapsedTeams}
                 selectedTeam={selectedTeam}
                 selectedPosition={selectedPosition}
-                people={people}
-                peopleLoading={peopleLoading}
-                peoplePlaceholder={peoplePlaceholder}
+                people={selectedPositionUsesRoster ? people : []}
+                peopleLoading={selectedPositionUsesRoster ? peopleLoading : false}
+                peoplePlaceholder={selectedPositionUsesRoster ? peoplePlaceholder : false}
                 selectedServiceTypeId={routeServiceTypeId}
                 selectedPlanId={routePlanId}
                 onToggleTeam={toggleTeamCollapsed}
                 onSelectSlot={handleSlotSelect}
                 onPreviewSlot={handleSlotPreview}
+                onAddPosition={handleAddCustomPosition}
                 onScheduleSuccess={handleScheduleSuccess}
                 onScheduleError={handleScheduleError}
               />

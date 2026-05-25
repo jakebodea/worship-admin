@@ -3,4 +3,5 @@ export interface SlotRef {
   teamName: string;
   positionId: string;
   positionName: string;
+  source?: "team_position" | "plan_member" | "custom";
 }
