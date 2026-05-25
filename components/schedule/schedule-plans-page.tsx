@@ -5,10 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ServicePlanTableSelector } from "@/components/service-plan-table-selector";
 
 function buildPlanWorkspaceUrl(serviceTypeId: string, planId: string): string {
-  const searchParams = new URLSearchParams();
-  searchParams.set("serviceTypeId", serviceTypeId);
-  searchParams.set("planId", planId);
-  return `/schedule/plan?${searchParams.toString()}`;
+  return `/services/${encodeURIComponent(serviceTypeId)}/plans/${encodeURIComponent(planId)}/assign`;
 }
 
 export function SchedulePlansPage() {
@@ -20,7 +17,7 @@ export function SchedulePlansPage() {
     if (!searchQuery) return;
 
     startTransition(() => {
-      router.replace("/schedule");
+      router.replace("/services");
     });
   }, [router, searchQuery]);
 

@@ -71,6 +71,8 @@
   --sidebar-accent-foreground: oklch(0.28 0.02 152);
   --sidebar-border: oklch(0.84 0.016 152);
   --sidebar-ring: oklch(0.61 0.06 154);
+  --sidebar-hover-surface: color-mix(in oklch, var(--sidebar) 34%, oklch(0.965 0.003 152) 66%);
+  --sidebar-active-surface: color-mix(in oklch, var(--sidebar) 12%, oklch(0.992 0.002 152) 88%);
 }
 
 @layer base {
@@ -94,6 +96,151 @@
   }
 }
 
+/* App-level sidebar state hierarchy. Keep shadcn sidebar primitives structural. */
+[data-sidebar="menu-button"],
+[data-sidebar="menu-sub-button"] {
+  color: color-mix(in oklch, var(--sidebar-foreground) 68%, transparent);
+  transition-property: width, height, padding, color, background-color, box-shadow;
+}
+
+[data-sidebar="menu-button"] > svg,
+[data-sidebar="menu-sub-button"] > svg {
+  color: color-mix(in oklch, var(--sidebar-foreground) 55%, transparent);
+}
+
+[data-sidebar="menu-button"]:hover,
+[data-sidebar="menu-sub-button"]:hover,
+[data-sidebar="menu-button"][data-state="open"]:hover {
+  background: var(--sidebar-hover-surface);
+  color: color-mix(in oklch, var(--sidebar-foreground) 86%, transparent);
+}
+
+[data-sidebar="menu-button"]:hover > svg,
+[data-sidebar="menu-sub-button"]:hover > svg {
+  color: color-mix(in oklch, var(--sidebar-foreground) 75%, transparent);
+}
+
+[data-sidebar="menu-button"]:active,
+[data-sidebar="menu-sub-button"]:active {
+  background: color-mix(in oklch, var(--sidebar-active-surface) 70%, var(--sidebar-hover-surface));
+  color: var(--sidebar-foreground);
+}
+
+[data-sidebar="menu-button"][data-active="true"],
+[data-sidebar="menu-sub-button"][data-active="true"] {
+  background: var(--sidebar-active-surface);
+  color: var(--sidebar-foreground);
+  box-shadow:
+    0 1px 2px 0 rgb(0 0 0 / 0.07),
+    0 0 0 1px color-mix(in oklch, var(--sidebar-border) 62%, white 38%);
+}
+
+[data-sidebar="menu-button"][data-active="true"] > svg,
+[data-sidebar="menu-sub-button"][data-active="true"] > svg {
+  color: var(--sidebar-foreground);
+}
+
+[data-sidebar="menu-action"] {
+  color: color-mix(in oklch, var(--sidebar-foreground) 68%, transparent);
+}
+
+[data-sidebar="menu-action"]:hover {
+  background: var(--sidebar-hover-surface);
+  color: color-mix(in oklch, var(--sidebar-foreground) 86%, transparent);
+}
+
+[data-sidebar="menu-badge"] {
+  color: var(--sidebar-foreground);
+}
+
+.sidebar-tab-group {
+  transform-origin: top left;
+  overflow: hidden;
+  transition:
+    background-color 170ms ease,
+    border-color 170ms ease,
+    box-shadow 170ms ease,
+    opacity 170ms ease,
+    transform 170ms ease;
+}
+
+.sidebar-tab-group[data-state="open"] {
+  animation: sidebar-tab-group-in 180ms ease-out both;
+}
+
+.sidebar-tab-group[data-state="closed"] {
+  animation: sidebar-tab-group-out 170ms ease-in both;
+  pointer-events: none;
+}
+
+.sidebar-tab-group [data-sidebar="menu-sub-item"] {
+  animation: sidebar-tab-item-in 180ms ease-out both;
+}
+
+.sidebar-tab-group [data-sidebar="menu-sub-item"]:nth-child(2) {
+  animation-delay: 22ms;
+}
+
+.sidebar-tab-group [data-sidebar="menu-sub-item"]:nth-child(3) {
+  animation-delay: 44ms;
+}
+
+.sidebar-tab-group[data-state="closed"] [data-sidebar="menu-sub-item"] {
+  animation: sidebar-tab-item-out 130ms ease-in both;
+}
+
+@keyframes sidebar-tab-group-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes sidebar-tab-group-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+}
+
+@keyframes sidebar-tab-item-in {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes sidebar-tab-item-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-tab-group,
+  .sidebar-tab-group [data-sidebar="menu-sub-item"] {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 .dark {
   /*
    * Softer charcoal grays — lighter surfaces than flat near-black rails.
@@ -108,6 +255,8 @@
   --sidebar-accent: oklch(0.288 0.014 154);
   --sidebar-accent-foreground: oklch(0.922 0.01 154);
   --sidebar-ring: oklch(0.58 0.055 154);
+  --sidebar-hover-surface: color-mix(in oklch, var(--sidebar) 78%, white 10%);
+  --sidebar-active-surface: color-mix(in oklch, var(--sidebar) 68%, white 18%);
 
   --background: oklch(0.245 0.01 154);
   --foreground: oklch(0.935 0.008 154);

@@ -12,7 +12,7 @@ This app helps teams schedule people into open positions for specific plans by c
 - availability and recent scheduling history context
 - one-click scheduling into Planning Center
 
-The root route (`/`) redirects to `/schedule`.
+The root route (`/`) redirects to `/services`.
 
 ## Setup
 
@@ -84,7 +84,9 @@ All routes are server-side and use authenticated Planning Center access where re
 app/
   api/                       # Next.js API routes
   auth/page.tsx              # Sign-in route
-  schedule/page.tsx          # Main scheduling UI route
+  services/page.tsx          # Service plan selection route
+  services/[serviceTypeId]/plans/[planId]/[view]/page.tsx
+                             # Main plan workspace route
 
 components/
   dashboard-page.tsx         # Main schedule workflow UI

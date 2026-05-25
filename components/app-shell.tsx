@@ -16,17 +16,19 @@ import {
   CalendarDays,
   Check,
   ChevronDown,
+  Columns3,
   Keyboard,
   Laptop,
+  ListMusic,
   Loader2,
   LogOut,
   Moon,
   Settings2,
   Shield,
   Sun,
+  UserPlus,
   Users,
 } from "lucide-react";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTheme } from "next-themes";
 import { authClient } from "@/lib/auth-client";
 import {
@@ -95,6 +97,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { SidebarTabGroup, type SidebarTabGroupItem } from "@/components/sidebar-tab-group";
 
 type PlanningCenterAccount = {
   id: string;
@@ -279,45 +282,72 @@ function SidebarResizeRail({
   );
 }
 
-type TopBarView = "schedule" | "lineup" | "plan";
+type TopBarView = "assign" | "lineup" | "plan";
+type ServicesSidebarKey = "services" | TopBarView;
 
-function parseTopBarView(value: string | null): TopBarView {
+function parseTopBarView(value: string | undefined): TopBarView {
   if (value === "lineup") return "lineup";
   if (value === "plan") return "plan";
-  return "schedule";
+  return "assign";
+}
+
+function getTopBarViewLabel(view: TopBarView): string {
+  if (view === "lineup") return "Lineup";
+  if (view === "plan") return "Plan";
+  return "Assign";
+}
+
+const planViewOptions: TopBarView[] = ["assign", "lineup", "plan"];
+
+function getServicesPlanPath(pathname: string): {
+  serviceTypeId: string;
+  planId: string;
+  view: TopBarView;
+} | null {
+  const match = /^\/services\/([^/]+)\/plans\/([^/]+)\/([^/]+)$/.exec(pathname);
+  if (!match) return null;
+
+  const view = parseTopBarView(match[3]);
+  if (match[3] !== view) return null;
+
+  return {
+    serviceTypeId: match[1],
+    planId: match[2],
+    view,
+  };
+}
+
+function buildScheduleViewUrl(
+  pathname: string,
+  searchParams: Pick<URLSearchParams, "toString">,
+  view: TopBarView
+): string {
+  const planPath = getServicesPlanPath(pathname);
+  if (!planPath) return "/services";
+
+  const params = new URLSearchParams(searchParams.toString());
+  const query = params.toString();
+  const path = `/services/${planPath.serviceTypeId}/plans/${planPath.planId}/${view}`;
+  return query ? `${path}?${query}` : path;
 }
 
 function getTopLevelPageLabel(pathname: string) {
   if (pathname.startsWith("/admin")) return "Admin";
   if (pathname.startsWith("/people")) return "People";
-  return "Schedule";
+  return "Services";
 }
 
 function AppTopBar() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const hasPlan = pathname === "/schedule/plan";
+  const planPath = getServicesPlanPath(pathname);
+  const hasPlan = Boolean(planPath);
+  const planView = planPath?.view ?? "assign";
+  const planViewLabel = getTopBarViewLabel(planView);
   const isPersonDetail = /^\/people\/[^/]+/.test(pathname);
   const isAdminUserDetail = /^\/admin\/users\/[^/]+/.test(pathname);
   const pageLabel = getTopLevelPageLabel(pathname);
-  const view = parseTopBarView(searchParams.get("view"));
-
-  const handleViewChange = useCallback(
-    (next: string) => {
-      const parsed = parseTopBarView(next);
-      const params = new URLSearchParams(searchParams.toString());
-      if (parsed === "schedule") {
-        params.delete("view");
-      } else {
-        params.set("view", parsed);
-      }
-      const query = params.toString();
-      const url = query ? `${pathname}?${query}` : pathname;
-      startTransition(() => router.replace(url));
-    },
-    [pathname, router, searchParams]
-  );
 
   return (
     <div className="flex w-full min-w-0 items-center gap-2 sm:gap-3">
@@ -342,39 +372,58 @@ function AppTopBar() {
               </BreadcrumbItem>
             </>
           ) : (
-            <BreadcrumbItem>
+            <>
+              <BreadcrumbItem>
+                {hasPlan ? (
+                  <BreadcrumbLink asChild>
+                    <Link href="/services">Services</Link>
+                  </BreadcrumbLink>
+                ) : (
+                  <BreadcrumbPage>{pageLabel}</BreadcrumbPage>
+                )}
+              </BreadcrumbItem>
               {hasPlan ? (
-                <BreadcrumbLink asChild>
-                  <Link href="/schedule">Schedule</Link>
-                </BreadcrumbLink>
-              ) : (
-                <BreadcrumbPage>{pageLabel}</BreadcrumbPage>
-              )}
-            </BreadcrumbItem>
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                        >
+                          <span>{planViewLabel}</span>
+                          <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-36">
+                        {planViewOptions.map((view) => (
+                          <DropdownMenuItem
+                            key={view}
+                            onSelect={() => {
+                              startTransition(() => {
+                                router.replace(buildScheduleViewUrl(pathname, searchParams, view));
+                              });
+                            }}
+                          >
+                            <span>{getTopBarViewLabel(view)}</span>
+                            {planView === view ? <Check className="ml-auto size-4" aria-hidden /> : null}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </BreadcrumbItem>
+                </>
+              ) : null}
+            </>
           )}
         </BreadcrumbList>
       </Breadcrumb>
-      {hasPlan ? (
-        <Tabs value={view} onValueChange={handleViewChange} className="ml-auto min-w-0 overflow-x-auto">
-          <TabsList className="h-8">
-            <TabsTrigger value="schedule" className="px-2 text-xs sm:px-3">
-              Schedule
-            </TabsTrigger>
-            <TabsTrigger value="lineup" className="px-2 text-xs sm:px-3">
-              Lineup
-            </TabsTrigger>
-            <TabsTrigger value="plan" className="px-2 text-xs sm:px-3">
-              Plan
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      ) : null}
     </div>
   );
 }
 
 function AppTopBarFallback({ pathname }: { pathname: string }) {
-  const hasPlan = pathname === "/schedule/plan";
   const isPersonDetail = /^\/people\/[^/]+/.test(pathname);
   const isAdminUserDetail = /^\/admin\/users\/[^/]+/.test(pathname);
   const pageLabel = getTopLevelPageLabel(pathname);
@@ -400,21 +449,6 @@ function AppTopBarFallback({ pathname }: { pathname: string }) {
           )}
         </BreadcrumbList>
       </Breadcrumb>
-      {hasPlan ? (
-        <Tabs value="schedule" className="ml-auto min-w-0 overflow-x-auto">
-          <TabsList className="h-8 opacity-60">
-            <TabsTrigger value="schedule" className="px-2 text-xs sm:px-3">
-              Schedule
-            </TabsTrigger>
-            <TabsTrigger value="lineup" className="px-2 text-xs sm:px-3">
-              Lineup
-            </TabsTrigger>
-            <TabsTrigger value="plan" className="px-2 text-xs sm:px-3">
-              Plan
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      ) : null}
     </div>
   );
 }
@@ -645,6 +679,63 @@ function SidebarAccountPanel({
   );
 }
 
+function ServicesSidebarMenuItem() {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const planPath = getServicesPlanPath(pathname);
+  const isPlanWorkspace = Boolean(planPath);
+  const activeScheduleView = planPath?.view ?? "assign";
+  const servicesRootItem: SidebarTabGroupItem<ServicesSidebarKey> = {
+    key: "services",
+    label: "Services",
+    href: "/services",
+    icon: CalendarDays,
+  };
+  const servicesViewItems: SidebarTabGroupItem<ServicesSidebarKey>[] = [
+    servicesRootItem,
+    {
+      key: "assign",
+      label: "Assign",
+      href: buildScheduleViewUrl(pathname, searchParams, "assign"),
+      icon: UserPlus,
+    },
+    {
+      key: "lineup",
+      label: "Lineup",
+      href: buildScheduleViewUrl(pathname, searchParams, "lineup"),
+      icon: Columns3,
+    },
+    {
+      key: "plan",
+      label: "Plan",
+      href: buildScheduleViewUrl(pathname, searchParams, "plan"),
+      icon: ListMusic,
+    },
+  ];
+  const servicesActiveKey: ServicesSidebarKey | null =
+    pathname === "/services" ? "services" : isPlanWorkspace ? activeScheduleView : null;
+
+  return (
+    <SidebarTabGroup
+      activeKey={servicesActiveKey}
+      fallbackItem={servicesRootItem}
+      isGrouped={isPlanWorkspace}
+      items={isPlanWorkspace ? servicesViewItems : [servicesRootItem]}
+    />
+  );
+}
+
+function ServicesSidebarMenuItemFallback() {
+  return (
+    <SidebarMenuButton asChild hoverCard="Services">
+      <Link href="/services">
+        <CalendarDays />
+        <span>Services</span>
+      </Link>
+    </SidebarMenuButton>
+  );
+}
+
 function AppSidebar({
   trailingChrome,
   collapsePreview = false,
@@ -720,16 +811,9 @@ function AppSidebar({
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname.startsWith("/schedule")}
-                    hoverCard="Schedule"
-                  >
-                    <Link href="/schedule">
-                      <CalendarDays />
-                      <span>Schedule</span>
-                    </Link>
-                  </SidebarMenuButton>
+                  <Suspense fallback={<ServicesSidebarMenuItemFallback />}>
+                    <ServicesSidebarMenuItem />
+                  </Suspense>
                 </SidebarMenuItem>
                 {peopleNavEnabled ? (
                   <SidebarMenuItem>

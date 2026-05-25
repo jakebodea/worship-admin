@@ -35,7 +35,7 @@ export function LineupTab({
 }: LineupTabProps) {
   if (isLoading) {
     return (
-      <ScrollArea className="max-h-[70vh] w-full xl:h-full xl:max-h-none">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="flex min-w-max items-start gap-6 pb-3 pr-4">
           {Array.from({ length: 4 }).map((_, index) => (
             <Skeleton key={index} className="h-80 w-[420px]" />
@@ -54,7 +54,7 @@ export function LineupTab({
   }
 
   return (
-    <ScrollArea className="max-h-[70vh] w-full xl:h-full xl:max-h-none">
+    <ScrollArea className="min-h-0 flex-1">
       <div className="relative" aria-busy={isPlaceholderData}>
         {isPlaceholderData ? (
           <div className="sticky left-0 top-0 z-10 mb-2 w-fit rounded-md border border-border/60 bg-background/95 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur">

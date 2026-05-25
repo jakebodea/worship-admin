@@ -66,7 +66,7 @@ function dashboard(overrides: Partial<PeopleDashboardData> = {}): PeopleDashboar
             positionName: "Acoustic Guitar",
             serviceTypeName: "Agape Worship Services",
             status: "U",
-            planUrl: "/schedule/plan?planId=plan-1",
+            planUrl: "/services/service-type-1/plans/plan-1/lineup",
           },
         ],
       },
