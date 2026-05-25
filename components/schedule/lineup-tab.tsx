@@ -148,6 +148,7 @@ function PositionAccordionItem({
   const needed = position.neededCount ?? 0;
   const total = scheduledCount + needed;
   const people = position.filledPeople ?? [];
+  const isTemporaryPosition = !!position.source && position.source !== "team_position";
   const slot = {
     teamId,
     teamName,
@@ -160,7 +161,9 @@ function PositionAccordionItem({
       <AccordionHeader className="rounded-none px-1 py-0">
         <AccordionTrigger className="min-w-0 flex-1 gap-1 rounded-none py-2 hover:no-underline">
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="truncate text-sm font-medium">{position.name}</span>
+            <span className={cn("truncate text-sm font-medium", isTemporaryPosition && "italic")}>
+              {position.name}
+            </span>
             <span className="text-[11px] text-muted-foreground tabular-nums">
               {needed > 0 ? `${scheduledCount}/${total}` : `${scheduledCount}`}
             </span>

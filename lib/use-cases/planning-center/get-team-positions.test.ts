@@ -341,4 +341,60 @@ describe("getNeededTeamPositionsForPlan", () => {
     expect(drums?.filledPendingCount).toBe(1);
     expect(drums?.filledPeople?.[0]?.name).toBe("Unknown person");
   });
+
+  it("adds filled plan-member-only positions that are not in service type team positions", async () => {
+    mocks.getServiceTypeTeamPositionsWithTeams.mockResolvedValue({
+      data: [teamPosition("tp-leader-am", "team-leaders", "Leader-Am")],
+      included: [team("team-leaders", "Leaders and Pastor")],
+    });
+    mocks.getServiceTypePlanNeededPositionsWithTeams.mockResolvedValue({
+      data: [],
+      included: [],
+    });
+    mocks.getPlanTeamMembers.mockResolvedValue({
+      data: [
+        planTeamMember({
+          id: "pp-youth",
+          teamId: "team-leaders",
+          teamPositionName: "Youth Leader-Am",
+          status: "C",
+          personId: "person-1",
+        }),
+      ],
+      included: [
+        team("team-leaders", "Leaders and Pastor"),
+        person("person-1", "Jake", "Bodea"),
+      ],
+    });
+
+    const result = await getNeededTeamPositionsForPlan("st-1", "plan-1");
+
+    expect(result).toEqual([
+      {
+        teamId: "team-leaders",
+        teamName: "Leaders and Pastor",
+        positions: [
+          {
+            id: "plan-member-position:team-leaders:youth%20leader-am",
+            name: "Youth Leader-Am",
+            teamId: "team-leaders",
+            teamName: "Leaders and Pastor",
+            source: "plan_member",
+            neededCount: 0,
+            filledConfirmedCount: 1,
+            filledPeople: [
+              {
+                id: "person-1",
+                planPersonId: "pp-youth",
+                name: "Jake Bodea",
+                status: "confirmed",
+                rawStatus: "C",
+                photoThumbnailUrl: null,
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
 });

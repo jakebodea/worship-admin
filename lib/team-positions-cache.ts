@@ -108,6 +108,12 @@ function isTeamPosition(value: unknown): value is TeamPosition {
     typeof position.name === "string" &&
     typeof position.teamId === "string" &&
     isOptionalString(position.teamName) &&
+    (
+      position.source === undefined ||
+      position.source === "team_position" ||
+      position.source === "plan_member" ||
+      position.source === "custom"
+    ) &&
     isOptionalNumber(position.neededCount) &&
     isOptionalNumber(position.filledPendingCount) &&
     isOptionalNumber(position.filledConfirmedCount) &&

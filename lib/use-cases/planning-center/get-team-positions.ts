@@ -130,6 +130,7 @@ export async function getNeededTeamPositionsForPlan(
   }
 
   applyPlanTeamMemberSummary(planSchedulingContext.rosterEntries, positionsByTeamAndName);
+  addPlanMemberOnlyPositions(planSchedulingContext.rosterEntries, teamMap, positionsByTeamAndName);
   addFilledPositionsToGroups(teamMap, positionsByTeamAndName);
 
   const groupedPositions: TeamPositionGroup[] = Array.from(teamMap.values());
@@ -199,6 +200,41 @@ function addFilledPositionsToGroups(
   }
 }
 
+function addPlanMemberOnlyPositions(
+  rosterEntries: PlanRosterEntry[],
+  teamMap: Map<string, TeamPositionGroup>,
+  positionsByTeamAndName: Map<string, TeamPosition>
+) {
+  for (const rosterEntry of rosterEntries) {
+    if (!rosterEntry.teamId || !rosterEntry.teamName || isDeclinedRosterStatus(rosterEntry.status)) {
+      continue;
+    }
+
+    const key = buildTeamPositionKey(rosterEntry.teamId, rosterEntry.positionName);
+    if (positionsByTeamAndName.has(key)) continue;
+
+    const slot: TeamPosition = {
+      id: buildPlanMemberOnlyPositionId(rosterEntry.teamId, rosterEntry.positionName),
+      name: rosterEntry.positionName,
+      teamId: rosterEntry.teamId,
+      teamName: rosterEntry.teamName,
+      source: "plan_member",
+      neededCount: 0,
+    };
+
+    positionsByTeamAndName.set(key, slot);
+    applyPlanTeamMemberSummary([rosterEntry], positionsByTeamAndName);
+
+    if (!teamMap.has(rosterEntry.teamId)) {
+      teamMap.set(rosterEntry.teamId, {
+        teamId: rosterEntry.teamId,
+        teamName: rosterEntry.teamName,
+        positions: [],
+      });
+    }
+  }
+}
+
 function getTeamInfo(
   position: RawTeamPosition,
   included: PCResource[]
@@ -230,6 +266,10 @@ function getTeamInfo(
 
 function buildTeamPositionKey(teamId: string, positionName: string): string {
   return buildSlotKey(teamId, positionName);
+}
+
+function buildPlanMemberOnlyPositionId(teamId: string, positionName: string): string {
+  return `plan-member-position:${teamId}:${encodeURIComponent(positionName.trim().toLowerCase())}`;
 }
 
 function applyPlanTeamMemberSummary(

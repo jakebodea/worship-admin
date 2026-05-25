@@ -44,6 +44,7 @@ export interface ScheduleCandidateTileProps {
   positionId?: string | null;
   teamName?: string | null;
   positionName?: string | null;
+  oneOff?: boolean;
   onScheduleSuccess?: () => void;
   onScheduleError?: (message: string) => void;
 }
@@ -56,6 +57,7 @@ export function ScheduleCandidateTile({
   positionId,
   teamName,
   positionName,
+  oneOff = false,
   onScheduleSuccess,
   onScheduleError,
 }: ScheduleCandidateTileProps) {
@@ -78,6 +80,7 @@ export function ScheduleCandidateTile({
     canSchedule: canScheduleForHook,
     onScheduleSuccess,
     onScheduleError,
+    oneOff,
   });
 
   const isScheduled = fromServerScheduled || scheduleSuccess;

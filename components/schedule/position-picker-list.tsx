@@ -24,6 +24,7 @@ export function PositionPickerList({
   onToggleTeam,
   onSelect,
   onPreviewSlot,
+  onAddPosition,
 }: {
   teamPositionsLoading: boolean;
   teamPositionsPlaceholder: boolean;
@@ -34,6 +35,7 @@ export function PositionPickerList({
   onToggleTeam: (teamId: string) => void;
   onSelect: (slot: SlotRef) => void;
   onPreviewSlot?: (slot: SlotRef) => void;
+  onAddPosition?: (team: { teamId: string; teamName: string }, positionName: string) => SlotRef | null;
 }) {
   const skeletonWidths = ["78%", "66%", "84%", "58%", "72%", "62%", "88%", "70%"];
 
@@ -72,6 +74,7 @@ export function PositionPickerList({
                   onToggle={onToggleTeam}
                   onSelect={onSelect}
                   onPreview={onPreviewSlot}
+                  onAddPosition={onAddPosition}
                 />
               ))}
             </div>

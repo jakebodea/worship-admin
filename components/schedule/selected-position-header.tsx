@@ -4,6 +4,7 @@ import { ChevronsUpDown, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { TeamPosition } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 export function SelectedPositionHeader({
   info,
@@ -20,12 +21,19 @@ export function SelectedPositionHeader({
   filter: string;
   onFilterChange: (next: string) => void;
 }) {
+  const isTemporaryPosition = !!info?.position.source && info.position.source !== "team_position";
+
   return (
     <div className="flex shrink-0 flex-col gap-2 px-1 sm:gap-3">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-        <p className="min-w-0 truncate text-xl font-semibold leading-tight tracking-tight sm:text-2xl">
-          {info?.positionName ?? "Position"}
-        </p>
+        <div className="flex min-w-0 items-center gap-2">
+          <p className={cn(
+            "min-w-0 truncate text-xl font-semibold leading-tight tracking-tight sm:text-2xl",
+            isTemporaryPosition && "italic"
+          )}>
+            {info?.positionName ?? "Position"}
+          </p>
+        </div>
         <Button
           type="button"
           variant="outline"

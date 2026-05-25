@@ -98,17 +98,23 @@ export async function POST(request: Request) {
       const selectedPosition = teamPositions.find((p) => p.id === positionId) as
         | (RawTeamPosition & { relationships?: { team?: { data?: { id: string } } } })
         | undefined;
-      if (!selectedPosition) {
+      if (!selectedPosition && (!oneOff || !requestBody.positionName)) {
         throw new ApiError(400, "INVALID_REQUEST", "Selected position was not found for this service type");
       }
-      const selectedPositionTeamId = selectedPosition.relationships?.team?.data?.id;
-      if (!selectedPositionTeamId || selectedPositionTeamId !== teamId) {
+      const selectedPositionTeamId = selectedPosition?.relationships?.team?.data?.id;
+      if (selectedPosition && (!selectedPositionTeamId || selectedPositionTeamId !== teamId)) {
         throw new ApiError(400, "INVALID_REQUEST", "Selected position does not belong to selected team");
       }
 
       const selectedTeam = findIncluded(included, "Team", teamId) as RawTeam | undefined;
-      const selectedTeamName = (selectedTeam?.attributes?.name as string | undefined) || "";
-      const selectedPositionName = selectedPosition.attributes?.name || "";
+      if (!selectedPosition && !selectedTeam) {
+        throw new ApiError(400, "INVALID_REQUEST", "Selected team was not found for this service type");
+      }
+      const selectedTeamName =
+        requestBody.teamName ||
+        (selectedTeam?.attributes?.name as string | undefined) ||
+        "";
+      const selectedPositionName = selectedPosition?.attributes?.name || requestBody.positionName || "";
 
       if (!oneOff) {
         const hasPositionAssignment = personAssignments?.data.some((assignment) => {

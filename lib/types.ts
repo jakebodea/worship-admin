@@ -87,6 +87,7 @@ export interface TeamPosition {
   name: string;
   teamId: string;
   teamName?: string;
+  source?: "team_position" | "plan_member" | "custom";
   neededCount?: number;
   filledPendingCount?: number;
   filledConfirmedCount?: number;
