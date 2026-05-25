@@ -232,11 +232,7 @@ function buildFallbackPlanTime(plan: PCResource): PCResource {
 }
 
 function buildPlanWorkspaceUrl(serviceTypeId: string, planId: string) {
-  const searchParams = new URLSearchParams();
-  searchParams.set("serviceTypeId", serviceTypeId);
-  searchParams.set("planId", planId);
-  searchParams.set("view", "lineup");
-  return `/schedule/plan?${searchParams.toString()}`;
+  return `/services/${encodeURIComponent(serviceTypeId)}/plans/${encodeURIComponent(planId)}/lineup`;
 }
 
 function buildMonthlyTrend(

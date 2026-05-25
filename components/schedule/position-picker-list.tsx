@@ -8,7 +8,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { SidebarMenuSkeleton } from "@/components/ui/sidebar";
 import { TeamSlotsCollapsible } from "@/components/schedule/team-slots-collapsible";
 import type { SlotRef } from "@/components/schedule/types";
@@ -39,7 +38,7 @@ export function PositionPickerList({
   const skeletonWidths = ["78%", "66%", "84%", "58%", "72%", "62%", "88%", "70%"];
 
   return (
-    <ScrollArea className="min-h-0 flex-1">
+    <div className="min-h-0 flex-1 overflow-auto">
       <div className="flex flex-col">
         {teamPositionsLoading ? (
           Array.from({ length: 8 }).map((_, index) => (
@@ -79,6 +78,6 @@ export function PositionPickerList({
           </div>
         )}
       </div>
-    </ScrollArea>
+    </div>
   );
 }

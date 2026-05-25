@@ -20,35 +20,27 @@ import { useTeamPositions } from "@/hooks/use-team-positions";
 import { cn } from "@/lib/utils";
 
 interface RouteSelectionIds {
-  serviceTypeId: string | null;
-  planId: string | null;
   teamId: string | null;
   positionId: string | null;
   view: DashboardView;
 }
 
-type DashboardView = "schedule" | "lineup" | "plan";
+type NavigationSelectionIds = RouteSelectionIds & {
+  serviceTypeId: string | null;
+  planId: string | null;
+};
+
+export type DashboardView = "assign" | "lineup" | "plan";
 const COLLAPSED_TEAMS_STORAGE_KEY_PREFIX = "schedule-collapsed-teams:";
 const COLLAPSED_TEAMS_STORAGE_MAP_KEY = `${COLLAPSED_TEAMS_STORAGE_KEY_PREFIX}by-plan`;
 const SLOT_PEOPLE_PREFETCH_DELAY_MS = 180;
 type SearchParamReader = Pick<URLSearchParams, "get">;
 
-function parseDashboardView(value: string | null): DashboardView {
-  if (value === "plan") return "plan";
-  if (value === "lineup") return "lineup";
-  return "schedule";
-}
-
-function parseSearchSelection(searchParams: SearchParamReader): RouteSelectionIds {
-  const serviceTypeId = searchParams.get("serviceTypeId");
-  const planId = searchParams.get("planId");
+function parseSearchSelection(searchParams: SearchParamReader, view: DashboardView): RouteSelectionIds {
   const teamId = searchParams.get("teamId");
   const positionId = searchParams.get("positionId");
-  const view = parseDashboardView(searchParams.get("view"));
 
   return {
-    serviceTypeId: serviceTypeId ?? null,
-    planId: planId ?? null,
     teamId: teamId ?? null,
     positionId: positionId ?? null,
     view,
@@ -61,16 +53,16 @@ function buildScheduleUrl({
   teamId,
   positionId,
   view,
-}: RouteSelectionIds): string {
+}: NavigationSelectionIds): string {
+  if (!serviceTypeId || !planId) return "/services";
+
   const searchParams = new URLSearchParams();
-  if (serviceTypeId) searchParams.set("serviceTypeId", serviceTypeId);
-  if (planId) searchParams.set("planId", planId);
   if (teamId) searchParams.set("teamId", teamId);
   if (positionId) searchParams.set("positionId", positionId);
-  if (view !== "schedule") searchParams.set("view", view);
 
   const query = searchParams.toString();
-  return query ? `/schedule/plan?${query}` : "/schedule/plan";
+  const path = `/services/${encodeURIComponent(serviceTypeId)}/plans/${encodeURIComponent(planId)}/${view}`;
+  return query ? `${path}?${query}` : path;
 }
 
 function formatPlanDate(date: Date | string | undefined) {
@@ -124,7 +116,15 @@ function buildPlanSubtitle(
   return withoutServiceTypePrefix;
 }
 
-export function DashboardPage() {
+export function DashboardPage({
+  serviceTypeId,
+  planId,
+  view,
+}: {
+  serviceTypeId: string;
+  planId: string;
+  view: DashboardView;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -154,14 +154,14 @@ export function DashboardPage() {
     }
   });
 
-  const routeIds = useMemo(() => parseSearchSelection(searchParams), [searchParams]);
+  const routeIds = useMemo(() => parseSearchSelection(searchParams, view), [searchParams, view]);
   const currentUrl = useMemo(() => {
     const query = searchParams.toString();
     return query ? `${pathname}?${query}` : pathname;
   }, [pathname, searchParams]);
 
   const navigateTo = useCallback(
-    (nextIds: RouteSelectionIds, method: "push" | "replace" = "push") => {
+    (nextIds: NavigationSelectionIds, method: "push" | "replace" = "push") => {
       const nextUrl = buildScheduleUrl(nextIds);
       if (nextUrl === currentUrl) return;
 
@@ -177,15 +177,15 @@ export function DashboardPage() {
   );
 
   const { data: serviceTypes, isLoading: serviceTypesLoading } = useServiceTypes();
+  const routeServiceTypeId = serviceTypeId;
+  const routePlanId = planId;
   const selectedServiceType =
-    serviceTypes?.find((serviceType) => serviceType.id === routeIds.serviceTypeId) ?? null;
-  const routeServiceTypeId = routeIds.serviceTypeId ?? null;
-  const routePlanId = routeIds.planId ?? null;
+    serviceTypes?.find((serviceType) => serviceType.id === routeServiceTypeId) ?? null;
 
   const { data: plans, isLoading: plansLoading, isFetching: plansFetching } = usePlans(
     routeServiceTypeId
   );
-  const selectedPlan = plans?.find((plan) => plan.id === routeIds.planId) ?? null;
+  const selectedPlan = plans?.find((plan) => plan.id === routePlanId) ?? null;
 
   const {
     data: teamPositionGroups,
@@ -209,9 +209,9 @@ export function DashboardPage() {
   const canLoadSelectedSlotPeople = Boolean(selectedPlan?.sortDate && selectedPosition);
   const selectedPlanId = routePlanId;
   const collapsedTeams = selectedPlanId ? (collapsedTeamsByPlan[selectedPlanId] ?? {}) : {};
-  const hasPlanUrlSelection = Boolean(routeIds.serviceTypeId && routeIds.planId);
+  const hasPlanUrlSelection = Boolean(routeServiceTypeId && routePlanId);
   const hasSelectedPlanMetadata = Boolean(selectedServiceType && selectedPlan);
-  const activeView: DashboardView = hasPlanUrlSelection ? routeIds.view : "schedule";
+  const activeView: DashboardView = hasPlanUrlSelection ? routeIds.view : "assign";
 
   const {
     data: people,
@@ -277,8 +277,8 @@ export function DashboardPage() {
   );
 
   useEffect(() => {
-    const hasServiceTypeInUrl = !!routeIds.serviceTypeId;
-    const hasPlanInUrl = !!routeIds.planId;
+    const hasServiceTypeInUrl = !!routeServiceTypeId;
+    const hasPlanInUrl = !!routePlanId;
     const hasTeamOrPositionInUrl = !!routeIds.teamId || !!routeIds.positionId;
 
     if (hasServiceTypeInUrl && serviceTypesLoading) return;
@@ -292,21 +292,23 @@ export function DashboardPage() {
       positionId: validatedPosition,
       view: activeView,
     });
+    const liveUrl = window.location.search
+      ? `${window.location.pathname}${window.location.search}`
+      : window.location.pathname;
 
-    if (currentUrl !== canonicalUrl) {
+    if (liveUrl !== canonicalUrl) {
       router.replace(canonicalUrl);
     }
   }, [
-    currentUrl,
     plansFetching,
     plansLoading,
-    routeIds.planId,
     routeIds.positionId,
-    routeIds.serviceTypeId,
     routeIds.teamId,
-    routeIds.view,
     router,
     activeView,
+    hasPlanUrlSelection,
+    routePlanId,
+    routeServiceTypeId,
     selectedPlan?.id,
     validatedPosition,
     selectedServiceType?.id,
@@ -360,7 +362,7 @@ export function DashboardPage() {
       planId: routePlanId,
       teamId: slot.teamId,
       positionId: slot.positionId,
-      view: "schedule",
+      view: "assign",
     });
   };
 
@@ -436,12 +438,12 @@ export function DashboardPage() {
 
         {!hasPlanUrlSelection ? (
           <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
-            <span>No plan selected · use the Schedule breadcrumb to choose one.</span>
+            <span>No plan selected · use Services to choose one.</span>
           </div>
         ) : (
           <Tabs value={activeView} className="flex min-h-0 flex-1 flex-col">
             <TabsContent
-              value="schedule"
+              value="assign"
               className="mt-0 flex min-h-0 flex-1 flex-col"
             >
               <ScheduleViewTab
