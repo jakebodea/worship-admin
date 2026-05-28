@@ -73,4 +73,15 @@ describe("PlanningCenterCoreClient", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it("allows successful empty write responses", async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response(null, { status: 204 })));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const client = new PlanningCenterCoreClient();
+
+    await expect(client.fetch("/services/v2/service_types/st-1/plan_times/time-1", {
+      method: "DELETE",
+    })).resolves.toBeUndefined();
+  });
 });

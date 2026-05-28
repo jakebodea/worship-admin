@@ -210,7 +210,7 @@ export class PlanningCenterCoreClient {
     const method = (options.method ?? "GET").toUpperCase();
     if (method !== "GET" || options.body) {
       const response = await this.request(endpoint, options);
-      return response.json();
+      return parseJsonResponse<T>(response);
     }
 
     const key = buildJsonFetchDedupeKey({
@@ -226,9 +226,7 @@ export class PlanningCenterCoreClient {
       return cloneJson(await existingRequest);
     }
 
-    const request = this.request(endpoint, options).then(
-      async (response) => response.json() as Promise<PCApiResponse<T>>
-    );
+    const request = this.request(endpoint, options).then(parseJsonResponse<T>);
     inFlightJsonFetches.set(key, request);
 
     try {
@@ -311,6 +309,19 @@ export class PlanningCenterCoreClient {
 
     return { data: allData, included: allIncluded };
   }
+}
+
+async function parseJsonResponse<T>(response: Response): Promise<PCApiResponse<T>> {
+  if (response.status === 204) {
+    return undefined as unknown as PCApiResponse<T>;
+  }
+
+  const text = await response.text();
+  if (!text.trim()) {
+    return undefined as unknown as PCApiResponse<T>;
+  }
+
+  return JSON.parse(text) as PCApiResponse<T>;
 }
 
 function buildApiError(
