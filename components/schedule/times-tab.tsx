@@ -1,18 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Clock3, Save } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { DateTimeEditor } from "@/components/date-time-editor";
-import {
-  TimeAssignmentSelector,
-  type TimeAssignmentValue,
-} from "@/components/time-assignment-selector";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { PlanTimeCard } from "@/components/schedule/plan-time-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/sonner";
 import { useOrganizationTimeZone } from "@/hooks/use-organization-timezone";
@@ -44,11 +34,6 @@ interface EditablePlanTime {
   assignedPlanPersonIds: string[];
 }
 
-const timeTypeLabels: Record<PlanTimeType, string> = {
-  service: "Service",
-  rehearsal: "Rehearsal",
-  other: "Other",
-};
 const emptyPlanTimes: PlanTime[] = [];
 
 function buildEditablePlanTime(
@@ -157,12 +142,6 @@ function buildPlanTimePatch(
   };
 }
 
-function summarizeTimeRange(edit: EditablePlanTime): string {
-  if (!edit.startTime) return "No start time";
-  if (!edit.endTime) return edit.startTime;
-  return `${edit.startTime} to ${edit.endTime}`;
-}
-
 function getNeededPositionIdsForTime(
   groups: TeamPositionGroup[] | undefined,
   planTimeId: string
@@ -187,26 +166,6 @@ function getPlanPersonIdsForTime(
   );
 }
 
-function getAssignmentValue(edit: EditablePlanTime): TimeAssignmentValue {
-  return {
-    teamIds: edit.assignedTeamIds,
-    positionIds: edit.assignedPositionIds,
-    neededPositionIds: edit.assignedNeededPositionIds,
-    planPersonIds: edit.assignedPlanPersonIds,
-  };
-}
-
-function getSecondaryScopeLabels(planTime: PlanTime): string[] {
-  const labels: string[] = [];
-  if (planTime.assignedPositionIds.length > 0) {
-    labels.push(`${planTime.assignedPositionIds.length} positions`);
-  }
-  if (planTime.splitTeamRehearsalAssignmentIds.length > 0) {
-    labels.push(`${planTime.splitTeamRehearsalAssignmentIds.length} split rules`);
-  }
-  return labels;
-}
-
 export function TimesTab({ serviceTypeId, planId, seriesId }: TimesTabProps) {
   const queryClient = useQueryClient();
   const timeZone = useOrganizationTimeZone();
@@ -217,36 +176,13 @@ export function TimesTab({ serviceTypeId, planId, seriesId }: TimesTabProps) {
   const [edits, setEdits] = useState<Record<string, EditablePlanTime>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
 
-  const groupedPlanTimes = useMemo(() => {
-    const groups: Record<PlanTimeType, PlanTime[]> = {
-      rehearsal: [],
-      service: [],
-      other: [],
-    };
-    for (const planTime of planTimes) {
-      groups[planTime.timeType].push(planTime);
-    }
-    return groups;
-  }, [planTimes]);
-
   useEffect(() => {
     setEdits(buildInitialEdits(planTimes, timeZone, teamPositionsQuery.data));
   }, [planTimes, teamPositionsQuery.data, timeZone]);
 
-  const updateEdit = (id: string, patch: Partial<EditablePlanTime>) => {
-    setEdits((current) => ({
-      ...current,
-      [id]: {
-        ...current[id],
-        ...patch,
-      },
-    }));
-  };
-
-  const savePlanTime = async (planTime: PlanTime) => {
+  const persistPlanTime = async (planTime: PlanTime, edit: EditablePlanTime) => {
     if (!serviceTypeId || !planId) return;
-    const edit = edits[planTime.id];
-    if (!edit || !isValidEdit(edit)) return;
+    if (!hasChanges(planTime, edit, timeZone, teamPositionsQuery.data) || !isValidEdit(edit)) return;
 
     setSavingId(planTime.id);
     try {
@@ -265,12 +201,38 @@ export function TimesTab({ serviceTypeId, planId, seriesId }: TimesTabProps) {
             query.queryKey[1] === serviceTypeId,
         }),
       ]);
-      toast.success("Time updated");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to update time");
     } finally {
       setSavingId(null);
     }
+  };
+
+  const updateEdit = (id: string, patch: Partial<EditablePlanTime>) => {
+    setEdits((current) => ({
+      ...current,
+      [id]: {
+        ...current[id],
+        ...patch,
+      },
+    }));
+  };
+
+  const commitEdit = (planTime: PlanTime, patch: Partial<EditablePlanTime>) => {
+    setEdits((current) => {
+      const nextEdit = { ...current[planTime.id], ...patch };
+      void persistPlanTime(planTime, nextEdit);
+      return {
+        ...current,
+        [planTime.id]: nextEdit,
+      };
+    });
+  };
+
+  const persistIfChanged = (planTime: PlanTime) => {
+    const edit = edits[planTime.id];
+    if (!edit) return;
+    void persistPlanTime(planTime, edit);
   };
 
   if (isLoading) {
@@ -293,139 +255,26 @@ export function TimesTab({ serviceTypeId, planId, seriesId }: TimesTabProps) {
 
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col overflow-auto", isPlaceholderData && "opacity-70")}>
-      <div className="flex flex-col gap-7 pb-6">
-        {(["rehearsal", "service", "other"] as const).map((timeType) => {
-          const group = groupedPlanTimes[timeType];
-          if (group.length === 0) return null;
+      <div className="flex flex-col gap-2.5 pb-6">
+        {planTimes.map((planTime) => {
+          const edit = edits[planTime.id];
+          if (!edit) return null;
+          const valid = isValidEdit(edit);
+          const saving = savingId === planTime.id;
 
           return (
-            <section key={timeType} className="flex flex-col gap-3">
-              <div className="flex items-center gap-3">
-                <h2 className="text-base font-semibold">{timeTypeLabels[timeType]}</h2>
-                <Badge variant="outline">{group.length}</Badge>
-              </div>
-
-              <div className="grid gap-3">
-                {group.map((planTime) => {
-                  const edit = edits[planTime.id];
-                  if (!edit) return null;
-                  const changed = hasChanges(planTime, edit, timeZone, teamPositionsQuery.data);
-                  const valid = isValidEdit(edit);
-                  const saving = savingId === planTime.id;
-                  const secondaryScopeLabels = getSecondaryScopeLabels(planTime);
-
-                  return (
-                    <div key={planTime.id} className="rounded-md border bg-card p-4 shadow-xs">
-                      <div className="grid gap-4 xl:grid-cols-[minmax(260px,0.9fr)_minmax(520px,1.7fr)_minmax(280px,1fr)_auto] xl:items-end">
-                        <div className="flex min-w-0 flex-col gap-3">
-                          <div className="flex min-w-0 items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="truncate text-base font-medium">{edit.name || "Untitled time"}</p>
-                              <p className="flex items-center gap-1 text-sm text-muted-foreground">
-                                <Clock3 data-icon="inline-start" />
-                                {summarizeTimeRange(edit)}
-                              </p>
-                            </div>
-                            {changed ? <Badge variant="secondary">Unsaved</Badge> : null}
-                          </div>
-
-                          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
-                            <Field className="gap-1.5">
-                              <FieldLabel htmlFor={`plan-time-name-${planTime.id}`}>Name</FieldLabel>
-                              <Input
-                                id={`plan-time-name-${planTime.id}`}
-                                value={edit.name}
-                                onChange={(event) => updateEdit(planTime.id, { name: event.target.value })}
-                              />
-                            </Field>
-
-                            <Field className="gap-1.5">
-                              <FieldLabel htmlFor={`plan-time-type-${planTime.id}`}>Type</FieldLabel>
-                              <NativeSelect
-                                id={`plan-time-type-${planTime.id}`}
-                                value={edit.timeType}
-                                wrapperClassName="w-full"
-                                onChange={(event) =>
-                                  updateEdit(planTime.id, { timeType: event.target.value as PlanTimeType })
-                                }
-                              >
-                                <NativeSelectOption value="rehearsal">Rehearsal</NativeSelectOption>
-                                <NativeSelectOption value="service">Service</NativeSelectOption>
-                                <NativeSelectOption value="other">Other</NativeSelectOption>
-                              </NativeSelect>
-                            </Field>
-                          </div>
-                        </div>
-
-                        <div className="grid gap-3 lg:grid-cols-2">
-                          <DateTimeEditor
-                            id={`plan-time-start-${planTime.id}`}
-                            label="Start"
-                            dateValue={edit.startDate}
-                            timeValue={edit.startTime}
-                            invalid={!edit.startDate || !edit.startTime}
-                            onDateChange={(startDate) =>
-                              updateEdit(planTime.id, {
-                                startDate,
-                                endDate: edit.endDate || startDate,
-                              })
-                            }
-                            onTimeChange={(startTime) => updateEdit(planTime.id, { startTime })}
-                          />
-
-                          <DateTimeEditor
-                            id={`plan-time-end-${planTime.id}`}
-                            label="End"
-                            dateValue={edit.endDate}
-                            timeValue={edit.endTime}
-                            invalid={!valid}
-                            onDateChange={(endDate) => updateEdit(planTime.id, { endDate })}
-                            onTimeChange={(endTime) => updateEdit(planTime.id, { endTime })}
-                          />
-                        </div>
-
-                        <Field className="gap-1.5">
-                          <FieldLabel>Applies to</FieldLabel>
-                          <TimeAssignmentSelector
-                            groups={teamPositionsQuery.data ?? []}
-                            value={getAssignmentValue(edit)}
-                            onChange={(assignment) =>
-                              updateEdit(planTime.id, {
-                                assignedTeamIds: assignment.teamIds,
-                                assignedPositionIds: assignment.positionIds,
-                                assignedNeededPositionIds: assignment.neededPositionIds,
-                                assignedPlanPersonIds: assignment.planPersonIds,
-                              })
-                            }
-                            disabled={teamPositionsQuery.isLoading}
-                          />
-                          {secondaryScopeLabels.length > 0 ? (
-                            <div className="flex flex-wrap gap-1">
-                              {secondaryScopeLabels.map((label) => (
-                                <Badge key={label} variant="outline" className="font-normal">
-                                  {label}
-                                </Badge>
-                              ))}
-                            </div>
-                          ) : null}
-                        </Field>
-
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="xl:mb-px"
-                          disabled={!changed || !valid || saving}
-                          onClick={() => void savePlanTime(planTime)}
-                        >
-                          <Save data-icon="inline-start" />
-                          {saving ? "Saving" : "Save"}
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
+            <PlanTimeCard
+              key={planTime.id}
+              planTimeId={planTime.id}
+              edit={edit}
+              valid={valid}
+              saving={saving}
+              assignmentGroups={teamPositionsQuery.data ?? []}
+              assignmentsLoading={teamPositionsQuery.isLoading}
+              onEditChange={(patch) => updateEdit(planTime.id, patch)}
+              onCommitEdit={(patch) => commitEdit(planTime, patch)}
+              onPersist={() => persistIfChanged(planTime)}
+            />
           );
         })}
       </div>
