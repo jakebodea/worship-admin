@@ -235,7 +235,12 @@ function addPlanMemberOnlyPositions(
     }
 
     const key = buildTeamPositionKey(rosterEntry.teamId, rosterEntry.positionName);
-    if (positionsByTeamAndName.has(key)) continue;
+    const existingSlot = positionsByTeamAndName.get(key);
+    if (existingSlot?.source === "plan_member") {
+      applyPlanTeamMemberSummary([rosterEntry], positionsByTeamAndName);
+      continue;
+    }
+    if (existingSlot) continue;
 
     const slot: TeamPosition = {
       id: buildPlanMemberOnlyPositionId(rosterEntry.teamId, rosterEntry.positionName),

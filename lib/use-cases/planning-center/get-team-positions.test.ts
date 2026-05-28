@@ -425,4 +425,48 @@ describe("getNeededTeamPositionsForPlan", () => {
       },
     ]);
   });
+
+  it("keeps multiple people in the same plan-member-only position", async () => {
+    mocks.getServiceTypeTeamPositionsWithTeams.mockResolvedValue({
+      data: [teamPosition("tp-leader-am", "team-leaders", "Leader-Am")],
+      included: [team("team-leaders", "Leaders and Pastor")],
+    });
+    mocks.getServiceTypePlanNeededPositionsWithTeams.mockResolvedValue({
+      data: [],
+      included: [],
+    });
+    mocks.getPlanTeamMembers.mockResolvedValue({
+      data: [
+        planTeamMember({
+          id: "pp-jake",
+          teamId: "team-leaders",
+          teamPositionName: "Youth Leader-Am",
+          status: "C",
+          personId: "person-1",
+        }),
+        planTeamMember({
+          id: "pp-casey",
+          teamId: "team-leaders",
+          teamPositionName: "Youth Leader-Am",
+          status: "U",
+          personId: "person-2",
+        }),
+      ],
+      included: [
+        team("team-leaders", "Leaders and Pastor"),
+        person("person-1", "Jake", "Bodea"),
+        person("person-2", "Casey", "Smith"),
+      ],
+    });
+
+    const result = await getNeededTeamPositionsForPlan("st-1", "plan-1");
+    const youthLeader = result[0]?.positions[0];
+
+    expect(youthLeader?.filledConfirmedCount).toBe(1);
+    expect(youthLeader?.filledPendingCount).toBe(1);
+    expect(youthLeader?.filledPeople?.map((entry) => entry.name)).toEqual([
+      "Jake Bodea",
+      "Casey Smith",
+    ]);
+  });
 });

@@ -22,6 +22,7 @@ interface PersonRehearsalTimesPopoverProps {
   planTimes: PlanTime[];
   serviceTypeId: string | null;
   planId: string | null;
+  seriesId: string | null;
 }
 
 function formatPlanTimeScheduleLabel(planTime: PlanTime, timeZone: string): string {
@@ -51,6 +52,7 @@ export function PersonRehearsalTimesPopover({
   planTimes,
   serviceTypeId,
   planId,
+  seriesId,
 }: PersonRehearsalTimesPopoverProps) {
   const queryClient = useQueryClient();
   const timeZone = useOrganizationTimeZone();
@@ -74,7 +76,7 @@ export function PersonRehearsalTimesPopover({
       });
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: queryKeys.teamPositions(serviceTypeId, planId, null),
+          queryKey: queryKeys.teamPositions(serviceTypeId, planId, seriesId),
         }),
         queryClient.invalidateQueries({
           queryKey: queryKeys.planTimes(serviceTypeId, planId),

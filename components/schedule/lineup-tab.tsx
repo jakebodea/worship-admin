@@ -25,6 +25,7 @@ interface LineupTabProps {
   isPlaceholderData: boolean;
   serviceTypeId: string | null;
   planId: string | null;
+  seriesId: string | null;
   planTimes: PlanTime[];
   onSelectPosition: (slot: SlotRef) => void;
   onPreviewPosition?: (slot: SlotRef) => void;
@@ -36,6 +37,7 @@ export function LineupTab({
   isPlaceholderData,
   serviceTypeId,
   planId,
+  seriesId,
   planTimes,
   onSelectPosition,
   onPreviewPosition,
@@ -80,6 +82,7 @@ export function LineupTab({
               group={group}
               serviceTypeId={serviceTypeId}
               planId={planId}
+              seriesId={seriesId}
               planTimes={planTimes}
               onSelectPosition={onSelectPosition}
               onPreviewPosition={onPreviewPosition}
@@ -95,6 +98,7 @@ function TeamColumn({
   group,
   serviceTypeId,
   planId,
+  seriesId,
   planTimes,
   onSelectPosition,
   onPreviewPosition,
@@ -102,6 +106,7 @@ function TeamColumn({
   group: TeamPositionGroup;
   serviceTypeId: string | null;
   planId: string | null;
+  seriesId: string | null;
   planTimes: PlanTime[];
   onSelectPosition: (slot: SlotRef) => void;
   onPreviewPosition?: (slot: SlotRef) => void;
@@ -135,6 +140,7 @@ function TeamColumn({
                 position={position}
                 serviceTypeId={serviceTypeId}
                 planId={planId}
+                seriesId={seriesId}
                 planTimes={planTimes}
                 onSelectPosition={onSelectPosition}
                 onPreviewPosition={onPreviewPosition}
@@ -154,6 +160,7 @@ function PositionAccordionItem({
   position,
   serviceTypeId,
   planId,
+  seriesId,
   planTimes,
   onSelectPosition,
   onPreviewPosition,
@@ -163,6 +170,7 @@ function PositionAccordionItem({
   position: TeamPosition;
   serviceTypeId: string | null;
   planId: string | null;
+  seriesId: string | null;
   planTimes: PlanTime[];
   onSelectPosition: (slot: SlotRef) => void;
   onPreviewPosition?: (slot: SlotRef) => void;
@@ -248,6 +256,7 @@ function PositionAccordionItem({
                 person={person}
                 serviceTypeId={serviceTypeId}
                 planId={planId}
+                seriesId={seriesId}
                 planTimes={planTimes}
               />
             ))}
@@ -262,11 +271,13 @@ function PersonRow({
   person,
   serviceTypeId,
   planId,
+  seriesId,
   planTimes,
 }: {
   person: FilledPositionPerson;
   serviceTypeId: string | null;
   planId: string | null;
+  seriesId: string | null;
   planTimes: PlanTime[];
 }) {
   return (
@@ -285,6 +296,7 @@ function PersonRow({
         person={person}
         serviceTypeId={serviceTypeId}
         planId={planId}
+        seriesId={seriesId}
         planTimes={planTimes}
       />
       <span

@@ -550,6 +550,7 @@ export function DashboardPage({
                 isPlaceholderData={teamPositionsPlaceholder}
                 serviceTypeId={routeServiceTypeId}
                 planId={routePlanId}
+                seriesId={selectedPlan?.seriesId ?? null}
                 planTimes={planTimes ?? []}
                 onSelectPosition={handleSlotSelect}
                 onPreviewPosition={handleSlotPreview}
