@@ -56,6 +56,21 @@ export const updatePlanTimeBodySchema = z.object({
   cleared_plan_person_ids: z.array(requiredId).optional(),
 });
 
+export const createPlanTimeBodySchema = z.object({
+  service_type_id: requiredId,
+  name: optionalText,
+  starts_at: z.string().datetime(),
+  ends_at: z.string().datetime().nullable().optional(),
+  time_type: z.enum(["service", "rehearsal", "other"]),
+  assigned_team_ids: z.array(requiredId).optional(),
+  assigned_position_ids: z.array(requiredId).optional(),
+});
+
+export const deletePlanTimeBodySchema = z.object({
+  service_type_id: requiredId,
+  plan_id: requiredId,
+});
+
 export const updatePlanPersonTimesBodySchema = z.object({
   service_type_id: requiredId,
   plan_id: requiredId,

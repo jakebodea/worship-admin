@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
 import { PlanTimeCard } from "@/components/schedule/plan-time-card";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/sonner";
 import { useOrganizationTimeZone } from "@/hooks/use-organization-timezone";
 import { usePlanTimes } from "@/hooks/use-plan-times";
 import { useTeamPositions } from "@/hooks/use-team-positions";
-import { patchJson } from "@/lib/http/client";
+import { deleteJson, patchJson, postJson } from "@/lib/http/client";
 import { formatWallTimeInTimeZone, zonedWallTimeToUtcIso } from "@/lib/planning-center/org-calendar";
 import { type SerializedPlanTime } from "@/lib/plan-time-client";
 import { queryKeys } from "@/lib/query-keys";
@@ -175,10 +177,26 @@ export function TimesTab({ serviceTypeId, planId, seriesId }: TimesTabProps) {
   const { isLoading, isPlaceholderData } = planTimesQuery;
   const [edits, setEdits] = useState<Record<string, EditablePlanTime>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     setEdits(buildInitialEdits(planTimes, timeZone, teamPositionsQuery.data));
   }, [planTimes, teamPositionsQuery.data, timeZone]);
+
+  const invalidatePlanTimeQueries = async () => {
+    if (!serviceTypeId || !planId) return;
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.planTimes(serviceTypeId, planId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.plans(serviceTypeId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.teamPositions(serviceTypeId, planId, seriesId) }),
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === "people-history-warmup" &&
+          query.queryKey[1] === serviceTypeId,
+      }),
+    ]);
+  };
 
   const persistPlanTime = async (planTime: PlanTime, edit: EditablePlanTime) => {
     if (!serviceTypeId || !planId) return;
@@ -191,20 +209,59 @@ export function TimesTab({ serviceTypeId, planId, seriesId }: TimesTabProps) {
         plan_id: planId,
         ...buildPlanTimePatch(planTime, edit, timeZone, teamPositionsQuery.data),
       });
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.planTimes(serviceTypeId, planId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.plans(serviceTypeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.teamPositions(serviceTypeId, planId, seriesId) }),
-        queryClient.invalidateQueries({
-          predicate: (query) =>
-            query.queryKey[0] === "people-history-warmup" &&
-            query.queryKey[1] === serviceTypeId,
-        }),
-      ]);
+      await invalidatePlanTimeQueries();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to update time");
     } finally {
       setSavingId(null);
+    }
+  };
+
+  const createPlanTime = async () => {
+    if (!serviceTypeId || !planId || creating) return;
+    const template = planTimes.at(-1);
+    const starts = template
+      ? formatWallTimeInTimeZone(template.startsAt, timeZone)
+      : formatWallTimeInTimeZone(new Date(), timeZone);
+    const ends = template?.endsAt ? formatWallTimeInTimeZone(template.endsAt, timeZone) : null;
+
+    setCreating(true);
+    try {
+      await postJson<SerializedPlanTime>(`/api/plans/${encodeURIComponent(planId)}/times`, {
+        service_type_id: serviceTypeId,
+        name: template?.timeType === "rehearsal" ? "New rehearsal" : "New service",
+        time_type: template?.timeType ?? "service",
+        starts_at: zonedWallTimeToUtcIso(starts.dateKey, starts.timeValue, timeZone),
+        ends_at: ends ? zonedWallTimeToUtcIso(ends.dateKey, ends.timeValue, timeZone) : null,
+        assigned_team_ids: template?.assignedTeamIds ?? [],
+        assigned_position_ids: template?.assignedPositionIds ?? [],
+      });
+      await invalidatePlanTimeQueries();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to add time");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const removePlanTime = async (planTime: PlanTime) => {
+    if (!serviceTypeId || !planId) return;
+    setDeletingId(planTime.id);
+    try {
+      await deleteJson(`/api/plan-times/${encodeURIComponent(planTime.id)}`, {
+        service_type_id: serviceTypeId,
+        plan_id: planId,
+      });
+      setEdits((current) => {
+        const next = { ...current };
+        delete next[planTime.id];
+        return next;
+      });
+      await invalidatePlanTimeQueries();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to delete time");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -247,14 +304,34 @@ export function TimesTab({ serviceTypeId, planId, seriesId }: TimesTabProps) {
 
   if (planTimes.length === 0) {
     return (
-      <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground">
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
         <span>No times found for this plan.</span>
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => void createPlanTime()}
+          disabled={creating || !serviceTypeId || !planId}
+        >
+          <Plus className="size-4" />
+          Add time
+        </Button>
       </div>
     );
   }
 
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col overflow-auto", isPlaceholderData && "opacity-70")}>
+      <div className="flex items-center justify-end pb-3">
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => void createPlanTime()}
+          disabled={creating || !serviceTypeId || !planId}
+        >
+          <Plus className="size-4" />
+          Add time
+        </Button>
+      </div>
       <div className="flex flex-col gap-2.5 pb-6">
         {planTimes.map((planTime) => {
           const edit = edits[planTime.id];
@@ -269,11 +346,13 @@ export function TimesTab({ serviceTypeId, planId, seriesId }: TimesTabProps) {
               edit={edit}
               valid={valid}
               saving={saving}
+              deleting={deletingId === planTime.id}
               assignmentGroups={teamPositionsQuery.data ?? []}
               assignmentsLoading={teamPositionsQuery.isLoading}
               onEditChange={(patch) => updateEdit(planTime.id, patch)}
               onCommitEdit={(patch) => commitEdit(planTime, patch)}
               onPersist={() => persistIfChanged(planTime)}
+              onDelete={() => removePlanTime(planTime)}
             />
           );
         })}

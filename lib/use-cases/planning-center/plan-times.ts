@@ -24,6 +24,23 @@ interface UpdatePlanTimeInput {
   clearedPlanPersonIds?: string[];
 }
 
+interface CreatePlanTimeInput {
+  serviceTypeId: string;
+  planId: string;
+  name?: string;
+  startsAt: string;
+  endsAt?: string | null;
+  timeType: PlanTimeType;
+  assignedTeamIds?: string[];
+  assignedPositionIds?: string[];
+}
+
+interface DeletePlanTimeInput {
+  serviceTypeId: string;
+  planId: string;
+  planTimeId: string;
+}
+
 export async function getPlanTimes(planId: string): Promise<PlanTime[]> {
   const rawPlanTimes = await planningCenterPlansService.getPlanTimes(planId);
   return rawPlanTimes
@@ -57,6 +74,41 @@ export async function updatePlanTime(input: UpdatePlanTimeInput): Promise<PlanTi
     throw new Error("Planning Center returned an invalid plan time");
   }
   return planTime;
+}
+
+export async function createPlanTime(input: CreatePlanTimeInput): Promise<PlanTime> {
+  const attributes: Record<string, unknown> = {
+    starts_at: input.startsAt,
+    time_type: input.timeType,
+  };
+  if (input.name !== undefined) attributes.name = input.name;
+  if (input.endsAt !== undefined) attributes.ends_at = input.endsAt;
+
+  const rawPlanTime = await planningCenterPlansService.createPlanTime(
+    input.serviceTypeId,
+    input.planId,
+    attributes,
+    input.assignedTeamIds,
+    input.assignedPositionIds
+  );
+  planningCenterPeopleService.invalidatePlanTimeSensitiveReadCaches(input.planId);
+  invalidatePlanWindowHistory();
+
+  const planTime = normalizePlanTime(rawPlanTime as RawPlanTime);
+  if (!planTime) {
+    throw new Error("Planning Center returned an invalid plan time");
+  }
+  return planTime;
+}
+
+export async function deletePlanTime(input: DeletePlanTimeInput): Promise<void> {
+  await planningCenterPlansService.deletePlanTime(
+    input.serviceTypeId,
+    input.planId,
+    input.planTimeId
+  );
+  planningCenterPeopleService.invalidatePlanTimeSensitiveReadCaches(input.planId);
+  invalidatePlanWindowHistory();
 }
 
 async function updateIndividualTimeAssignments(input: UpdatePlanTimeInput) {

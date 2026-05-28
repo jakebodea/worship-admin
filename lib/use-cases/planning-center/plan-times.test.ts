@@ -3,7 +3,12 @@ import { planningCenterCatalogService } from "@/lib/planning-center/services/cat
 import { planningCenterPeopleService } from "@/lib/planning-center/services/people-service";
 import { planningCenterPlansService } from "@/lib/planning-center/services/plans-service";
 import { invalidatePlanWindowHistory } from "@/lib/use-cases/planning-center/get-people-for-position";
-import { getPlanTimes, updatePlanTime } from "@/lib/use-cases/planning-center/plan-times";
+import {
+  createPlanTime,
+  deletePlanTime,
+  getPlanTimes,
+  updatePlanTime,
+} from "@/lib/use-cases/planning-center/plan-times";
 
 vi.mock("@/lib/planning-center/services/catalog-service", () => ({
   planningCenterCatalogService: {
@@ -14,7 +19,9 @@ vi.mock("@/lib/planning-center/services/catalog-service", () => ({
 vi.mock("@/lib/planning-center/services/plans-service", () => ({
   planningCenterPlansService: {
     getPlanTimes: vi.fn(),
+    createPlanTime: vi.fn(),
     updatePlanTime: vi.fn(),
+    deletePlanTime: vi.fn(),
   },
 }));
 
@@ -32,7 +39,9 @@ vi.mock("@/lib/use-cases/planning-center/get-people-for-position", () => ({
 
 const plansServiceMock = planningCenterPlansService as unknown as {
   getPlanTimes: Mock<typeof planningCenterPlansService.getPlanTimes>;
+  createPlanTime: Mock<typeof planningCenterPlansService.createPlanTime>;
   updatePlanTime: Mock<typeof planningCenterPlansService.updatePlanTime>;
+  deletePlanTime: Mock<typeof planningCenterPlansService.deletePlanTime>;
 };
 const catalogServiceMock = planningCenterCatalogService as unknown as {
   updateServiceTypePlanNeededPositionTime: Mock<
@@ -47,7 +56,9 @@ const peopleServiceMock = planningCenterPeopleService as unknown as {
   >;
 };
 const getPlanTimesMock = plansServiceMock.getPlanTimes;
+const createPlanTimeMock = plansServiceMock.createPlanTime;
 const updatePlanTimeMock = plansServiceMock.updatePlanTime;
+const deletePlanTimeMock = plansServiceMock.deletePlanTime;
 const updateServiceTypePlanNeededPositionTimeMock =
   catalogServiceMock.updateServiceTypePlanNeededPositionTime;
 const getPlanTeamMembersMock = peopleServiceMock.getPlanTeamMembers;
@@ -149,6 +160,58 @@ describe("plan times use case", () => {
     expect(invalidatePlanTimeSensitiveReadCachesMock).toHaveBeenCalledWith("plan-1");
     expect(invalidatePlanWindowHistoryMock).toHaveBeenCalled();
     expect(planTime.timeType).toBe("service");
+  });
+
+  it("creates plan times and invalidates time-sensitive caches", async () => {
+    createPlanTimeMock.mockResolvedValue({
+      id: "time-new",
+      type: "PlanTime",
+      attributes: {
+        name: "New service",
+        starts_at: "2026-05-24T18:00:00.000Z",
+        ends_at: null,
+        time_type: "service",
+      },
+    });
+
+    const planTime = await createPlanTime({
+      serviceTypeId: "st-1",
+      planId: "plan-1",
+      name: "New service",
+      startsAt: "2026-05-24T18:00:00.000Z",
+      endsAt: null,
+      timeType: "service",
+      assignedTeamIds: ["team-1"],
+      assignedPositionIds: ["position-1"],
+    });
+
+    expect(createPlanTimeMock).toHaveBeenCalledWith(
+      "st-1",
+      "plan-1",
+      {
+        name: "New service",
+        starts_at: "2026-05-24T18:00:00.000Z",
+        ends_at: null,
+        time_type: "service",
+      },
+      ["team-1"],
+      ["position-1"]
+    );
+    expect(invalidatePlanTimeSensitiveReadCachesMock).toHaveBeenCalledWith("plan-1");
+    expect(invalidatePlanWindowHistoryMock).toHaveBeenCalled();
+    expect(planTime.id).toBe("time-new");
+  });
+
+  it("deletes plan times and invalidates time-sensitive caches", async () => {
+    await deletePlanTime({
+      serviceTypeId: "st-1",
+      planId: "plan-1",
+      planTimeId: "time-1",
+    });
+
+    expect(deletePlanTimeMock).toHaveBeenCalledWith("st-1", "plan-1", "time-1");
+    expect(invalidatePlanTimeSensitiveReadCachesMock).toHaveBeenCalledWith("plan-1");
+    expect(invalidatePlanWindowHistoryMock).toHaveBeenCalled();
   });
 
   it("patches plan-level needed position time overrides", async () => {

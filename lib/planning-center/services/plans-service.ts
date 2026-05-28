@@ -134,23 +134,10 @@ export class PlanningCenterPlansService {
     assignedTeamIds?: string[],
     assignedPositionIds?: string[]
   ): Promise<PCResource> {
-    const relationships = {
-      ...(assignedTeamIds === undefined
-        ? {}
-        : {
-            assigned_teams: {
-              data: assignedTeamIds.map((id) => ({ type: "Team", id })),
-            },
-          }),
-      ...(assignedPositionIds === undefined
-        ? {}
-        : {
-            assigned_positions: {
-              data: assignedPositionIds.map((id) => ({ type: "TeamPosition", id })),
-            },
-          }),
-    };
-    const hasRelationships = Object.keys(relationships).length > 0;
+    const relationships = this.buildPlanTimeAssignmentRelationships(
+      assignedTeamIds,
+      assignedPositionIds
+    );
 
     const response = await this.core.fetch<PCResource>(
       `/services/v2/service_types/${serviceTypeId}/plan_times/${planTimeId}`,
@@ -164,13 +151,58 @@ export class PlanningCenterPlansService {
             type: "PlanTime",
             id: planTimeId,
             attributes,
-            ...(hasRelationships ? { relationships } : {}),
+            ...(relationships ? { relationships } : {}),
           },
         }),
       }
     );
     this.invalidatePlanTimesCache(serviceTypeId, planId);
     return response.data;
+  }
+
+  async createPlanTime(
+    serviceTypeId: string,
+    planId: string,
+    attributes: Record<string, unknown>,
+    assignedTeamIds?: string[],
+    assignedPositionIds?: string[]
+  ): Promise<PCResource> {
+    const relationships = this.buildPlanTimeAssignmentRelationships(
+      assignedTeamIds,
+      assignedPositionIds
+    );
+    const response = await this.core.fetch<PCResource>(
+      `/services/v2/service_types/${serviceTypeId}/plans/${planId}/plan_times`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          data: {
+            type: "PlanTime",
+            attributes,
+            ...(relationships ? { relationships } : {}),
+          },
+        }),
+      }
+    );
+    this.invalidatePlanTimesCache(serviceTypeId, planId);
+    return response.data;
+  }
+
+  async deletePlanTime(
+    serviceTypeId: string,
+    planId: string,
+    planTimeId: string
+  ): Promise<void> {
+    await this.core.fetch<PCResource>(
+      `/services/v2/service_types/${serviceTypeId}/plan_times/${planTimeId}`,
+      {
+        method: "DELETE",
+      }
+    );
+    this.invalidatePlanTimesCache(serviceTypeId, planId);
   }
 
   async getPlanForServiceTypeWithSeries(
@@ -205,6 +237,29 @@ export class PlanningCenterPlansService {
       namespace,
       ...parts.map((part) => encodeURIComponent(part)),
     ].join(":");
+  }
+
+  private buildPlanTimeAssignmentRelationships(
+    assignedTeamIds?: string[],
+    assignedPositionIds?: string[]
+  ) {
+    const relationships = {
+      ...(assignedTeamIds === undefined
+        ? {}
+        : {
+            assigned_teams: {
+              data: assignedTeamIds.map((id) => ({ type: "Team", id })),
+            },
+          }),
+      ...(assignedPositionIds === undefined
+        ? {}
+        : {
+            assigned_positions: {
+              data: assignedPositionIds.map((id) => ({ type: "TeamPosition", id })),
+            },
+          }),
+    };
+    return Object.keys(relationships).length > 0 ? relationships : null;
   }
 }
 

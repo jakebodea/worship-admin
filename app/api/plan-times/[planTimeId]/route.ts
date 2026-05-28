@@ -3,8 +3,11 @@ import { ApiError } from "@/lib/http/api-error";
 import { handlePlanningCenterRoute } from "@/lib/http/planning-center-route";
 import { logger } from "@/lib/logger";
 import { serializePlanTime } from "@/lib/plan-time-client";
-import { updatePlanTime } from "@/lib/use-cases/planning-center/plan-times";
-import { updatePlanTimeBodySchema } from "@/lib/use-cases/planning-center/schemas";
+import { deletePlanTime, updatePlanTime } from "@/lib/use-cases/planning-center/plan-times";
+import {
+  deletePlanTimeBodySchema,
+  updatePlanTimeBodySchema,
+} from "@/lib/use-cases/planning-center/schemas";
 
 export const dynamic = "force-dynamic";
 
@@ -48,5 +51,34 @@ export async function PATCH(
     });
 
     return serializePlanTime(planTime);
+  });
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ planTimeId: string }> }
+) {
+  const log = logger.withRequest(request);
+  return handlePlanningCenterRoute(request, async () => {
+    const parsedParams = paramsSchema.safeParse(await params);
+    if (!parsedParams.success) {
+      log.warn({ issues: parsedParams.error.issues }, "Invalid plan-time route params");
+      throw new ApiError(400, "INVALID_REQUEST", "Invalid request", parsedParams.error.issues);
+    }
+
+    const body = await request.json();
+    const parsedBody = deletePlanTimeBodySchema.safeParse(body);
+    if (!parsedBody.success) {
+      log.warn({ issues: parsedBody.error.issues }, "Invalid plan-time delete body");
+      throw new ApiError(400, "INVALID_REQUEST", "Invalid request", parsedBody.error.issues);
+    }
+
+    await deletePlanTime({
+      serviceTypeId: parsedBody.data.service_type_id,
+      planId: parsedBody.data.plan_id,
+      planTimeId: parsedParams.data.planTimeId,
+    });
+
+    return new Response(null, { status: 204 });
   });
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDownIcon, Clock3, Pencil } from "lucide-react";
+import { ChevronDownIcon, Clock3, Pencil, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { TimeAssignmentSelector, type TimeAssignmentValue } from "@/components/time-assignment-selector";
 import {
@@ -11,6 +11,7 @@ import {
 } from "@/components/schedule/plan-time-display";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
+import { DeleteConfirmationDialog } from "@/components/ui/delete-confirmation-dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -38,9 +39,11 @@ interface PlanTimeCardProps {
   saving: boolean;
   assignmentGroups: TeamPositionGroup[];
   assignmentsLoading: boolean;
+  deleting: boolean;
   onEditChange: (patch: Partial<PlanTimeEditState>) => void;
   onCommitEdit: (patch: Partial<PlanTimeEditState>) => void;
   onPersist: () => void;
+  onDelete: () => Promise<void>;
 }
 
 const timeTypeLabels: Record<PlanTimeType, string> = {
@@ -59,10 +62,13 @@ export function PlanTimeCard({
   saving,
   assignmentGroups,
   assignmentsLoading,
+  deleting,
   onEditChange,
   onCommitEdit,
   onPersist,
+  onDelete,
 }: PlanTimeCardProps) {
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const assignmentValue: TimeAssignmentValue = {
     teamIds: edit.assignedTeamIds,
     positionIds: edit.assignedPositionIds,
@@ -114,6 +120,17 @@ export function PlanTimeCard({
             <NativeSelectOption value="service">{timeTypeLabels.service}</NativeSelectOption>
             <NativeSelectOption value="other">{timeTypeLabels.other}</NativeSelectOption>
           </NativeSelect>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
+            aria-label={`Delete ${edit.name || "time"}`}
+            disabled={saving || deleting}
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
         </div>
 
         <PlanTimeRangeEditor
@@ -142,6 +159,19 @@ export function PlanTimeCard({
           }
         />
       </div>
+      <DeleteConfirmationDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        onConfirm={async () => {
+          await onDelete();
+          setDeleteOpen(false);
+        }}
+        isPending={deleting}
+        itemLabel={edit.name || "this time"}
+        title="Delete time?"
+        description="Remove this time from the plan? Any assignments tied to it will also lose this time."
+        confirmLabel="Delete time"
+      />
     </div>
   );
 }
