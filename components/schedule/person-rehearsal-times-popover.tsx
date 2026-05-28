@@ -55,12 +55,11 @@ export function PersonRehearsalTimesPopover({
   const queryClient = useQueryClient();
   const timeZone = useOrganizationTimeZone();
   const assignedTimeIds = person.assignedTimeIds ?? [];
-  const rehearsalTimes = useMemo(
-    () => planTimes.filter((planTime) => planTime.timeType === "rehearsal"),
+  const editablePlanTimeIds = useMemo(
+    () => planTimes.map((planTime) => planTime.id),
     [planTimes]
   );
-  const rehearsalIds = useMemo(() => rehearsalTimes.map((planTime) => planTime.id), [rehearsalTimes]);
-  const canEdit = !!serviceTypeId && !!planId && !!person.personId && rehearsalTimes.length > 0;
+  const canEdit = !!serviceTypeId && !!planId && !!person.personId && planTimes.length > 0;
 
   const persist = async (timeIds: string[]) => {
     if (!serviceTypeId || !planId || !person.personId) return;
@@ -90,7 +89,7 @@ export function PersonRehearsalTimesPopover({
         }),
       ]);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to update rehearsals");
+      toast.error(error instanceof Error ? error.message : "Unable to update times");
     }
   };
 
@@ -100,9 +99,9 @@ export function PersonRehearsalTimesPopover({
     onPersist: persist,
   });
   const displayTimeIds = open ? draft : assignedTimeIds;
-  const selectedRehearsalCount = rehearsalIds.filter((id) => displayTimeIds.includes(id)).length;
+  const selectedTimeCount = editablePlanTimeIds.filter((id) => displayTimeIds.includes(id)).length;
 
-  if (rehearsalTimes.length === 0) return null;
+  if (planTimes.length === 0) return null;
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
@@ -113,17 +112,22 @@ export function PersonRehearsalTimesPopover({
           size="sm"
           className="h-7 max-w-full px-2 text-xs text-muted-foreground hover:text-foreground"
           disabled={!canEdit}
-          aria-label={`Edit rehearsals for ${person.name}`}
+          aria-label={`Edit times for ${person.name}`}
         >
           <Clock3 data-icon="inline-start" />
-          {selectedRehearsalCount}/{rehearsalTimes.length}
+          {selectedTimeCount}/{planTimes.length}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" sideOffset={8} className="w-96 p-0">
+      <PopoverContent
+        align="end"
+        sideOffset={8}
+        className="w-96 p-0"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
         <Command>
           <CommandList>
             <CommandGroup>
-              {rehearsalTimes.map((planTime) => {
+              {planTimes.map((planTime) => {
                 const selected = draft.includes(planTime.id);
 
                 return (
@@ -131,6 +135,10 @@ export function PersonRehearsalTimesPopover({
                     key={planTime.id}
                     value={`${planTime.name} ${planTime.id}`}
                     onSelect={() => setDraft((current) => toggleId(current, planTime.id))}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
                   >
                     <Check className={cn(selected ? "opacity-100" : "opacity-0")} />
                     <span className="min-w-0 flex-1 truncate">{planTime.name}</span>

@@ -224,7 +224,13 @@ function PositionAccordionItem({
         className="cursor-pointer pb-3 pt-0"
         onClick={(event) => {
           const target = event.target as HTMLElement;
-          if (target.closest("button, a, input, textarea, select, [role='button']")) return;
+          if (
+            target.closest(
+              "button, a, input, textarea, select, [role='button'], [data-slot='popover-content'], [data-slot='command-item'], [cmdk-item]"
+            )
+          ) {
+            return;
+          }
 
           const trigger = event.currentTarget
             .closest("[data-slot='accordion-item']")
@@ -264,7 +270,11 @@ function PersonRow({
   planTimes: PlanTime[];
 }) {
   return (
-    <li className="flex items-center gap-2 text-sm">
+    <li
+      className="flex items-center gap-2 text-sm"
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
       <Avatar className="h-6 w-6">
         <AvatarImage src={person.photoThumbnailUrl || undefined} alt={person.name} />
         <AvatarFallback className="text-[10px]">{getInitials(person.name)}</AvatarFallback>
