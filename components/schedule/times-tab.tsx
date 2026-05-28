@@ -110,6 +110,19 @@ function isValidEdit(edit: EditablePlanTime): boolean {
   return Number.isFinite(start) && Number.isFinite(end) && end >= start;
 }
 
+function getInvalidEditMessage(edit: EditablePlanTime): string {
+  if (!edit.name.trim()) return "Time name is required.";
+  if (!edit.startDate || !edit.startTime) return "Start date and time are required.";
+  if (edit.endTime) {
+    const start = Date.parse(`${edit.startDate}T${edit.startTime}:00`);
+    const end = Date.parse(`${edit.endDate}T${edit.endTime}:00`);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) {
+      return "End time must be after start time.";
+    }
+  }
+  return "Fix this time before saving.";
+}
+
 function buildPlanTimePatch(
   planTime: PlanTime,
   edit: EditablePlanTime,
@@ -289,6 +302,11 @@ export function TimesTab({ serviceTypeId, planId, seriesId }: TimesTabProps) {
   const persistIfChanged = (planTime: PlanTime) => {
     const edit = edits[planTime.id];
     if (!edit) return;
+    if (!hasChanges(planTime, edit, timeZone, teamPositionsQuery.data)) return;
+    if (!isValidEdit(edit)) {
+      toast.error(getInvalidEditMessage(edit));
+      return;
+    }
     void persistPlanTime(planTime, edit);
   };
 
