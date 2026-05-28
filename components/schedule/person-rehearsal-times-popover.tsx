@@ -60,7 +60,6 @@ export function PersonRehearsalTimesPopover({
     [planTimes]
   );
   const rehearsalIds = useMemo(() => rehearsalTimes.map((planTime) => planTime.id), [rehearsalTimes]);
-  const selectedRehearsalCount = rehearsalIds.filter((id) => draft.includes(id)).length;
   const canEdit = !!serviceTypeId && !!planId && !!person.personId && rehearsalTimes.length > 0;
 
   const persist = async (timeIds: string[]) => {
@@ -100,6 +99,8 @@ export function PersonRehearsalTimesPopover({
     equals: haveSameIds,
     onPersist: persist,
   });
+  const displayTimeIds = open ? draft : assignedTimeIds;
+  const selectedRehearsalCount = rehearsalIds.filter((id) => displayTimeIds.includes(id)).length;
 
   if (rehearsalTimes.length === 0) return null;
 
