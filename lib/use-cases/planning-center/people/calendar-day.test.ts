@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import {
+  formatWallTimeInTimeZone,
+  zonedWallTimeToUtcIso,
+} from "@/lib/planning-center/org-calendar";
 import { blockoutCoversPlanSortInstant } from "@/lib/use-cases/planning-center/people/calendar-day";
 
 describe("blockoutCoversPlanSortInstant", () => {
@@ -37,5 +41,39 @@ describe("blockoutCoversPlanSortInstant", () => {
         timeZone: null,
       })
     ).toBe(true);
+  });
+});
+
+describe("org timezone wall-clock helpers", () => {
+  it("formats an instant as org-local date and time", () => {
+    expect(
+      formatWallTimeInTimeZone(
+        new Date("2026-05-24T16:30:00.000Z"),
+        "America/Los_Angeles"
+      )
+    ).toEqual({
+      dateKey: "2026-05-24",
+      timeValue: "09:30",
+    });
+  });
+
+  it("converts an org-local date and time back to a UTC ISO instant", () => {
+    expect(
+      zonedWallTimeToUtcIso(
+        "2026-05-24",
+        "09:30",
+        "America/Los_Angeles"
+      )
+    ).toBe("2026-05-24T16:30:00.000Z");
+  });
+
+  it("uses the offset for the selected wall-clock date", () => {
+    expect(
+      zonedWallTimeToUtcIso(
+        "2026-12-24",
+        "09:30",
+        "America/Los_Angeles"
+      )
+    ).toBe("2026-12-24T17:30:00.000Z");
   });
 });

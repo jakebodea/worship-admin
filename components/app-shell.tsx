@@ -16,6 +16,7 @@ import {
   CalendarDays,
   Check,
   ChevronDown,
+  Clock3,
   Columns3,
   Keyboard,
   Laptop,
@@ -282,22 +283,24 @@ function SidebarResizeRail({
   );
 }
 
-type TopBarView = "assign" | "lineup" | "plan";
+type TopBarView = "assign" | "lineup" | "plan" | "times";
 type ServicesSidebarKey = "services" | TopBarView;
 
 function parseTopBarView(value: string | undefined): TopBarView {
   if (value === "lineup") return "lineup";
   if (value === "plan") return "plan";
+  if (value === "times") return "times";
   return "assign";
 }
 
 function getTopBarViewLabel(view: TopBarView): string {
   if (view === "lineup") return "Lineup";
   if (view === "plan") return "Plan";
+  if (view === "times") return "Times";
   return "Assign";
 }
 
-const planViewOptions: TopBarView[] = ["assign", "lineup", "plan"];
+const planViewOptions: TopBarView[] = ["assign", "lineup", "plan", "times"];
 
 function getServicesPlanPath(pathname: string): {
   serviceTypeId: string;
@@ -710,6 +713,12 @@ function ServicesSidebarMenuItem() {
       label: "Plan",
       href: buildScheduleViewUrl(pathname, searchParams, "plan"),
       icon: ListMusic,
+    },
+    {
+      key: "times",
+      label: "Times",
+      href: buildScheduleViewUrl(pathname, searchParams, "times"),
+      icon: Clock3,
     },
   ];
   const servicesActiveKey: ServicesSidebarKey | null =

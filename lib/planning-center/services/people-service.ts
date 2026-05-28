@@ -277,6 +277,43 @@ export class PlanningCenterPeopleService {
     return response.data;
   }
 
+  async updatePlanPersonTimes({
+    personId,
+    planPersonId,
+    serviceTypeId,
+    planId,
+    planTimeIds,
+  }: {
+    personId: string;
+    planPersonId: string;
+    serviceTypeId: string;
+    planId: string;
+    planTimeIds: string[];
+  }): Promise<PCResource> {
+    const response = await this.core.fetch<PCResource>(
+      `/services/v2/people/${personId}/plan_people/${planPersonId}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          data: {
+            type: "PlanPerson",
+            id: planPersonId,
+            relationships: {
+              times: {
+                data: planTimeIds.map((id) => ({ type: "PlanTime", id })),
+              },
+            },
+          },
+        }),
+      }
+    );
+    this.invalidateScheduleReadCaches({ personId, serviceTypeId, planId });
+    return response.data;
+  }
+
   async deletePlanPerson(
     planPersonId: string,
     context?: { personId?: string; serviceTypeId?: string; planId?: string }
@@ -363,6 +400,16 @@ export class PlanningCenterPeopleService {
         (personSchedulesPrefix ? key.startsWith(personSchedulesPrefix) : false) ||
         key === planTeamMembersKey
       );
+    });
+  }
+
+  invalidatePlanTimeSensitiveReadCaches(planId: string) {
+    const scope = this.core.getCacheScope();
+    const planTimesKey = this.buildCacheKey("plan-plan-times", planId);
+    const personSchedulesPrefix = [scope, "person-schedules"].join(":");
+
+    this.cache.deleteWhere((key) => {
+      return key === planTimesKey || key.startsWith(personSchedulesPrefix);
     });
   }
 

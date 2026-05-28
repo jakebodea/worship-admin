@@ -193,6 +193,59 @@ describe("PlanningCenterPeopleService.updatePlanPersonStatus", () => {
   });
 });
 
+describe("PlanningCenterPeopleService.updatePlanPersonTimes", () => {
+  it("patches PlanPerson time relationships and invalidates cached plan members", async () => {
+    const fetchAllWithIncluded = vi.fn().mockResolvedValue({ data: [], included: [] });
+    const fetch = vi.fn().mockResolvedValue({
+      data: { id: "pp-123", type: "PlanPerson", attributes: {} },
+    });
+    const core = {
+      fetch,
+      fetchAllWithIncluded,
+      getCacheScope: () => "test-scope",
+    } as unknown as PlanningCenterCoreClient;
+    const service = new PlanningCenterPeopleService(core);
+
+    await service.getPlanTeamMembers("st-789", "plan-101");
+    await service.getPlanTeamMembers("st-789", "plan-101");
+
+    await service.updatePlanPersonTimes({
+      personId: "person-456",
+      planPersonId: "pp-123",
+      serviceTypeId: "st-789",
+      planId: "plan-101",
+      planTimeIds: ["time-1", "time-2"],
+    });
+
+    await service.getPlanTeamMembers("st-789", "plan-101");
+
+    expect(fetchAllWithIncluded).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledWith(
+      "/services/v2/people/person-456/plan_people/pp-123",
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          data: {
+            type: "PlanPerson",
+            id: "pp-123",
+            relationships: {
+              times: {
+                data: [
+                  { type: "PlanTime", id: "time-1" },
+                  { type: "PlanTime", id: "time-2" },
+                ],
+              },
+            },
+          },
+        }),
+      }
+    );
+  });
+});
+
 describe("PlanningCenterPeopleService.invalidateScheduleReadCaches", () => {
   it("clears cached plan team members and person schedules for conflict reconciliation", async () => {
     const fetchAllWithIncluded = vi.fn().mockResolvedValue({ data: [], included: [] });

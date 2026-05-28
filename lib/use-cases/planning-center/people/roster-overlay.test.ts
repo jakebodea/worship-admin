@@ -53,6 +53,8 @@ function rosterEntry(
     label: "Band - Vocals",
     status: "pending",
     rawStatus: "U",
+    assignedTimeIds: [],
+    serviceTimeIds: [],
     ...rest,
   };
 }

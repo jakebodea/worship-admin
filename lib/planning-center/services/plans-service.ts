@@ -112,6 +112,67 @@ export class PlanningCenterPlansService {
     return response.data;
   }
 
+  async getPlanTimes(planId: string): Promise<PCResource[]> {
+    const planTimes = await this.cache.get(
+      this.buildCacheKey("plan-times", planId),
+      PLANS_RANGE_CACHE_TTL_MS,
+      async () => {
+        return this.core.fetchAll<PCResource>(
+          `/services/v2/plans/${planId}/plan_times`,
+          { order: "starts_at", per_page: "200", include: "split_team_rehearsal_assignments" }
+        );
+      }
+    );
+    return structuredClone(planTimes);
+  }
+
+  async updatePlanTime(
+    serviceTypeId: string,
+    planId: string,
+    planTimeId: string,
+    attributes: Record<string, unknown>,
+    assignedTeamIds?: string[],
+    assignedPositionIds?: string[]
+  ): Promise<PCResource> {
+    const relationships = {
+      ...(assignedTeamIds === undefined
+        ? {}
+        : {
+            assigned_teams: {
+              data: assignedTeamIds.map((id) => ({ type: "Team", id })),
+            },
+          }),
+      ...(assignedPositionIds === undefined
+        ? {}
+        : {
+            assigned_positions: {
+              data: assignedPositionIds.map((id) => ({ type: "TeamPosition", id })),
+            },
+          }),
+    };
+    const hasRelationships = Object.keys(relationships).length > 0;
+
+    const response = await this.core.fetch<PCResource>(
+      `/services/v2/service_types/${serviceTypeId}/plan_times/${planTimeId}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          data: {
+            type: "PlanTime",
+            id: planTimeId,
+            attributes,
+            ...(hasRelationships ? { relationships } : {}),
+          },
+        }),
+      }
+    );
+    this.invalidatePlanTimesCache(serviceTypeId, planId);
+    return response.data;
+  }
+
   async getPlanForServiceTypeWithSeries(
     serviceTypeId: string,
     planId: string
@@ -123,6 +184,27 @@ export class PlanningCenterPlansService {
       data: response.data,
       included: response.included || [],
     };
+  }
+
+  invalidatePlanTimesCache(serviceTypeId: string, planId: string) {
+    const scope = this.core.getCacheScope();
+    const planTimesKey = this.buildCacheKey("plan-times", planId);
+    const plansRangePrefix = [
+      scope,
+      "plans-range",
+      encodeURIComponent(serviceTypeId),
+      "",
+    ].join(":");
+
+    this.cache.deleteWhere((key) => key === planTimesKey || key.startsWith(plansRangePrefix));
+  }
+
+  private buildCacheKey(namespace: string, ...parts: string[]): string {
+    return [
+      this.core.getCacheScope(),
+      namespace,
+      ...parts.map((part) => encodeURIComponent(part)),
+    ].join(":");
   }
 }
 

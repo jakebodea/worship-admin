@@ -37,6 +37,32 @@ export const planItemsQuerySchema = z.object({
   plan_id: requiredId,
 });
 
+export const planTimesQuerySchema = z.object({
+  service_type_id: requiredId,
+});
+
+export const updatePlanTimeBodySchema = z.object({
+  service_type_id: requiredId,
+  plan_id: requiredId,
+  name: optionalText,
+  starts_at: z.string().datetime().optional(),
+  ends_at: z.string().datetime().nullable().optional(),
+  time_type: z.enum(["service", "rehearsal", "other"]).optional(),
+  assigned_team_ids: z.array(requiredId).optional(),
+  assigned_position_ids: z.array(requiredId).optional(),
+  assigned_needed_position_ids: z.array(requiredId).optional(),
+  cleared_needed_position_ids: z.array(requiredId).optional(),
+  assigned_plan_person_ids: z.array(requiredId).optional(),
+  cleared_plan_person_ids: z.array(requiredId).optional(),
+});
+
+export const updatePlanPersonTimesBodySchema = z.object({
+  service_type_id: requiredId,
+  plan_id: requiredId,
+  person_id: requiredId,
+  plan_time_ids: z.array(requiredId),
+});
+
 export const createPlanItemBodySchema = z.object({
   service_type_id: requiredId,
   plan_id: requiredId,
