@@ -11,11 +11,13 @@ import {
 } from "@/components/schedule/plan-time-display";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
+import { Card, CardContent } from "@/components/ui/card";
 import { DeleteConfirmationDialog } from "@/components/ui/delete-confirmation-dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { usePersistOnClosePopover } from "@/hooks/use-persist-on-close-popover";
 import type { PlanTimeType, TeamPositionGroup } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -77,15 +79,15 @@ export function PlanTimeCard({
   };
 
   return (
-    <div
+    <Card
       className={cn(
-        "group/plan-time rounded-lg border bg-card p-3.5 shadow-xs transition-colors hover:border-border/80",
+        "group/plan-time gap-0 rounded-lg py-0 shadow-xs transition-colors hover:border-border/80",
         saving && "opacity-70"
       )}
     >
-      <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+      <CardContent className="flex min-w-0 flex-1 flex-col gap-2.5 p-3.5">
         <div className="flex flex-wrap items-center gap-2">
-          <input
+          <Input
             id={`plan-time-name-${planTimeId}`}
             value={edit.name}
             placeholder="Untitled time"
@@ -99,9 +101,9 @@ export function PlanTimeCard({
               }
             }}
             className={cn(
-              "min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1.5 py-0.5 -mx-1.5 text-base font-semibold shadow-none outline-none transition-[color,background-color,border-color,box-shadow]",
+              "min-w-0 flex-1 border-transparent shadow-none font-semibold",
               "hover:border-border/60 hover:bg-muted/30",
-              "focus-visible:border-ring focus-visible:bg-background focus-visible:ring-[3px] focus-visible:ring-ring/50",
+              "focus-visible:border-input focus-visible:bg-background",
               !edit.name.trim() && "text-muted-foreground"
             )}
           />
@@ -158,7 +160,7 @@ export function PlanTimeCard({
             })
           }
         />
-      </div>
+      </CardContent>
       <DeleteConfirmationDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
@@ -172,7 +174,7 @@ export function PlanTimeCard({
         description="Remove this time from the plan? Any assignments tied to it will also lose this time."
         confirmLabel="Delete time"
       />
-    </div>
+    </Card>
   );
 }
 
@@ -209,30 +211,30 @@ function PlanTimeRangeEditor({
   onCommitEdit,
   onPersist,
 }: PlanTimeRangeEditorProps) {
-  const [open, setOpen] = useState(false);
   const [dateOpen, setDateOpen] = useState(false);
   const [endDateOpen, setEndDateOpen] = useState(false);
   const sameDay = !endDate || endDate === startDate;
   const displayLabel = formatPlanTimeRangeLabel({ startDate, startTime, endDate, endTime });
+  const nestedPickerOpen = dateOpen || endDateOpen;
 
-  const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) {
+  const { open, handleOpenChange, contentRef } = usePersistOnClosePopover({
+    onClose: () => {
       onPersist();
       setDateOpen(false);
       setEndDateOpen(false);
-    }
-    setOpen(nextOpen);
-  };
+    },
+    enterToClose: { disabled: nestedPickerOpen },
+  });
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange} modal={false}>
       <PopoverTrigger asChild>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           className={cn(
-            "group/time-range flex min-h-8 w-full cursor-pointer items-center gap-1.5 rounded-md py-1 pr-1 text-left text-sm text-muted-foreground transition-[color,background-color]",
-            "hover:bg-muted/30 hover:text-foreground",
-            "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+            "group/time-range h-auto min-h-8 w-full justify-start gap-1.5 px-1 py-1 pr-1 font-normal text-muted-foreground",
             open && "bg-muted/30 text-foreground"
           )}
           data-invalid={invalid || undefined}
@@ -240,7 +242,9 @@ function PlanTimeRangeEditor({
           aria-expanded={open}
         >
           <Clock3 className="size-3.5 shrink-0" />
-          <span className={cn("min-w-0 flex-1", invalid && "text-destructive")}>{displayLabel}</span>
+          <span className={cn("min-w-0 flex-1 text-left", invalid && "text-destructive")}>
+            {displayLabel}
+          </span>
           <Pencil
             className={cn(
               "size-3.5 shrink-0 transition-opacity",
@@ -248,10 +252,11 @@ function PlanTimeRangeEditor({
             )}
             aria-hidden="true"
           />
-        </button>
+        </Button>
       </PopoverTrigger>
 
       <PopoverContent
+        ref={contentRef}
         align="start"
         className="w-80 p-4"
         onOpenAutoFocus={(event) => event.preventDefault()}
@@ -279,7 +284,6 @@ function PlanTimeRangeEditor({
               value={startTime}
               invalid={invalid}
               onChange={(startTime) => onEditChange({ startTime })}
-              onBlur={onPersist}
             />
             <TimePickerField
               id={`${id}-end-time`}
@@ -287,7 +291,6 @@ function PlanTimeRangeEditor({
               value={endTime}
               invalid={invalid}
               onChange={(endTime) => onEditChange({ endTime })}
-              onBlur={onPersist}
             />
           </div>
 
@@ -303,12 +306,6 @@ function PlanTimeRangeEditor({
             />
           ) : null}
         </FieldGroup>
-
-        <div className="mt-4 flex justify-end">
-          <Button type="button" size="sm" onClick={() => handleOpenChange(false)}>
-            Done
-          </Button>
-        </div>
       </PopoverContent>
     </Popover>
   );
@@ -377,7 +374,6 @@ interface TimePickerFieldProps {
   value: string;
   invalid?: boolean;
   onChange: (value: string) => void;
-  onBlur?: () => void;
 }
 
 function TimePickerField({
@@ -386,7 +382,6 @@ function TimePickerField({
   value,
   invalid = false,
   onChange,
-  onBlur,
 }: TimePickerFieldProps) {
   return (
     <Field className="min-w-0 flex-1 gap-1.5">
@@ -398,7 +393,6 @@ function TimePickerField({
         aria-invalid={invalid || undefined}
         className={timeInputClassName}
         onChange={(event) => onChange(event.target.value)}
-        onBlur={onBlur}
       />
     </Field>
   );

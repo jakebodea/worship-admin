@@ -1,12 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Check, Clock3, Loader2 } from "lucide-react";
+import { useMemo } from "react";
+import { Check, Clock3 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { formatPlanTimeRangeLabel } from "@/components/schedule/plan-time-display";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Command, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "@/components/ui/sonner";
+import { useDraftPopover } from "@/hooks/use-persist-on-close-popover";
 import { useOrganizationTimeZone } from "@/hooks/use-organization-timezone";
 import { patchJson } from "@/lib/http/client";
 import { formatWallTimeInTimeZone } from "@/lib/planning-center/org-calendar";
@@ -21,10 +24,16 @@ interface PersonRehearsalTimesPopoverProps {
   planId: string | null;
 }
 
-function formatTimeRange(planTime: PlanTime, timeZone: string): string {
-  const start = formatWallTimeInTimeZone(planTime.startsAt, timeZone).timeValue;
-  const end = planTime.endsAt ? formatWallTimeInTimeZone(planTime.endsAt, timeZone).timeValue : null;
-  return end ? `${start}-${end}` : start;
+function formatPlanTimeScheduleLabel(planTime: PlanTime, timeZone: string): string {
+  const starts = formatWallTimeInTimeZone(planTime.startsAt, timeZone);
+  const ends = planTime.endsAt ? formatWallTimeInTimeZone(planTime.endsAt, timeZone) : null;
+
+  return formatPlanTimeRangeLabel({
+    startDate: starts.dateKey,
+    startTime: starts.timeValue,
+    endDate: ends?.dateKey ?? starts.dateKey,
+    endTime: ends?.timeValue ?? "",
+  });
 }
 
 function haveSameIds(a: string[], b: string[]): boolean {
@@ -45,34 +54,25 @@ export function PersonRehearsalTimesPopover({
 }: PersonRehearsalTimesPopoverProps) {
   const queryClient = useQueryClient();
   const timeZone = useOrganizationTimeZone();
-  const [open, setOpen] = useState(false);
-  const [draftTimeIds, setDraftTimeIds] = useState<string[]>(person.assignedTimeIds ?? []);
-  const [saving, setSaving] = useState(false);
+  const assignedTimeIds = person.assignedTimeIds ?? [];
   const rehearsalTimes = useMemo(
     () => planTimes.filter((planTime) => planTime.timeType === "rehearsal"),
     [planTimes]
   );
   const rehearsalIds = useMemo(() => rehearsalTimes.map((planTime) => planTime.id), [rehearsalTimes]);
-  const selectedRehearsalCount = rehearsalIds.filter((id) => draftTimeIds.includes(id)).length;
-  const originalTimeIds = person.assignedTimeIds ?? [];
+  const selectedRehearsalCount = rehearsalIds.filter((id) => draft.includes(id)).length;
   const canEdit = !!serviceTypeId && !!planId && !!person.personId && rehearsalTimes.length > 0;
-  const changed = !haveSameIds(originalTimeIds, draftTimeIds);
 
-  const handleOpenChange = (nextOpen: boolean) => {
-    setOpen(nextOpen);
-    if (nextOpen) setDraftTimeIds(person.assignedTimeIds ?? []);
-  };
+  const persist = async (timeIds: string[]) => {
+    if (!serviceTypeId || !planId || !person.personId) return;
+    if (haveSameIds(assignedTimeIds, timeIds)) return;
 
-  const save = async () => {
-    if (!serviceTypeId || !planId || !person.personId || !changed) return;
-
-    setSaving(true);
     try {
       await patchJson(`/api/plan-people/${encodeURIComponent(person.planPersonId)}/times`, {
         service_type_id: serviceTypeId,
         plan_id: planId,
         person_id: person.personId,
-        plan_time_ids: draftTimeIds,
+        plan_time_ids: timeIds,
       });
       await Promise.all([
         queryClient.invalidateQueries({
@@ -90,14 +90,16 @@ export function PersonRehearsalTimesPopover({
             query.queryKey[1] === serviceTypeId,
         }),
       ]);
-      toast.success("Rehearsals updated");
-      setOpen(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to update rehearsals");
-    } finally {
-      setSaving(false);
     }
   };
+
+  const { open, draft, setDraft, handleOpenChange } = useDraftPopover({
+    value: assignedTimeIds,
+    equals: haveSameIds,
+    onPersist: persist,
+  });
 
   if (rehearsalTimes.length === 0) return null;
 
@@ -116,42 +118,30 @@ export function PersonRehearsalTimesPopover({
           {selectedRehearsalCount}/{rehearsalTimes.length}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" sideOffset={8} className="w-[320px] p-0">
-        <div className="border-b px-3 py-2">
-          <p className="truncate text-sm font-medium">{person.name}</p>
-          <p className="text-xs text-muted-foreground">Rehearsal attendance</p>
-        </div>
+      <PopoverContent align="end" sideOffset={8} className="w-96 p-0">
+        <Command>
+          <CommandList>
+            <CommandGroup>
+              {rehearsalTimes.map((planTime) => {
+                const selected = draft.includes(planTime.id);
 
-        <div className="flex flex-col py-1">
-          {rehearsalTimes.map((planTime) => {
-            const selected = draftTimeIds.includes(planTime.id);
-
-            return (
-              <button
-                key={planTime.id}
-                type="button"
-                className="flex min-w-0 items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/60 focus-visible:bg-muted focus-visible:outline-none"
-                onClick={() => setDraftTimeIds((current) => toggleId(current, planTime.id))}
-              >
-                <Check className={cn(selected ? "opacity-100" : "opacity-0")} />
-                <span className="min-w-0 flex-1 truncate">{planTime.name}</span>
-                <Badge variant="outline" className="font-normal tabular-nums">
-                  {formatTimeRange(planTime, timeZone)}
-                </Badge>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex items-center justify-end gap-2 border-t px-3 py-2">
-          <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
-            Cancel
-          </Button>
-          <Button type="button" size="sm" disabled={!changed || saving} onClick={() => void save()}>
-            {saving ? <Loader2 data-icon="inline-start" className="animate-spin" /> : null}
-            Save
-          </Button>
-        </div>
+                return (
+                  <CommandItem
+                    key={planTime.id}
+                    value={`${planTime.name} ${planTime.id}`}
+                    onSelect={() => setDraft((current) => toggleId(current, planTime.id))}
+                  >
+                    <Check className={cn(selected ? "opacity-100" : "opacity-0")} />
+                    <span className="min-w-0 flex-1 truncate">{planTime.name}</span>
+                    <Badge variant="outline" className="max-w-[14rem] truncate font-normal">
+                      {formatPlanTimeScheduleLabel(planTime, timeZone)}
+                    </Badge>
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
       </PopoverContent>
     </Popover>
   );
