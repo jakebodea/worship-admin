@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { DashboardPage, type DashboardView } from "@/components/dashboard-page";
 import { SchedulePlanWorkspaceFallback } from "@/components/schedule/schedule-page-fallbacks";
 
-const dashboardViews = new Set<DashboardView>(["assign", "lineup", "plan"]);
+const dashboardViews = new Set<DashboardView>(["assign", "lineup", "plan", "times"]);
 
 type ServicesPlanViewPageProps = {
   params: Promise<{

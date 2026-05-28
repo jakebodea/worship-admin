@@ -7,6 +7,7 @@ import { PlanningCenterServicesIcon } from "@/components/planning-center-service
 import { LineupTab } from "@/components/schedule/lineup-tab";
 import { PlanTab } from "@/components/schedule/plan-tab";
 import { ScheduleViewTab } from "@/components/schedule/schedule-view-tab";
+import { TimesTab } from "@/components/schedule/times-tab";
 import { Button } from "@/components/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import type { SlotRef } from "@/components/schedule/types";
@@ -14,6 +15,7 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/sonner";
 import { createPeopleQueryOptions, usePeople } from "@/hooks/use-people";
 import { createPlanItemsQueryOptions } from "@/hooks/use-plan-items";
+import { usePlanTimes } from "@/hooks/use-plan-times";
 import { usePlans } from "@/hooks/use-plans";
 import { useServiceTypes } from "@/hooks/use-service-types";
 import { useTeamPositions } from "@/hooks/use-team-positions";
@@ -31,7 +33,7 @@ type NavigationSelectionIds = RouteSelectionIds & {
   planId: string | null;
 };
 
-export type DashboardView = "assign" | "lineup" | "plan";
+export type DashboardView = "assign" | "lineup" | "plan" | "times";
 const COLLAPSED_TEAMS_STORAGE_KEY_PREFIX = "schedule-collapsed-teams:";
 const COLLAPSED_TEAMS_STORAGE_MAP_KEY = `${COLLAPSED_TEAMS_STORAGE_KEY_PREFIX}by-plan`;
 const SLOT_PEOPLE_PREFETCH_DELAY_MS = 180;
@@ -201,6 +203,7 @@ export function DashboardPage({
     routePlanId,
     selectedPlan?.seriesId ?? null
   );
+  const { data: planTimes } = usePlanTimes(routeServiceTypeId, routePlanId);
 
   const selectedTeamGroup =
     teamPositionGroups?.find((group) => group.teamId === routeIds.teamId) ?? null;
@@ -545,6 +548,10 @@ export function DashboardPage({
                 groups={teamPositionGroups ?? []}
                 isLoading={teamPositionsLoading}
                 isPlaceholderData={teamPositionsPlaceholder}
+                serviceTypeId={routeServiceTypeId}
+                planId={routePlanId}
+                seriesId={selectedPlan?.seriesId ?? null}
+                planTimes={planTimes ?? []}
                 onSelectPosition={handleSlotSelect}
                 onPreviewPosition={handleSlotPreview}
               />
@@ -554,6 +561,14 @@ export function DashboardPage({
               <PlanTab
                 serviceTypeId={routeServiceTypeId}
                 planId={routePlanId}
+              />
+            </TabsContent>
+
+            <TabsContent value="times" className="mt-0 flex min-h-0 flex-1 flex-col">
+              <TimesTab
+                serviceTypeId={routeServiceTypeId}
+                planId={routePlanId}
+                seriesId={selectedPlan?.seriesId ?? null}
               />
             </TabsContent>
           </Tabs>

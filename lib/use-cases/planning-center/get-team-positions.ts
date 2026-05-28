@@ -79,6 +79,7 @@ export async function getNeededTeamPositionsForPlan(
       name: positionName,
       teamId,
       teamName,
+      source: "team_position",
       neededCount: 0,
     };
 
@@ -96,11 +97,8 @@ export async function getNeededTeamPositionsForPlan(
     const neededName = (needed.attributes.team_position_name || "").trim();
     if (!teamId || !neededName) continue;
 
-    const matchedPosition = positionsByTeamAndName.get(
-      buildTeamPositionKey(teamId, neededName)
-    );
-    if (!matchedPosition) continue;
-    let teamName = matchedPosition.teamName || "";
+    const matchedPosition = positionsByTeamAndName.get(buildTeamPositionKey(teamId, neededName));
+    let teamName = matchedPosition?.teamName || "";
     if (!teamName) {
       const team = findIncluded(neededIncluded, "Team", teamId) as unknown as RawTeam | undefined;
       if (team) teamName = team.attributes.name as string;
@@ -116,15 +114,41 @@ export async function getNeededTeamPositionsForPlan(
     }
 
     const group = teamMap.get(teamId)!;
-    const existingPosition = group.positions.find((position) => position.id === matchedPosition.id);
     const incrementBy = typeof quantity === "number" && quantity > 0 ? quantity : 1;
+    const timeId = getRelationshipId(needed.relationships?.time?.data);
+    const timePreferenceOptionId = getRelationshipId(needed.relationships?.time_preference_option?.data);
+
+    if (!matchedPosition) {
+      const slot: TeamPosition = {
+        id: buildNeededPositionSlotId(needed.id),
+        name: neededName,
+        teamId,
+        teamName,
+        source: "needed_position",
+        neededPositionId: needed.id,
+        timeId,
+        timePreferenceOptionId,
+        neededCount: incrementBy,
+      };
+      group.positions.push(slot);
+      positionsByTeamAndName.set(buildTeamPositionKey(teamId, neededName), slot);
+      continue;
+    }
+
+    const existingPosition = group.positions.find((position) => position.id === matchedPosition.id);
 
     if (existingPosition) {
       existingPosition.neededCount = (existingPosition.neededCount ?? 0) + incrementBy;
+      existingPosition.neededPositionId ??= needed.id;
+      existingPosition.timeId ??= timeId;
+      existingPosition.timePreferenceOptionId ??= timePreferenceOptionId;
       continue;
     }
 
     matchedPosition.teamName = teamName;
+    matchedPosition.neededPositionId ??= needed.id;
+    matchedPosition.timeId ??= timeId;
+    matchedPosition.timePreferenceOptionId ??= timePreferenceOptionId;
     matchedPosition.neededCount = incrementBy;
     group.positions.push(matchedPosition);
   }
@@ -211,7 +235,12 @@ function addPlanMemberOnlyPositions(
     }
 
     const key = buildTeamPositionKey(rosterEntry.teamId, rosterEntry.positionName);
-    if (positionsByTeamAndName.has(key)) continue;
+    const existingSlot = positionsByTeamAndName.get(key);
+    if (existingSlot?.source === "plan_member") {
+      applyPlanTeamMemberSummary([rosterEntry], positionsByTeamAndName);
+      continue;
+    }
+    if (existingSlot) continue;
 
     const slot: TeamPosition = {
       id: buildPlanMemberOnlyPositionId(rosterEntry.teamId, rosterEntry.positionName),
@@ -272,6 +301,17 @@ function buildPlanMemberOnlyPositionId(teamId: string, positionName: string): st
   return `plan-member-position:${teamId}:${encodeURIComponent(positionName.trim().toLowerCase())}`;
 }
 
+function buildNeededPositionSlotId(neededPositionId: string): string {
+  return `needed-position:${neededPositionId}`;
+}
+
+function getRelationshipId(
+  data: { id?: string } | { id?: string }[] | null | undefined
+): string | null {
+  if (!data || Array.isArray(data)) return null;
+  return data.id ?? null;
+}
+
 function applyPlanTeamMemberSummary(
   rosterEntries: PlanRosterEntry[],
   positionsByTeamAndName: Map<string, TeamPosition>
@@ -295,10 +335,13 @@ function applyPlanTeamMemberSummary(
     const entry: FilledPositionPerson = {
       id: rosterEntry.personId ?? `unknown-${rosterEntry.planPersonId}`,
       planPersonId: rosterEntry.planPersonId,
+      personId: rosterEntry.personId,
       name: rosterEntry.person?.name || "Unknown person",
       status,
       rawStatus: rosterEntry.rawStatus,
       photoThumbnailUrl: rosterEntry.person?.photoThumbnailUrl ?? null,
+      assignedTimeIds: rosterEntry.assignedTimeIds,
+      serviceTimeIds: rosterEntry.serviceTimeIds,
     };
 
     if (!slot.filledPeople) {

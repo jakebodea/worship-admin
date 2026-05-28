@@ -161,10 +161,25 @@ describe("getNeededTeamPositionsForPlan", () => {
         teamName: "Band",
         positions: [
           {
+            id: "needed-position:np-4",
+            name: "Keys",
+            teamId: "team-band",
+            teamName: "Band",
+            source: "needed_position",
+            neededPositionId: "np-4",
+            timeId: null,
+            timePreferenceOptionId: null,
+            neededCount: 1,
+          },
+          {
             id: "tp-band-vocals",
             name: "Vocals",
             teamId: "team-band",
             teamName: "Band",
+            source: "team_position",
+            neededPositionId: "np-1",
+            timeId: null,
+            timePreferenceOptionId: null,
             neededCount: 3,
           },
         ],
@@ -178,6 +193,10 @@ describe("getNeededTeamPositionsForPlan", () => {
             name: "Slides",
             teamId: "team-media",
             teamName: "Media",
+            source: "team_position",
+            neededPositionId: "np-5",
+            timeId: null,
+            timePreferenceOptionId: null,
             neededCount: 1,
           },
         ],
@@ -300,18 +319,24 @@ describe("getNeededTeamPositionsForPlan", () => {
       {
         id: "person-1",
         planPersonId: "pp-confirmed",
+        personId: "person-1",
         name: "Amy Leader",
         status: "confirmed",
         rawStatus: "C",
         photoThumbnailUrl: null,
+        assignedTimeIds: [],
+        serviceTimeIds: [],
       },
       {
         id: "person-2",
         planPersonId: "pp-pending",
+        personId: "person-2",
         name: "Ben Singer",
         status: "pending",
         rawStatus: "U",
         photoThumbnailUrl: null,
+        assignedTimeIds: [],
+        serviceTimeIds: [],
       },
     ]);
   });
@@ -386,15 +411,62 @@ describe("getNeededTeamPositionsForPlan", () => {
               {
                 id: "person-1",
                 planPersonId: "pp-youth",
+                personId: "person-1",
                 name: "Jake Bodea",
                 status: "confirmed",
                 rawStatus: "C",
                 photoThumbnailUrl: null,
+                assignedTimeIds: [],
+                serviceTimeIds: [],
               },
             ],
           },
         ],
       },
+    ]);
+  });
+
+  it("keeps multiple people in the same plan-member-only position", async () => {
+    mocks.getServiceTypeTeamPositionsWithTeams.mockResolvedValue({
+      data: [teamPosition("tp-leader-am", "team-leaders", "Leader-Am")],
+      included: [team("team-leaders", "Leaders and Pastor")],
+    });
+    mocks.getServiceTypePlanNeededPositionsWithTeams.mockResolvedValue({
+      data: [],
+      included: [],
+    });
+    mocks.getPlanTeamMembers.mockResolvedValue({
+      data: [
+        planTeamMember({
+          id: "pp-jake",
+          teamId: "team-leaders",
+          teamPositionName: "Youth Leader-Am",
+          status: "C",
+          personId: "person-1",
+        }),
+        planTeamMember({
+          id: "pp-casey",
+          teamId: "team-leaders",
+          teamPositionName: "Youth Leader-Am",
+          status: "U",
+          personId: "person-2",
+        }),
+      ],
+      included: [
+        team("team-leaders", "Leaders and Pastor"),
+        person("person-1", "Jake", "Bodea"),
+        person("person-2", "Casey", "Smith"),
+      ],
+    });
+
+    const result = await getNeededTeamPositionsForPlan("st-1", "plan-1");
+    const youthLeader = result[0]?.positions[0];
+
+    expect(youthLeader?.filledConfirmedCount).toBe(1);
+    expect(youthLeader?.filledPendingCount).toBe(1);
+    expect(youthLeader?.filledPeople?.map((entry) => entry.name)).toEqual([
+      "Jake Bodea",
+      "Casey Smith",
     ]);
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { CalendarDays } from "lucide-react";
+import { PersonRehearsalTimesPopover } from "@/components/schedule/person-rehearsal-times-popover";
 import type { SlotRef } from "@/components/schedule/types";
 import {
   Accordion,
@@ -15,13 +16,17 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getInitials } from "@/lib/format/initials";
-import type { FilledPositionPerson, TeamPosition, TeamPositionGroup } from "@/lib/types";
+import type { FilledPositionPerson, PlanTime, TeamPosition, TeamPositionGroup } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface LineupTabProps {
   groups: TeamPositionGroup[];
   isLoading: boolean;
   isPlaceholderData: boolean;
+  serviceTypeId: string | null;
+  planId: string | null;
+  seriesId: string | null;
+  planTimes: PlanTime[];
   onSelectPosition: (slot: SlotRef) => void;
   onPreviewPosition?: (slot: SlotRef) => void;
 }
@@ -30,6 +35,10 @@ export function LineupTab({
   groups,
   isLoading,
   isPlaceholderData,
+  serviceTypeId,
+  planId,
+  seriesId,
+  planTimes,
   onSelectPosition,
   onPreviewPosition,
 }: LineupTabProps) {
@@ -71,6 +80,10 @@ export function LineupTab({
             <TeamColumn
               key={group.teamId}
               group={group}
+              serviceTypeId={serviceTypeId}
+              planId={planId}
+              seriesId={seriesId}
+              planTimes={planTimes}
               onSelectPosition={onSelectPosition}
               onPreviewPosition={onPreviewPosition}
             />
@@ -83,10 +96,18 @@ export function LineupTab({
 
 function TeamColumn({
   group,
+  serviceTypeId,
+  planId,
+  seriesId,
+  planTimes,
   onSelectPosition,
   onPreviewPosition,
 }: {
   group: TeamPositionGroup;
+  serviceTypeId: string | null;
+  planId: string | null;
+  seriesId: string | null;
+  planTimes: PlanTime[];
   onSelectPosition: (slot: SlotRef) => void;
   onPreviewPosition?: (slot: SlotRef) => void;
 }) {
@@ -117,6 +138,10 @@ function TeamColumn({
                 teamId={group.teamId}
                 teamName={group.teamName}
                 position={position}
+                serviceTypeId={serviceTypeId}
+                planId={planId}
+                seriesId={seriesId}
+                planTimes={planTimes}
                 onSelectPosition={onSelectPosition}
                 onPreviewPosition={onPreviewPosition}
               />
@@ -133,12 +158,20 @@ function PositionAccordionItem({
   teamId,
   teamName,
   position,
+  serviceTypeId,
+  planId,
+  seriesId,
+  planTimes,
   onSelectPosition,
   onPreviewPosition,
 }: {
   teamId: string;
   teamName: string;
   position: TeamPosition;
+  serviceTypeId: string | null;
+  planId: string | null;
+  seriesId: string | null;
+  planTimes: PlanTime[];
   onSelectPosition: (slot: SlotRef) => void;
   onPreviewPosition?: (slot: SlotRef) => void;
 }) {
@@ -199,7 +232,13 @@ function PositionAccordionItem({
         className="cursor-pointer pb-3 pt-0"
         onClick={(event) => {
           const target = event.target as HTMLElement;
-          if (target.closest("button, a, input, textarea, select, [role='button']")) return;
+          if (
+            target.closest(
+              "button, a, input, textarea, select, [role='button'], [data-slot='popover-content'], [data-slot='command-item'], [cmdk-item]"
+            )
+          ) {
+            return;
+          }
 
           const trigger = event.currentTarget
             .closest("[data-slot='accordion-item']")
@@ -212,7 +251,14 @@ function PositionAccordionItem({
         ) : (
           <ul className="space-y-1.5 pl-1">
             {people.map((person) => (
-              <PersonRow key={`${position.id}-${person.id}-${person.rawStatus}`} person={person} />
+              <PersonRow
+                key={`${position.id}-${person.id}-${person.rawStatus}`}
+                person={person}
+                serviceTypeId={serviceTypeId}
+                planId={planId}
+                seriesId={seriesId}
+                planTimes={planTimes}
+              />
             ))}
           </ul>
         )}
@@ -221,15 +267,38 @@ function PositionAccordionItem({
   );
 }
 
-function PersonRow({ person }: { person: FilledPositionPerson }) {
+function PersonRow({
+  person,
+  serviceTypeId,
+  planId,
+  seriesId,
+  planTimes,
+}: {
+  person: FilledPositionPerson;
+  serviceTypeId: string | null;
+  planId: string | null;
+  seriesId: string | null;
+  planTimes: PlanTime[];
+}) {
   return (
-    <li className="flex items-center gap-2 text-sm">
+    <li
+      className="flex items-center gap-2 text-sm"
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
       <Avatar className="h-6 w-6">
         <AvatarImage src={person.photoThumbnailUrl || undefined} alt={person.name} />
         <AvatarFallback className="text-[10px]">{getInitials(person.name)}</AvatarFallback>
       </Avatar>
 
       <span className="truncate">{person.name}</span>
+      <PersonRehearsalTimesPopover
+        person={person}
+        serviceTypeId={serviceTypeId}
+        planId={planId}
+        seriesId={seriesId}
+        planTimes={planTimes}
+      />
       <span
         className={cn(
           "ml-auto size-2 shrink-0 rounded-full",

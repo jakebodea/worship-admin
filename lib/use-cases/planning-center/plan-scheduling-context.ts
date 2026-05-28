@@ -26,6 +26,8 @@ export interface PlanRosterEntry {
   label: string;
   status: PlanRosterStatus;
   rawStatus: string;
+  assignedTimeIds: string[];
+  serviceTimeIds: string[];
   /** Services `plan_person.decline_reason` when present. */
   declineReason?: string | null;
 }
@@ -180,6 +182,8 @@ function normalizeRosterEntry(
     label: buildRosterLabel(rawPositionName, positionName, teamName),
     status,
     rawStatus: (member.attributes.status || "").toString(),
+    assignedTimeIds: getRelationshipIds(member.relationships?.times?.data),
+    serviceTimeIds: getRelationshipIds(member.relationships?.service_times?.data),
     declineReason: normalizeDeclineReason(member.attributes.decline_reason),
   };
 }
@@ -250,6 +254,10 @@ function getRelationshipId(
 ): string | null {
   if (!data || Array.isArray(data)) return null;
   return data.id || null;
+}
+
+function getRelationshipIds(data: { id: string }[] | null | undefined): string[] {
+  return data?.map((item) => item.id).filter(Boolean) ?? [];
 }
 
 function normalizePositionName(positionName: string): string {

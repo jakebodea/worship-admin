@@ -480,3 +480,9 @@ export function invalidateCandidateHistoryForPerson(personId: string) {
   const planWindowPrefix = [scope, "plan-window-history"].join(":");
   planWindowHistoryCache.deleteWhere((key) => key.startsWith(planWindowPrefix));
 }
+
+export function invalidatePlanWindowHistory() {
+  const scope = planningCenterPeopleService.getCacheScope();
+  const planWindowPrefix = [scope, "plan-window-history"].join(":");
+  planWindowHistoryCache.deleteWhere((key) => key.startsWith(planWindowPrefix));
+}

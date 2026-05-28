@@ -111,6 +111,7 @@ function isTeamPosition(value: unknown): value is TeamPosition {
     (
       position.source === undefined ||
       position.source === "team_position" ||
+      position.source === "needed_position" ||
       position.source === "plan_member" ||
       position.source === "custom"
     ) &&
@@ -128,10 +129,13 @@ function isFilledPositionPerson(value: unknown): value is FilledPositionPerson {
   const person = value as Partial<FilledPositionPerson>;
   return typeof person.id === "string" &&
     typeof person.planPersonId === "string" &&
+    isOptionalString(person.personId) &&
     typeof person.name === "string" &&
     (person.status === "pending" || person.status === "confirmed") &&
     typeof person.rawStatus === "string" &&
-    isOptionalString(person.photoThumbnailUrl);
+    isOptionalString(person.photoThumbnailUrl) &&
+    isOptionalStringArray(person.assignedTimeIds) &&
+    isOptionalStringArray(person.serviceTimeIds);
 }
 
 function isOptionalString(value: unknown) {
@@ -140,4 +144,8 @@ function isOptionalString(value: unknown) {
 
 function isOptionalNumber(value: unknown) {
   return value === undefined || typeof value === "number";
+}
+
+function isOptionalStringArray(value: unknown) {
+  return value === undefined || (Array.isArray(value) && value.every((item) => typeof item === "string"));
 }

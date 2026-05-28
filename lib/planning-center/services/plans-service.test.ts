@@ -62,3 +62,141 @@ describe("PlanningCenterPlansService.getPlansWithIncludedInDateRange", () => {
     expect(second.included[0].attributes.title).toBe("Original Series");
   });
 });
+
+describe("PlanningCenterPlansService plan times", () => {
+  it("fetches plan times through the plan-scoped endpoint and returns cache-safe copies", async () => {
+    const fetchAll = vi.fn().mockResolvedValue([
+      {
+        id: "time-1",
+        type: "PlanTime",
+        attributes: { name: "Service", starts_at: "2026-05-24T16:30:00Z" },
+      },
+    ]);
+    const core = {
+      fetchAll,
+      getCacheScope: () => "test-scope",
+    } as unknown as PlanningCenterCoreClient;
+    const service = new PlanningCenterPlansService(core);
+
+    const first = await service.getPlanTimes("plan-1");
+    first[0].attributes.name = "Mutated";
+    const second = await service.getPlanTimes("plan-1");
+
+    expect(fetchAll).toHaveBeenCalledTimes(1);
+    expect(fetchAll).toHaveBeenCalledWith(
+      "/services/v2/plans/plan-1/plan_times",
+      { order: "starts_at", per_page: "200", include: "split_team_rehearsal_assignments" }
+    );
+    expect(second[0].attributes.name).toBe("Service");
+  });
+
+  it("patches plan times through the service-type plan-time endpoint", async () => {
+    const fetch = vi.fn().mockResolvedValue({
+      data: {
+        id: "time-1",
+        type: "PlanTime",
+        attributes: { name: "Updated" },
+      },
+    });
+    const core = {
+      fetch,
+      getCacheScope: () => "test-scope",
+    } as unknown as PlanningCenterCoreClient;
+    const service = new PlanningCenterPlansService(core);
+
+    await service.updatePlanTime("st-1", "plan-1", "time-1", {
+      name: "Updated",
+    }, ["team-1"]);
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/services/v2/service_types/st-1/plan_times/time-1",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          data: {
+            type: "PlanTime",
+            id: "time-1",
+            attributes: {
+              name: "Updated",
+            },
+            relationships: {
+              assigned_teams: {
+                data: [{ type: "Team", id: "team-1" }],
+              },
+            },
+          },
+        }),
+      })
+    );
+  });
+
+  it("creates plan times through the plan-scoped endpoint", async () => {
+    const fetch = vi.fn().mockResolvedValue({
+      data: {
+        id: "time-new",
+        type: "PlanTime",
+        attributes: { name: "New service" },
+      },
+    });
+    const core = {
+      fetch,
+      getCacheScope: () => "test-scope",
+    } as unknown as PlanningCenterCoreClient;
+    const service = new PlanningCenterPlansService(core);
+
+    await service.createPlanTime(
+      "st-1",
+      "plan-1",
+      {
+        name: "New service",
+        starts_at: "2026-05-24T18:00:00.000Z",
+      },
+      ["team-1"]
+    );
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/services/v2/service_types/st-1/plans/plan-1/plan_times",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          data: {
+            type: "PlanTime",
+            attributes: {
+              name: "New service",
+              starts_at: "2026-05-24T18:00:00.000Z",
+            },
+            relationships: {
+              assigned_teams: {
+                data: [{ type: "Team", id: "team-1" }],
+              },
+            },
+          },
+        }),
+      })
+    );
+  });
+
+  it("deletes plan times through the service-type plan-time endpoint", async () => {
+    const fetch = vi.fn().mockResolvedValue({
+      data: {
+        id: "time-1",
+        type: "PlanTime",
+        attributes: {},
+      },
+    });
+    const core = {
+      fetch,
+      getCacheScope: () => "test-scope",
+    } as unknown as PlanningCenterCoreClient;
+    const service = new PlanningCenterPlansService(core);
+
+    await service.deletePlanTime("st-1", "plan-1", "time-1");
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/services/v2/service_types/st-1/plan_times/time-1",
+      {
+        method: "DELETE",
+      }
+    );
+  });
+});

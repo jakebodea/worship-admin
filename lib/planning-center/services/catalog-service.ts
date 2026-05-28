@@ -132,6 +132,51 @@ export class PlanningCenterCatalogService {
     return cloneResourceResponse(response);
   }
 
+  async updateServiceTypePlanNeededPositionTime(
+    serviceTypeId: string,
+    planId: string,
+    neededPositionId: string,
+    planTimeId: string | null
+  ): Promise<PCResource> {
+    const response = await this.core.fetch<PCResource>(
+      `/services/v2/service_types/${serviceTypeId}/plans/${planId}/needed_positions/${neededPositionId}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          data: {
+            type: "NeededPosition",
+            id: neededPositionId,
+            relationships: {
+              time: {
+                data: planTimeId ? { type: "PlanTime", id: planTimeId } : null,
+              },
+            },
+          },
+        }),
+      }
+    );
+    this.invalidateNeededPositionsCache(serviceTypeId, planId);
+    return response.data;
+  }
+
+  invalidateNeededPositionsCache(serviceTypeId: string, planId: string) {
+    const scope = this.core.getCacheScope();
+    const serviceTypePrefix = [
+      scope,
+      "service-type-plan-needed-positions",
+      encodeURIComponent(serviceTypeId),
+      encodeURIComponent(planId),
+    ].join(":");
+    const seriesPrefix = [scope, "series-plan-needed-positions"].join(":");
+
+    this.cache.deleteWhere(
+      (key) => key.startsWith(serviceTypePrefix) || key.startsWith(seriesPrefix)
+    );
+  }
+
   private buildCacheKey(namespace: string, ...parts: string[]): string {
     return [
       this.core.getCacheScope(),

@@ -87,7 +87,10 @@ export interface TeamPosition {
   name: string;
   teamId: string;
   teamName?: string;
-  source?: "team_position" | "plan_member" | "custom";
+  source?: "team_position" | "needed_position" | "plan_member" | "custom";
+  neededPositionId?: string;
+  timeId?: string | null;
+  timePreferenceOptionId?: string | null;
   neededCount?: number;
   filledPendingCount?: number;
   filledConfirmedCount?: number;
@@ -97,10 +100,13 @@ export interface TeamPosition {
 export interface FilledPositionPerson {
   id: string;
   planPersonId: string;
+  personId?: string | null;
   name: string;
   status: "pending" | "confirmed";
   rawStatus: string;
   photoThumbnailUrl?: string | null;
+  assignedTimeIds?: string[];
+  serviceTimeIds?: string[];
 }
 
 export interface RawTeamPosition {
@@ -230,10 +236,26 @@ export interface RawPlanTime {
   type: "PlanTime";
   id: string;
   attributes: {
+    name?: string;
     starts_at?: string;
     ends_at?: string;
     /** Planning Center may send other values; handled as opaque string when parsing. */
     time_type?: string;
+    team_reminders?: unknown;
+  };
+  relationships?: {
+    plan?: {
+      data?: PCResourceIdentifier;
+    };
+    assigned_teams?: {
+      data?: PCResourceIdentifier[];
+    };
+    assigned_positions?: {
+      data?: PCResourceIdentifier[];
+    };
+    split_team_rehearsal_assignments?: {
+      data?: PCResourceIdentifier[];
+    };
   };
 }
 
@@ -262,6 +284,20 @@ export interface Plan {
   planningCenterUrl?: string | null;
   createdAt: Date;
   sortDate?: Date;
+}
+
+export type PlanTimeType = "service" | "rehearsal" | "other";
+
+export interface PlanTime {
+  id: string;
+  name: string;
+  startsAt: Date;
+  endsAt: Date | null;
+  timeType: PlanTimeType;
+  teamReminders: unknown;
+  assignedTeamIds: string[];
+  assignedPositionIds: string[];
+  splitTeamRehearsalAssignmentIds: string[];
 }
 
 export interface RawPlan {
@@ -442,6 +478,12 @@ export interface RawNeededPosition {
   };
   relationships?: {
     team?: {
+      data: PCResourceIdentifier | null;
+    };
+    time?: {
+      data: PCResourceIdentifier | null;
+    };
+    time_preference_option?: {
       data: PCResourceIdentifier | null;
     };
   };
